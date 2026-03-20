@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { AirportInput } from '@/components/ui/airport-input';
 
 interface LegInput {
   originCode: string;
@@ -154,22 +155,19 @@ export function MultiLegForm() {
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <Input
-                label="From (ICAO/IATA)"
-                placeholder="KTEB"
+              <AirportInput
+                label="From"
+                placeholder="Search airport..."
                 value={leg.originCode}
-                onChange={e => updateLeg(i, 'originCode', e.target.value)}
-                maxLength={4}
+                onChange={val => updateLeg(i, 'originCode', val)}
                 required
                 readOnly={i > 0}
-                className={i > 0 ? 'opacity-60' : ''}
               />
-              <Input
-                label="To (ICAO/IATA)"
-                placeholder="KPBI"
+              <AirportInput
+                label="To"
+                placeholder="Search airport..."
                 value={leg.destCode}
-                onChange={e => updateLeg(i, 'destCode', e.target.value)}
-                maxLength={4}
+                onChange={val => updateLeg(i, 'destCode', val)}
                 required
               />
               <Input
