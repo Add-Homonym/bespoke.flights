@@ -1,0 +1,88 @@
+import Link from 'next/link';
+import { getSession } from '@/lib/auth';
+import { getDb } from '@/lib/db';
+import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import type { BookingRequest, BookingLeg, User } from '@/lib/types';
+
+const statusBadge: Record<string, 'default' | 'success' | 'warning' | 'error' | 'gold'> = {
+  open: 'gold',
+  quoted: 'warning',
+  booked: 'success',
+  cancelled: 'error',
+  completed: 'default',
+};
+
+export default async function DashboardPage() {
+  const session = await getSession();
+  const db = getDb();
+  const user = db.prepare('SELECT name FROM users WHERE id = ?').get(session!.userId) as Pick<User, 'name'>;
+
+  const requests = db.prepare(
+    'SELECT * FROM booking_requests WHERE customer_id = ? ORDER BY created_at DESC LIMIT 10'
+  ).all(session!.userId) as BookingRequest[];
+
+  const getLegs = db.prepare('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order');
+
+  return (
+    <div>
+      <div className="mb-10">
+        <h1 className="font-display text-3xl text-brand-cream mb-2">Welcome back, {user.name.split(' ')[0]}</h1>
+        <p className="text-brand-muted">Manage your flight requests and bookings.</p>
+      </div>
+
+      {/* Quick actions */}
+      <div className="grid md:grid-cols-3 gap-4 mb-12">
+        <Link href="/book">
+          <Card hover className="text-center">
+            <div className="text-3xl mb-3">&#9992;</div>
+            <h3 className="text-brand-cream font-semibold mb-1">Book a Flight</h3>
+            <p className="text-brand-muted text-xs">Create a new multi-leg request</p>
+          </Card>
+        </Link>
+        <Link href="/requests">
+          <Card hover className="text-center">
+            <div className="text-3xl mb-3">&#128203;</div>
+            <h3 className="text-brand-cream font-semibold mb-1">My Requests</h3>
+            <p className="text-brand-muted text-xs">View all booking requests</p>
+          </Card>
+        </Link>
+        <Link href="/account">
+          <Card hover className="text-center">
+            <div className="text-3xl mb-3">&#9881;</div>
+            <h3 className="text-brand-cream font-semibold mb-1">Account Settings</h3>
+            <p className="text-brand-muted text-xs">Update your profile info</p>
+          </Card>
+        </Link>
+      </div>
+
+      {/* Recent requests */}
+      <h2 className="font-display text-xl text-brand-cream mb-4">Recent Requests</h2>
+      {requests.length === 0 ? (
+        <Card>
+          <p className="text-brand-muted text-center py-8">No flight requests yet. <Link href="/book" className="text-brand-gold hover:underline">Book your first flight</Link></p>
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {requests.map(req => {
+            const legs = getLegs.all(req.id) as BookingLeg[];
+            const route = legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).join(' → ');
+            return (
+              <Link key={req.id} href={`/requests/${req.id}`}>
+                <Card hover className="flex items-center justify-between">
+                  <div>
+                    <p className="text-brand-cream font-mono tracking-wide">{route}</p>
+                    <p className="text-brand-muted text-xs mt-1">
+                      {legs.length} leg{legs.length !== 1 ? 's' : ''} &middot; {req.passenger_count} pax &middot; {new Date(req.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <Badge variant={statusBadge[req.status]}>{req.status}</Badge>
+                </Card>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
