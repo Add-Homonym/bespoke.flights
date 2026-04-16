@@ -4,6 +4,7 @@ import { getDb } from '@/lib/db';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { QuoteActions } from '@/components/booking/quote-actions';
+import { OutreachStatus } from '@/components/operator/outreach-status';
 import type { BookingRequest, BookingLeg, Quote } from '@/lib/types';
 
 const statusBadge: Record<string, 'default' | 'success' | 'warning' | 'error' | 'gold'> = {
@@ -36,6 +37,9 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
     WHERE q.request_id = ?
     ORDER BY q.price_cents ASC
   `).all(request.id) as (Quote & { company_name: string; aircraft_type?: string; aircraft_capacity?: number; tail_number?: string; aircraft_year?: number })[];
+
+  // Count operators contacted via outreach
+  const outreachCount = (db.prepare('SELECT COUNT(*) as count FROM outreach_log WHERE request_id = ?').get(request.id) as { count: number }).count;
 
   const route = legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).join(' → ');
 
@@ -78,6 +82,9 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
         </div>
       </Card>
 
+      {/* Outreach Status — shows which operators were auto-contacted */}
+      {outreachCount > 0 && <OutreachStatus requestId={request.id} />}
+
       {/* Quotes */}
       <h2 className="font-display text-xl text-brand-cream mb-4">
         Quotes {quotes.length > 0 && <span className="text-brand-muted text-sm font-normal">({quotes.length})</span>}
@@ -85,7 +92,12 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
 
       {quotes.length === 0 ? (
         <Card>
-          <p className="text-brand-muted text-center py-8">No quotes yet. Operators are reviewing your request.</p>
+          <p className="text-brand-muted text-center py-8">
+            {outreachCount > 0
+              ? `${outreachCount} operators have been contacted. Quotes will appear here as they respond.`
+              : 'No quotes yet. Operators are reviewing your request.'
+            }
+          </p>
         </Card>
       ) : (
         <div className="grid gap-4">

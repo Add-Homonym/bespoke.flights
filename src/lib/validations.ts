@@ -53,3 +53,17 @@ export const aircraftSchema = z.object({
   rangeNm: z.number().int().optional(),
   year: z.number().int().optional(),
 });
+
+export const operatorSettingsSchema = z.object({
+  contact_method: z.enum(['email', 'text', 'both']).optional(),
+  contact_email: z.string().email().optional().nullable(),
+  contact_phone: z.string().min(7).optional().nullable(),
+  safety_rating: z.string().optional().nullable(),
+  fleet_types: z.array(z.string()).optional(),
+  markets: z.array(z.string()).optional(),
+  range_max_nm: z.number().int().optional().nullable(),
+  hi_capable: z.number().int().min(0).max(1).optional(),
+  transoceanic: z.number().int().min(0).max(1).optional(),
+  certificate: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+});

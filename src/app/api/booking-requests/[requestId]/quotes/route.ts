@@ -43,14 +43,30 @@ export async function POST(req: Request, { params }: { params: Promise<{ request
   const request = db.prepare('SELECT * FROM booking_requests WHERE id = ?').get(requestId);
   if (!request) return NextResponse.json({ error: 'Request not found' }, { status: 404 });
 
+  // Check for existing quote
+  const existingQuote = db.prepare('SELECT id FROM quotes WHERE request_id = ? AND operator_id = ?').get(requestId, operator.id);
+  if (existingQuote) return NextResponse.json({ error: 'You have already quoted this request' }, { status: 409 });
+
   const { priceCents, currency, message, aircraftId, validUntil } = parsed.data;
 
-  const result = db.prepare(
-    'INSERT INTO quotes (request_id, operator_id, aircraft_id, price_cents, currency, message, valid_until) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).run(requestId, operator.id, aircraftId || null, priceCents, currency, message || null, validUntil || null);
+  const transaction = db.transaction(() => {
+    // Insert quote
+    const result = db.prepare(
+      'INSERT INTO quotes (request_id, operator_id, aircraft_id, price_cents, currency, message, valid_until) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(requestId, operator.id, aircraftId || null, priceCents, currency, message || null, validUntil || null);
 
-  // Update request status to 'quoted' if it was 'open'
-  db.prepare("UPDATE booking_requests SET status = 'quoted', updated_at = datetime('now') WHERE id = ? AND status = 'open'").run(requestId);
+    // Update request status to 'quoted' if it was 'open'
+    db.prepare("UPDATE booking_requests SET status = 'quoted', updated_at = datetime('now') WHERE id = ? AND status = 'open'").run(requestId);
 
-  return NextResponse.json({ id: Number(result.lastInsertRowid) }, { status: 201 });
+    // Mark outreach log as responded (if this operator was auto-matched)
+    db.prepare(
+      "UPDATE outreach_log SET status = 'responded', responded_at = datetime('now') WHERE request_id = ? AND operator_id = ?"
+    ).run(requestId, operator.id);
+
+    return Number(result.lastInsertRowid);
+  });
+
+  const quoteId = transaction();
+
+  return NextResponse.json({ id: quoteId }, { status: 201 });
 }

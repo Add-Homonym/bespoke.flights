@@ -17,6 +17,18 @@ export default async function OperatorDashboardPage() {
   const acceptedQuotes = operator ? (db.prepare("SELECT COUNT(*) as count FROM quotes WHERE operator_id = ? AND status = 'accepted'").get(operator.id) as { count: number }).count : 0;
   const fleetSize = operator ? (db.prepare('SELECT COUNT(*) as count FROM aircraft WHERE operator_id = ?').get(operator.id) as { count: number }).count : 0;
 
+  // Inbound RFQs (auto-matched to this operator)
+  const inboundTotal = operator ? (db.prepare('SELECT COUNT(*) as count FROM outreach_log WHERE operator_id = ?').get(operator.id) as { count: number }).count : 0;
+  const inboundPending = operator ? (db.prepare(`
+    SELECT COUNT(*) as count FROM outreach_log ol
+    WHERE ol.operator_id = ?
+      AND NOT EXISTS (SELECT 1 FROM quotes q WHERE q.request_id = ol.request_id AND q.operator_id = ol.operator_id)
+      AND EXISTS (SELECT 1 FROM booking_requests br WHERE br.id = ol.request_id AND br.status IN ('open', 'quoted'))
+  `).get(operator.id) as { count: number }).count : 0;
+
+  // Profile completeness check
+  const profileComplete = operator && operator.markets && operator.fleet_types && operator.safety_rating && (operator.contact_email || operator.contact_phone);
+
   return (
     <div>
       <div className="mb-10">
@@ -32,16 +44,48 @@ export default async function OperatorDashboardPage() {
         )}
       </div>
 
+      {/* Profile incomplete warning */}
+      {operator && !profileComplete && (
+        <Card className="mb-8 border-brand-warning/30 bg-brand-warning/5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-brand-warning text-sm font-semibold">Complete your operator profile</p>
+              <p className="text-brand-warning/70 text-xs mt-1">
+                Configure your markets, fleet types, safety rating, and contact method so the matching engine can route charter requests to you automatically.
+              </p>
+            </div>
+            <Link href="/operator/settings" className="rounded-lg bg-brand-warning px-4 py-2 text-sm font-semibold text-brand-dark hover:bg-brand-warning/80 transition-colors shrink-0">
+              Configure →
+            </Link>
+          </div>
+        </Card>
+      )}
+
       {operator?.status === 'pending' && (
         <Card className="mb-8 border-brand-warning/30 bg-brand-warning/5">
-          <p className="text-brand-warning text-sm">Your operator account is pending approval. You&apos;ll be able to submit quotes once approved by an administrator.</p>
+          <p className="text-brand-warning text-sm">Your operator account is pending approval. Configure your profile now — RFQs will begin flowing once approved.</p>
         </Card>
+      )}
+
+      {/* Inbound highlight */}
+      {inboundPending > 0 && (
+        <Link href="/operator/inbound">
+          <Card hover className="mb-8 border-brand-gold/30 bg-brand-gold/5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-brand-gold font-semibold text-lg">{inboundPending} inbound request{inboundPending !== 1 ? 's' : ''} awaiting your quote</p>
+                <p className="text-brand-cream/60 text-sm mt-1">These were automatically matched to your operator profile.</p>
+              </div>
+              <span className="text-brand-gold text-2xl">→</span>
+            </div>
+          </Card>
+        </Link>
       )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
         {[
-          { label: 'Open Requests', value: openRequests, href: '/operator/requests' },
+          { label: 'Inbound RFQs', value: inboundTotal, sub: inboundPending > 0 ? `${inboundPending} pending` : undefined, href: '/operator/inbound' },
           { label: 'Quotes Submitted', value: myQuotes, href: '/operator/quotes' },
           { label: 'Quotes Accepted', value: acceptedQuotes, href: '/operator/quotes' },
           { label: 'Fleet Size', value: fleetSize, href: '/operator/fleet' },
@@ -50,29 +94,36 @@ export default async function OperatorDashboardPage() {
             <Card hover>
               <p className="text-brand-muted text-xs uppercase tracking-wider mb-1">{stat.label}</p>
               <p className="text-brand-cream font-display text-3xl">{stat.value}</p>
+              {stat.sub && <p className="text-brand-gold text-xs mt-1">{stat.sub}</p>}
             </Card>
           </Link>
         ))}
       </div>
 
       {/* Quick actions */}
-      <div className="grid md:grid-cols-3 gap-4">
+      <div className="grid md:grid-cols-4 gap-4">
+        <Link href="/operator/inbound">
+          <Card hover className="text-center py-8">
+            <h3 className="text-brand-cream font-semibold mb-1">Inbound RFQs</h3>
+            <p className="text-brand-muted text-xs">Requests matched to you</p>
+          </Card>
+        </Link>
         <Link href="/operator/requests">
           <Card hover className="text-center py-8">
-            <h3 className="text-brand-cream font-semibold mb-1">Browse Demand</h3>
-            <p className="text-brand-muted text-xs">View open flight requests</p>
+            <h3 className="text-brand-cream font-semibold mb-1">Browse All Demand</h3>
+            <p className="text-brand-muted text-xs">See all open requests</p>
           </Card>
         </Link>
         <Link href="/operator/fleet">
           <Card hover className="text-center py-8">
             <h3 className="text-brand-cream font-semibold mb-1">Manage Fleet</h3>
-            <p className="text-brand-muted text-xs">Add and manage your aircraft</p>
+            <p className="text-brand-muted text-xs">Add and manage aircraft</p>
           </Card>
         </Link>
-        <Link href="/operator/quotes">
+        <Link href="/operator/settings">
           <Card hover className="text-center py-8">
-            <h3 className="text-brand-cream font-semibold mb-1">My Quotes</h3>
-            <p className="text-brand-muted text-xs">Track your submitted quotes</p>
+            <h3 className="text-brand-cream font-semibold mb-1">Settings</h3>
+            <p className="text-brand-muted text-xs">Contact method & profile</p>
           </Card>
         </Link>
       </div>

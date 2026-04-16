@@ -30,9 +30,11 @@ export function Header({ user }: { user?: { name: string; role: string } | null 
               )}
               {user.role === 'operator' && (
                 <>
-                  <Link href="/operator/requests" className="text-sm text-brand-muted hover:text-brand-cream transition-colors">Demand</Link>
+                  <Link href="/operator/inbound" className="text-sm text-brand-muted hover:text-brand-cream transition-colors">Inbound</Link>
+                  <Link href="/operator/requests" className="text-sm text-brand-muted hover:text-brand-cream transition-colors">All Demand</Link>
                   <Link href="/operator/quotes" className="text-sm text-brand-muted hover:text-brand-cream transition-colors">My Quotes</Link>
                   <Link href="/operator/fleet" className="text-sm text-brand-muted hover:text-brand-cream transition-colors">Fleet</Link>
+                  <Link href="/operator/settings" className="text-sm text-brand-muted hover:text-brand-cream transition-colors">Settings</Link>
                 </>
               )}
               {user.role === 'admin' && (
@@ -41,6 +43,7 @@ export function Header({ user }: { user?: { name: string; role: string } | null 
                   <Link href="/admin/users" className="text-sm text-brand-muted hover:text-brand-cream transition-colors">Users</Link>
                   <Link href="/admin/operators" className="text-sm text-brand-muted hover:text-brand-cream transition-colors">Operators</Link>
                   <Link href="/admin/requests" className="text-sm text-brand-muted hover:text-brand-cream transition-colors">Requests</Link>
+                  <Link href="/admin/discoveries" className="text-sm text-brand-muted hover:text-brand-cream transition-colors">Discoveries</Link>
                 </>
               )}
               <Link href="/account" className="text-sm text-brand-muted hover:text-brand-cream transition-colors">Account</Link>

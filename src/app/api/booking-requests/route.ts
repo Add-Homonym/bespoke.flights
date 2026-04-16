@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { bookingRequestSchema } from '@/lib/validations';
+import { dispatchOutreach } from '@/lib/outreach/engine';
 import type { BookingRequest, BookingLeg } from '@/lib/types';
 
 export async function POST(req: Request) {
@@ -25,20 +26,52 @@ export async function POST(req: Request) {
     'INSERT INTO booking_legs (request_id, leg_order, origin_code, origin_name, dest_code, dest_name, departure_date, departure_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
   );
 
+  let requestId: number;
+  const savedLegs: BookingLeg[] = [];
+
   const transaction = db.transaction(() => {
     const result = insertRequest.run(session.userId, passengerCount, notes || null);
-    const requestId = Number(result.lastInsertRowid);
+    requestId = Number(result.lastInsertRowid);
 
     for (let i = 0; i < legs.length; i++) {
       const leg = legs[i];
-      insertLeg.run(requestId, i + 1, leg.originCode, leg.originName || null, leg.destCode, leg.destName || null, leg.departureDate, leg.departureTime || null);
+      insertLeg.run(
+        requestId, i + 1,
+        leg.originCode, leg.originName || null,
+        leg.destCode, leg.destName || null,
+        leg.departureDate, leg.departureTime || null
+      );
+      savedLegs.push({
+        id: 0, request_id: requestId, leg_order: i + 1,
+        origin_code: leg.originCode, origin_name: leg.originName || null,
+        dest_code: leg.destCode, dest_name: leg.destName || null,
+        departure_date: leg.departureDate, departure_time: leg.departureTime || null,
+      });
     }
 
     return requestId;
   });
 
-  const requestId = transaction();
-  return NextResponse.json({ id: requestId }, { status: 201 });
+  requestId = transaction();
+
+  // ── AUTOMATIC OUTREACH ──
+  // Matches approved operators by market/fleet/safety, logs RFQs,
+  // and delivers via Resend (email) or SMS stub.
+  let outreach = { matched: 0, dispatched: 0 };
+  try {
+    outreach = await dispatchOutreach(db, requestId!, savedLegs, passengerCount, notes || null);
+  } catch (err) {
+    console.error('Outreach dispatch error:', err);
+    // Non-fatal: the request is still created even if outreach fails
+  }
+
+  return NextResponse.json({
+    id: requestId!,
+    outreach: {
+      operatorsMatched: outreach.matched,
+      rfqsDispatched: outreach.dispatched,
+    },
+  }, { status: 201 });
 }
 
 export async function GET() {
@@ -53,11 +86,9 @@ export async function GET() {
   } else if (session.role === 'customer') {
     requests = db.prepare('SELECT * FROM booking_requests WHERE customer_id = ? ORDER BY created_at DESC').all(session.userId) as BookingRequest[];
   } else {
-    // Operators see open requests
     requests = db.prepare("SELECT * FROM booking_requests WHERE status IN ('open', 'quoted') ORDER BY created_at DESC").all() as BookingRequest[];
   }
 
-  // Attach legs to each request
   const getLegs = db.prepare('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order');
   const result = requests.map(r => ({
     ...r,
