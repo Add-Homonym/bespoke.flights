@@ -10,10 +10,10 @@ export async function GET() {
   }
 
   const db = getDb();
-  const operator = db.prepare('SELECT * FROM operators WHERE user_id = ?').get(session.userId) as Operator | undefined;
+  const operator = await db.one<Operator>('SELECT * FROM operators WHERE user_id = ?', [session.userId]);
   if (!operator) return NextResponse.json({ error: 'Operator not found' }, { status: 404 });
 
-  const user = db.prepare('SELECT email, phone FROM users WHERE id = ?').get(session.userId) as { email: string; phone: string | null };
+  const user = (await db.one<{ email: string; phone: string | null }>('SELECT email, phone FROM users WHERE id = ?', [session.userId]))!;
 
   return NextResponse.json({
     ...operator,
@@ -33,7 +33,7 @@ export async function PATCH(req: Request) {
   const body = await req.json();
   const db = getDb();
 
-  const operator = db.prepare('SELECT * FROM operators WHERE user_id = ?').get(session.userId) as Operator | undefined;
+  const operator = await db.one<Operator>('SELECT * FROM operators WHERE user_id = ?', [session.userId]);
   if (!operator) return NextResponse.json({ error: 'Operator not found' }, { status: 404 });
 
   const {
@@ -50,7 +50,7 @@ export async function PATCH(req: Request) {
     notes,
   } = body;
 
-  db.prepare(`
+  await db.run(`
     UPDATE operators SET
       contact_method = COALESCE(?, contact_method),
       contact_email = COALESCE(?, contact_email),
@@ -64,7 +64,7 @@ export async function PATCH(req: Request) {
       certificate = COALESCE(?, certificate),
       notes = COALESCE(?, notes)
     WHERE id = ?
-  `).run(
+  `, [
     contact_method || null,
     contact_email || null,
     contact_phone || null,
@@ -77,9 +77,9 @@ export async function PATCH(req: Request) {
     certificate || null,
     notes || null,
     operator.id,
-  );
+  ]);
 
-  const updated = db.prepare('SELECT * FROM operators WHERE id = ?').get(operator.id) as Operator;
+  const updated = (await db.one<Operator>('SELECT * FROM operators WHERE id = ?', [operator.id]))!;
   return NextResponse.json({
     ...updated,
     fleet_types: updated.fleet_types ? JSON.parse(updated.fleet_types) : [],

@@ -1,8 +1,9 @@
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
+import { legsByRequest } from '@/lib/db/queries';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import type { Operator, Quote, BookingLeg } from '@/lib/types';
+import type { Operator, Quote } from '@/lib/types';
 import Link from 'next/link';
 import { formatMoney } from '@/lib/payments/config';
 
@@ -31,7 +32,7 @@ export default async function OperatorQuotesPage() {
   const session = await getSession();
   const db = getDb();
 
-  const operator = db.prepare('SELECT * FROM operators WHERE user_id = ?').get(session!.userId) as Operator | undefined;
+  const operator = await db.one<Operator>('SELECT * FROM operators WHERE user_id = ?', [session!.userId]);
 
   if (!operator) {
     return (
@@ -42,7 +43,7 @@ export default async function OperatorQuotesPage() {
     );
   }
 
-  const quotes = db.prepare(`
+  const quotes = await db.query<Quote & { aircraft_type?: string; tail_number?: string; payment_status: string | null; payout_cents: number | null }>(`
     SELECT q.*, a.type as aircraft_type, a.tail_number,
       (SELECT p.status FROM payments p WHERE p.quote_id = q.id AND p.status IN ('processing','succeeded','partially_refunded','refunded')
        ORDER BY p.id DESC LIMIT 1) as payment_status,
@@ -52,9 +53,9 @@ export default async function OperatorQuotesPage() {
     LEFT JOIN aircraft a ON a.id = q.aircraft_id
     WHERE q.operator_id = ?
     ORDER BY q.created_at DESC
-  `).all(operator.id) as (Quote & { aircraft_type?: string; tail_number?: string; payment_status: string | null; payout_cents: number | null })[];
+  `, [operator.id]);
 
-  const getLegs = db.prepare('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order');
+  const legsByReq = await legsByRequest(db, quotes.map(r => r.request_id));
 
   return (
     <div>
@@ -68,7 +69,7 @@ export default async function OperatorQuotesPage() {
       ) : (
         <div className="space-y-3">
           {quotes.map(quote => {
-            const legs = getLegs.all(quote.request_id) as BookingLeg[];
+            const legs = legsByReq.get(quote.request_id) ?? [];
             const route = legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).join(' → ');
 
             return (

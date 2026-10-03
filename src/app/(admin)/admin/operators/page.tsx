@@ -7,14 +7,14 @@ import type { Operator } from '@/lib/types';
 export default async function AdminOperatorsPage() {
   const db = getDb();
 
-  const operators = db.prepare(`
+  const operators = await db.query<Operator & { name: string; email: string; phone: string | null }>(`
     SELECT o.*, u.name, u.email, u.phone
     FROM operators o
     JOIN users u ON u.id = o.user_id
     ORDER BY
       CASE o.status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
       o.created_at DESC
-  `).all() as (Operator & { name: string; email: string; phone: string | null })[];
+  `);
 
   const statusBadge: Record<string, 'warning' | 'success' | 'error'> = {
     pending: 'warning',

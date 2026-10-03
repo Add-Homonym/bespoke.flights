@@ -2,7 +2,7 @@
 
 Private aviation charter marketplace. Travelers submit multi-leg flight requests, certified charter operators compete with quotes, and bookings happen directly — no broker markup.
 
-**Stack:** Next.js 16 · React 19 · TypeScript · Tailwind CSS 4 · better-sqlite3 · Stripe (Checkout + Connect) · Resend (email) · Vercel Cron
+**Stack:** Next.js 16 · React 19 · TypeScript · Tailwind CSS 4 · Postgres (Neon via Vercel) · Stripe (Checkout + Connect) · Resend (email) · Vercel Cron
 
 ---
 
@@ -242,7 +242,8 @@ src/
     ├── types.ts                # All TypeScript interfaces + market/fleet constants
     ├── validations.ts          # Zod schemas for all API inputs
     ├── db/
-    │   ├── index.ts            # SQLite connection (better-sqlite3, WAL mode)
+    │   ├── index.ts            # Postgres access: pg pool (Neon) or embedded PGlite
+    │   ├── queries.ts          # Shared query helpers (batched legs, quote counts)
     │   ├── schema.ts           # Full DDL: users, operators, aircraft, booking_requests,
     │   │                       #   booking_legs, quotes, outreach_log, discovered_operators
     │   └── seed.ts             # Test data: 4 operators, 2 customers, 1 admin,
@@ -266,7 +267,7 @@ src/
 
 ## Database Schema
 
-Eleven tables in SQLite (better-sqlite3, WAL mode):
+Eleven tables in Postgres:
 
 | Table | Purpose |
 |---|---|
@@ -282,7 +283,22 @@ Eleven tables in SQLite (better-sqlite3, WAL mode):
 | `refunds` | Ledger of refunds issued from the app. |
 | `payment_events` | Stripe webhook event IDs that have been processed, used for idempotency. |
 
-The `operators` table also stores the Stripe Connect account ID, capability flags, and an optional fee override. `getDb()` adds these columns to existing databases.
+The `operators` table also stores the Stripe Connect account ID, capability flags, and an optional fee override.
+
+### Database access
+
+`src/lib/db/index.ts` picks the database:
+
+| `DATABASE_URL` | Database |
+|---|---|
+| Set | Postgres via `pg` (production: Neon's pooled connection string, injected by the Vercel integration) |
+| Unset, development | Embedded [PGlite](https://pglite.dev) (Postgres compiled to WASM) in `data/pglite`. Nothing to install. |
+| Unset, production | Startup error |
+
+- **Schema** (`schema.ts`) is applied on the first query after each cold start. Every statement is `IF NOT EXISTS`, and an advisory lock stops concurrent cold starts from colliding. Schema changes must be additive and idempotent.
+- **Queries** use `?` placeholders, which are rewritten to `$1, $2, …`. Do not put a literal `?` in SQL text.
+- **Types:** `COUNT`/`SUM`/`BIGINT` values come back as JS numbers. Timestamps (`TIMESTAMPTZ`) come back as ISO 8601 strings. Money is stored in cents as `BIGINT`.
+- **Payment fulfillment** locks the booking request row (`SELECT … FOR UPDATE`). Stripe webhooks for the same request on different serverless instances then run one at a time instead of deadlocking or double-booking.
 
 ---
 
@@ -293,9 +309,17 @@ git clone https://github.com/Add-Homonym/bespoke.flights.git
 cd bespoke.flights
 npm install
 cp .env.example .env.local    # fill in values
-npm run seed                   # creates SQLite DB with test data
+npm run seed                   # loads test data into the local PGlite database
 npm run dev                    # http://localhost:3000
-npm test                       # Vitest suite
+npm test                       # Vitest suite (in-process PGlite)
+```
+
+No database setup is needed locally. To develop against Neon instead, pull the project's env vars (`vercel env pull .env.local`). Prefer a Neon development branch over production. The seed script refuses to run when `DATABASE_URL` is set unless you pass `SEED_DATABASE=yes`, because it creates accounts with a known password.
+
+To run the tests against a real Postgres server (tables are truncated):
+
+```bash
+TEST_DATABASE_URL=postgres://… npm run test:pg
 ```
 
 ### Test Accounts
@@ -325,17 +349,34 @@ All use password `password123`:
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | Production | Signing secret for the connected-accounts webhook endpoint |
 | `PLATFORM_FEE_BPS` | No | Platform commission in basis points (default `500` = 5%) |
 | `APP_URL` | No | Public base URL for Stripe redirect URLs and email links (defaults to the request origin) |
-| `DATABASE_PATH` | No | SQLite file path (default `data/bespoke.db`) |
+| `DATABASE_URL` | Production | Postgres connection string. Set automatically by the Vercel Neon integration (pooled). |
+| `DATABASE_POOL_MAX` | No | Max connections per function instance (default 5) |
+| `PGLITE_DIR` | No | Local PGlite data directory when `DATABASE_URL` is unset (default `data/pglite`; `memory` for in-memory) |
 
 ---
 
 ## Deployment (Vercel)
 
+### 1. Database: Neon through the Vercel Marketplace
+
+1. In the Vercel dashboard, open the **bespoke.flights** project → **Storage** → **Create Database** → **Neon** (Serverless Postgres).
+2. Choose a region close to the project's function region, then **Connect** it to the project for Production, Preview and Development.
+3. The integration adds `DATABASE_URL` (pooled) and related `PG*`/`POSTGRES_*` variables. The app only reads `DATABASE_URL`.
+4. Redeploy. Tables are created on the first request.
+
+Optional: enable Neon's preview-branch option in the integration so each preview deployment gets its own database branch instead of sharing production data.
+
+### 2. Other environment variables
+
+Set `JWT_SECRET` (required: a long random string; without it, session tokens are signed with a public development key), `CRON_SECRET`, and the Stripe and Resend variables from the table above.
+
+### 3. Deploy
+
 ```bash
 vercel deploy
 ```
 
-Set environment variables in the Vercel dashboard. The cron schedule in `vercel.json` runs the discovery pipeline every Monday at 18:00 UTC (8:00 AM HST). Vercel Cron requires a Pro plan.
+The cron schedule in `vercel.json` runs the discovery pipeline every Monday at 18:00 UTC (8:00 AM HST). Vercel Cron requires a Pro plan.
 
 To test the cron endpoint locally:
 

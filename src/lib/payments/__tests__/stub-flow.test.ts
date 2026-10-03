@@ -14,13 +14,13 @@ import type { Payment } from '@/lib/types';
 const BASE = 'http://localhost:3000';
 let f: Fixture;
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.stubEnv('STRIPE_SECRET_KEY', '');
   vi.stubEnv('NODE_ENV', 'test');
   vi.stubEnv('RESEND_API_KEY', '');
   vi.stubEnv('PLATFORM_FEE_BPS', '');
   vi.spyOn(console, 'log').mockImplementation(() => {});
-  f = createFixture();
+  f = await createFixture();
 });
 
 afterEach(() => {
@@ -29,7 +29,7 @@ afterEach(() => {
 });
 
 const payment = (id: number) => row<Payment>(f.db, 'SELECT * FROM payments WHERE id = ?', id);
-const status = (table: string, id: number) => row<{ status: string }>(f.db, `SELECT status FROM ${table} WHERE id = ?`, id).status;
+const status = async (table: string, id: number) => (await row<{ status: string }>(f.db, `SELECT status FROM ${table} WHERE id = ?`, id)).status;
 
 async function expectError(p: Promise<unknown>, httpStatus: number) {
   await expect(p).rejects.toBeInstanceOf(PaymentError);
@@ -42,20 +42,20 @@ describe('createCheckout (stub mode)', () => {
     expect(res.provider).toBe('stub');
     expect(res.url).toBe(`${BASE}/requests/${f.requestId}?checkout=stub&payment=${res.paymentId}`);
 
-    const p = payment(res.paymentId);
+    const p = await payment(res.paymentId);
     expect(p.status).toBe('pending');
     expect(p.amount_cents).toBe(8_500_000);
     expect(p.platform_fee_cents).toBe(425_000);
     expect(p.operator_payout_cents).toBe(8_075_000);
     // Quote and request untouched until paid
-    expect(status('quotes', f.quoteA)).toBe('pending');
-    expect(status('booking_requests', f.requestId)).toBe('quoted');
+    expect(await status('quotes', f.quoteA)).toBe('pending');
+    expect(await status('booking_requests', f.requestId)).toBe('quoted');
   });
 
   it('uses a per-operator fee override', async () => {
-    f.db.prepare('UPDATE operators SET platform_fee_bps = 250 WHERE id = ?').run(f.operatorA);
+    await f.db.run('UPDATE operators SET platform_fee_bps = 250 WHERE id = ?', [f.operatorA]);
     const res = await createCheckout(f.db, { quoteId: f.quoteA, customerId: f.customerId, baseUrl: BASE });
-    expect(payment(res.paymentId).platform_fee_cents).toBe(212_500);
+    expect((await payment(res.paymentId)).platform_fee_cents).toBe(212_500);
   });
 
   it('hides other customers’ quotes', async () => {
@@ -67,17 +67,17 @@ describe('createCheckout (stub mode)', () => {
   });
 
   it('rejects expired quotes', async () => {
-    f.db.prepare("UPDATE quotes SET valid_until = '2020-01-01' WHERE id = ?").run(f.quoteA);
+    await f.db.run("UPDATE quotes SET valid_until = '2020-01-01' WHERE id = ?", [f.quoteA]);
     await expectError(createCheckout(f.db, { quoteId: f.quoteA, customerId: f.customerId, baseUrl: BASE }), 409);
   });
 
   it('rejects non-pending quotes', async () => {
-    f.db.prepare("UPDATE quotes SET status = 'rejected' WHERE id = ?").run(f.quoteA);
+    await f.db.run("UPDATE quotes SET status = 'rejected' WHERE id = ?", [f.quoteA]);
     await expectError(createCheckout(f.db, { quoteId: f.quoteA, customerId: f.customerId, baseUrl: BASE }), 409);
   });
 
   it('rejects quotes from suspended operators', async () => {
-    f.db.prepare("UPDATE operators SET status = 'suspended' WHERE id = ?").run(f.operatorA);
+    await f.db.run("UPDATE operators SET status = 'suspended' WHERE id = ?", [f.operatorA]);
     await expectError(createCheckout(f.db, { quoteId: f.quoteA, customerId: f.customerId, baseUrl: BASE }), 409);
   });
 
@@ -89,8 +89,8 @@ describe('createCheckout (stub mode)', () => {
   it('supersedes an earlier open checkout on the same request', async () => {
     const first = await createCheckout(f.db, { quoteId: f.quoteA, customerId: f.customerId, baseUrl: BASE });
     const second = await createCheckout(f.db, { quoteId: f.quoteB, customerId: f.customerId, baseUrl: BASE });
-    expect(payment(first.paymentId).status).toBe('canceled');
-    expect(payment(second.paymentId).status).toBe('pending');
+    expect((await payment(first.paymentId)).status).toBe('canceled');
+    expect((await payment(second.paymentId)).status).toBe('pending');
   });
 
   it('blocks a new checkout once the request is paid', async () => {
@@ -106,11 +106,11 @@ describe('payment success', () => {
     const outcome = await simulateStubPayment(f.db, paymentId, f.customerId, BASE);
 
     expect(outcome).toBe('booked');
-    expect(payment(paymentId).status).toBe('succeeded');
-    expect(payment(paymentId).paid_at).not.toBeNull();
-    expect(status('quotes', f.quoteA)).toBe('accepted');
-    expect(status('quotes', f.quoteB)).toBe('rejected');
-    expect(status('booking_requests', f.requestId)).toBe('booked');
+    expect((await payment(paymentId)).status).toBe('succeeded');
+    expect((await payment(paymentId)).paid_at).not.toBeNull();
+    expect(await status('quotes', f.quoteA)).toBe('accepted');
+    expect(await status('quotes', f.quoteB)).toBe('rejected');
+    expect(await status('booking_requests', f.requestId)).toBe('booked');
   });
 
   it('sends receipt and operator confirmation emails', async () => {
@@ -125,7 +125,7 @@ describe('payment success', () => {
     const { paymentId } = await createCheckout(f.db, { quoteId: f.quoteA, customerId: f.customerId, baseUrl: BASE });
     await fulfillPayment(f.db, paymentId, { baseUrl: BASE });
     expect(await fulfillPayment(f.db, paymentId, { baseUrl: BASE })).toBe('duplicate');
-    expect(row<{ c: number }>(f.db, 'SELECT COUNT(*) c FROM refunds').c).toBe(0);
+    expect((await row<{ c: number }>(f.db, 'SELECT COUNT(*) c FROM refunds')).c).toBe(0);
   });
 
   it('cannot be simulated by another customer or twice', async () => {
@@ -143,18 +143,39 @@ describe('payment success', () => {
     // Customer had completed the first (superseded) session too
     const outcome = await fulfillPayment(f.db, first.paymentId, { baseUrl: BASE });
     expect(outcome).toBe('conflict');
-    expect(payment(first.paymentId).status).toBe('refunded');
-    expect(payment(first.paymentId).refunded_cents).toBe(8_500_000);
+    expect((await payment(first.paymentId)).status).toBe('refunded');
+    expect((await payment(first.paymentId)).refunded_cents).toBe(8_500_000);
     // The real booking stands
-    expect(status('booking_requests', f.requestId)).toBe('booked');
-    expect(status('quotes', f.quoteB)).toBe('accepted');
+    expect(await status('booking_requests', f.requestId)).toBe('booked');
+    expect(await status('quotes', f.quoteB)).toBe('accepted');
+  });
+
+  it('books exactly once when two payments for the same request complete concurrently', async () => {
+    // Repeated so the two transactions overlap; without row locks this deadlocks on real Postgres.
+    for (let round = 0; round < 15; round++) {
+      f = await createFixture();
+      const first = await createCheckout(f.db, { quoteId: f.quoteA, customerId: f.customerId, baseUrl: BASE });
+      const second = await createCheckout(f.db, { quoteId: f.quoteB, customerId: f.customerId, baseUrl: BASE });
+
+      const outcomes = await Promise.all([
+        fulfillPayment(f.db, first.paymentId, { baseUrl: BASE }),
+        fulfillPayment(f.db, second.paymentId, { baseUrl: BASE }),
+      ]);
+
+      expect([...outcomes].sort()).toEqual(['booked', 'conflict']);
+      const accepted = await f.db.query("SELECT id FROM quotes WHERE request_id = ? AND status = 'accepted'", [f.requestId]);
+      expect(accepted).toHaveLength(1);
+      expect(await status('booking_requests', f.requestId)).toBe('booked');
+      const refunded = await f.db.query("SELECT id FROM payments WHERE request_id = ? AND status = 'refunded'", [f.requestId]);
+      expect(refunded).toHaveLength(1);
+    }
   });
 
   it('books a superseded checkout if it is the one that gets paid', async () => {
     const first = await createCheckout(f.db, { quoteId: f.quoteA, customerId: f.customerId, baseUrl: BASE });
     await createCheckout(f.db, { quoteId: f.quoteB, customerId: f.customerId, baseUrl: BASE });
     expect(await fulfillPayment(f.db, first.paymentId, { baseUrl: BASE })).toBe('booked');
-    expect(status('quotes', f.quoteA)).toBe('accepted');
+    expect(await status('quotes', f.quoteA)).toBe('accepted');
   });
 });
 
@@ -168,14 +189,14 @@ describe('refunds', () => {
   it('partial then full refund; full refund cancels the booking', async () => {
     const id = await paid();
     await refundPayment(f.db, id, { amountCents: 1_000_000, reason: 'Leg 2 cancelled' });
-    expect(payment(id).status).toBe('partially_refunded');
-    expect(status('booking_requests', f.requestId)).toBe('booked');
+    expect((await payment(id)).status).toBe('partially_refunded');
+    expect(await status('booking_requests', f.requestId)).toBe('booked');
 
     await refundPayment(f.db, id, {});
-    expect(payment(id).status).toBe('refunded');
-    expect(payment(id).refunded_cents).toBe(8_500_000);
-    expect(status('booking_requests', f.requestId)).toBe('cancelled');
-    expect(row<{ c: number }>(f.db, 'SELECT COUNT(*) c FROM refunds WHERE payment_id = ?', id).c).toBe(2);
+    expect((await payment(id)).status).toBe('refunded');
+    expect((await payment(id)).refunded_cents).toBe(8_500_000);
+    expect(await status('booking_requests', f.requestId)).toBe('cancelled');
+    expect((await row<{ c: number }>(f.db, 'SELECT COUNT(*) c FROM refunds WHERE payment_id = ?', id)).c).toBe(2);
   });
 
   it('rejects over-refunds', async () => {
@@ -191,20 +212,20 @@ describe('refunds', () => {
 
   it('applyRefundTotal is absolute and never decreases', async () => {
     const id = await paid();
-    applyRefundTotal(f.db, id, 500_000);
-    applyRefundTotal(f.db, id, 500_000);
-    expect(payment(id).refunded_cents).toBe(500_000);
-    applyRefundTotal(f.db, id, 100);
-    expect(payment(id).refunded_cents).toBe(500_000);
+    await applyRefundTotal(f.db, id, 500_000);
+    await applyRefundTotal(f.db, id, 500_000);
+    expect((await payment(id)).refunded_cents).toBe(500_000);
+    await applyRefundTotal(f.db, id, 100);
+    expect((await payment(id)).refunded_cents).toBe(500_000);
   });
 });
 
 describe('connect onboarding (stub mode)', () => {
   it('marks the operator as payout-ready', async () => {
-    f.db.prepare('UPDATE operators SET stripe_account_id = NULL, stripe_charges_enabled = 0, stripe_payouts_enabled = 0 WHERE id = ?').run(f.operatorB);
+    await f.db.run('UPDATE operators SET stripe_account_id = NULL, stripe_charges_enabled = 0, stripe_payouts_enabled = 0 WHERE id = ?', [f.operatorB]);
     const url = await startConnectOnboarding(f.db, f.operatorB, BASE);
     expect(url).toBe(`${BASE}/operator/settings?payouts=return`);
-    const op = row<{ stripe_account_id: string; stripe_charges_enabled: number }>(f.db, 'SELECT * FROM operators WHERE id = ?', f.operatorB);
+    const op = await row<{ stripe_account_id: string; stripe_charges_enabled: number }>(f.db, 'SELECT * FROM operators WHERE id = ?', f.operatorB);
     expect(op.stripe_account_id).toBe(`acct_stub_${f.operatorB}`);
     expect(op.stripe_charges_enabled).toBe(1);
   });

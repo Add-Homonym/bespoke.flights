@@ -16,7 +16,7 @@ export async function POST(req: Request) {
     const { email, password } = parsed.data;
     const db = getDb();
 
-    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email) as User | undefined;
+    const user = await db.one<User>('SELECT * FROM users WHERE email = ?', [email]);
     if (!user) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }

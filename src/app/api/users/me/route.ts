@@ -9,7 +9,7 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const db = getDb();
-  const user = db.prepare('SELECT id, email, phone, name, role, created_at FROM users WHERE id = ?').get(session.userId) as Omit<User, 'password_hash' | 'updated_at'> | undefined;
+  const user = await db.one<Omit<User, 'password_hash' | 'updated_at'>>('SELECT id, email, phone, name, role, created_at FROM users WHERE id = ?', [session.userId]);
 
   if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
   return NextResponse.json(user);
@@ -37,11 +37,11 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
   }
 
-  updates.push("updated_at = datetime('now')");
+  updates.push('updated_at = now()');
   values.push(session.userId);
 
-  db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+  await db.run(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, values);
 
-  const user = db.prepare('SELECT id, email, phone, name, role, created_at FROM users WHERE id = ?').get(session.userId);
+  const user = await db.one('SELECT id, email, phone, name, role, created_at FROM users WHERE id = ?', [session.userId]);
   return NextResponse.json(user);
 }

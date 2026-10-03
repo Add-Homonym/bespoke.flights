@@ -35,24 +35,24 @@ export default async function RequestDetailPage({
   const { checkout } = await searchParams;
   const db = getDb();
 
-  const request = db.prepare('SELECT * FROM booking_requests WHERE id = ?').get(requestId) as BookingRequest | undefined;
+  const request = await db.one<BookingRequest>('SELECT * FROM booking_requests WHERE id = ?', [requestId]);
   if (!request || (session.role === 'customer' && request.customer_id !== session.userId)) {
     notFound();
   }
 
-  const legs = db.prepare('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order').all(request.id) as BookingLeg[];
+  const legs = await db.query<BookingLeg>('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order', [request.id]);
 
-  const quotes = db.prepare(`
+  const quotes = await db.query<Quote & { company_name: string; stripe_charges_enabled: number; aircraft_type?: string; aircraft_capacity?: number; tail_number?: string; aircraft_year?: number }>(`
     SELECT q.*, o.company_name, o.stripe_charges_enabled, a.type as aircraft_type, a.capacity as aircraft_capacity, a.tail_number, a.year as aircraft_year
     FROM quotes q
     JOIN operators o ON o.id = q.operator_id
     LEFT JOIN aircraft a ON a.id = q.aircraft_id
     WHERE q.request_id = ?
     ORDER BY q.price_cents ASC
-  `).all(request.id) as (Quote & { company_name: string; stripe_charges_enabled: number; aircraft_type?: string; aircraft_capacity?: number; tail_number?: string; aircraft_year?: number })[];
+  `, [request.id]);
 
   // Most relevant payment: settled or in flight first, then the latest failure.
-  const payment = db.prepare(`
+  const payment = await db.one<(Payment & { company_name: string })>(`
     SELECT p.*, o.company_name FROM payments p
     JOIN operators o ON o.id = p.operator_id
     WHERE p.request_id = ? AND p.status != 'canceled'
@@ -60,13 +60,13 @@ export default async function RequestDetailPage({
       WHEN 'succeeded' THEN 0 WHEN 'partially_refunded' THEN 0 WHEN 'refunded' THEN 0
       WHEN 'processing' THEN 1 WHEN 'pending' THEN 2 ELSE 3 END, p.id DESC
     LIMIT 1
-  `).get(request.id) as (Payment & { company_name: string }) | undefined;
+  `, [request.id]);
   const paymentInFlight = payment && ['processing', 'succeeded', 'partially_refunded'].includes(payment.status);
   const stripeMode = getPaymentsMode() === 'stripe';
   const today = new Date().toISOString().slice(0, 10);
 
   // Count operators contacted via outreach
-  const outreachCount = (db.prepare('SELECT COUNT(*) as count FROM outreach_log WHERE request_id = ?').get(request.id) as { count: number }).count;
+  const outreachCount = (await db.one<{ count: number }>('SELECT COUNT(*) as count FROM outreach_log WHERE request_id = ?', [request.id]))!.count;
 
   const route = legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).join(' → ');
 

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
+import { toId } from '@/lib/db/queries';
 
 export async function GET(req: Request) {
   const session = await getSession();
@@ -13,7 +14,7 @@ export async function GET(req: Request) {
 
   if (requestId) {
     // Get outreach for a specific request
-    const logs = db.prepare(`
+    const logs = await db.query(`
       SELECT ol.*, o.company_name, o.contact_method, o.contact_email, o.contact_phone,
              q.id as quote_id, q.price_cents as quote_price, q.status as quote_status
       FROM outreach_log ol
@@ -21,12 +22,12 @@ export async function GET(req: Request) {
       LEFT JOIN quotes q ON q.request_id = ol.request_id AND q.operator_id = ol.operator_id
       WHERE ol.request_id = ?
       ORDER BY ol.match_score DESC
-    `).all(requestId);
+    `, [toId(requestId)]);
     return NextResponse.json(logs);
   }
 
   // Get recent outreach activity (admin or customer's own)
-  const logs = db.prepare(`
+  const logs = await db.query(`
     SELECT ol.*, o.company_name, br.status as request_status
     FROM outreach_log ol
     JOIN operators o ON o.id = ol.operator_id
@@ -34,7 +35,7 @@ export async function GET(req: Request) {
     ${session.role === 'customer' ? 'WHERE br.customer_id = ?' : ''}
     ORDER BY ol.sent_at DESC
     LIMIT 50
-  `).all(session.role === 'customer' ? session.userId : undefined);
+  `, session.role === 'customer' ? [session.userId] : []);
 
   return NextResponse.json(logs);
 }

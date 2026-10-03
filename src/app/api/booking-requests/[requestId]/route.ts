@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
+import { toId } from '@/lib/db/queries';
 import type { BookingRequest, BookingLeg } from '@/lib/types';
 
 export async function GET(_req: Request, { params }: { params: Promise<{ requestId: string }> }) {
@@ -9,7 +10,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ request
 
   const { requestId } = await params;
   const db = getDb();
-  const request = db.prepare('SELECT * FROM booking_requests WHERE id = ?').get(requestId) as BookingRequest | undefined;
+  const request = await db.one<BookingRequest>('SELECT * FROM booking_requests WHERE id = ?', [toId(requestId)]);
 
   if (!request) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
@@ -18,8 +19,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ request
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const legs = db.prepare('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order').all(request.id) as BookingLeg[];
-  const customer = db.prepare('SELECT name, email FROM users WHERE id = ?').get(request.customer_id) as { name: string; email: string };
+  const legs = await db.query<BookingLeg>('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order', [request.id]);
+  const customer = await db.one<{ name: string; email: string }>('SELECT name, email FROM users WHERE id = ?', [request.customer_id]);
 
   return NextResponse.json({ ...request, legs, customer });
 }
@@ -32,7 +33,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ reques
   const body = await req.json();
   const db = getDb();
 
-  const request = db.prepare('SELECT * FROM booking_requests WHERE id = ?').get(requestId) as BookingRequest | undefined;
+  const request = await db.one<BookingRequest>('SELECT * FROM booking_requests WHERE id = ?', [toId(requestId)]);
   if (!request) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   if (session.role === 'customer' && request.customer_id !== session.userId) {
@@ -40,7 +41,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ reques
   }
 
   if (body.status === 'cancelled') {
-    db.prepare("UPDATE booking_requests SET status = 'cancelled', updated_at = datetime('now') WHERE id = ?").run(requestId);
+    await db.run("UPDATE booking_requests SET status = 'cancelled', updated_at = now() WHERE id = ?", [request.id]);
   }
 
   return NextResponse.json({ success: true });

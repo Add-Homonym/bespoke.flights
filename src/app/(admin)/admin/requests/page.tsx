@@ -1,9 +1,10 @@
 import Link from 'next/link';
 import { getDb } from '@/lib/db';
+import { legsByRequest, quoteCountsByRequest } from '@/lib/db/queries';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, Thead, Th, Td, Tr } from '@/components/ui/table';
-import type { BookingRequest, BookingLeg } from '@/lib/types';
+import type { BookingRequest } from '@/lib/types';
 
 const statusBadge: Record<string, 'default' | 'success' | 'warning' | 'error' | 'gold'> = {
   open: 'gold',
@@ -15,15 +16,15 @@ const statusBadge: Record<string, 'default' | 'success' | 'warning' | 'error' | 
 
 export default async function AdminRequestsPage() {
   const db = getDb();
-  const requests = db.prepare(`
+  const requests = await db.query<BookingRequest & { customer_name: string; customer_email: string }>(`
     SELECT br.*, u.name as customer_name, u.email as customer_email
     FROM booking_requests br
     JOIN users u ON u.id = br.customer_id
     ORDER BY br.created_at DESC
-  `).all() as (BookingRequest & { customer_name: string; customer_email: string })[];
+  `);
 
-  const getLegs = db.prepare('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order');
-  const getQuoteCount = db.prepare('SELECT COUNT(*) as count FROM quotes WHERE request_id = ?');
+  const legsByReq = await legsByRequest(db, requests.map(r => r.id));
+  const quoteCounts = await quoteCountsByRequest(db, requests.map(r => r.id));
 
   return (
     <div>
@@ -49,8 +50,8 @@ export default async function AdminRequestsPage() {
           </Thead>
           <tbody>
             {requests.map(req => {
-              const legs = getLegs.all(req.id) as BookingLeg[];
-              const quoteCount = (getQuoteCount.get(req.id) as { count: number }).count;
+              const legs = legsByReq.get(req.id) ?? [];
+              const quoteCount = quoteCounts.get(req.id) ?? 0;
               const route = legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).join(' → ');
 
               return (

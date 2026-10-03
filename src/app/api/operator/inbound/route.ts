@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
+import { legsByRequest } from '@/lib/db/queries';
 import type { Operator } from '@/lib/types';
 
 export async function GET() {
@@ -10,11 +11,27 @@ export async function GET() {
   }
 
   const db = getDb();
-  const operator = db.prepare('SELECT * FROM operators WHERE user_id = ?').get(session.userId) as Operator | undefined;
+  const operator = await db.one<Operator>('SELECT * FROM operators WHERE user_id = ?', [session.userId]);
   if (!operator) return NextResponse.json({ error: 'Operator not found' }, { status: 404 });
 
   // Get all outreach logs for this operator, joined with request and leg data
-  const inbound = db.prepare(`
+  const inbound = await db.query<{
+    outreach_id: number;
+    request_id: number;
+    match_score: number;
+    rfq_subject: string;
+    rfq_body: string;
+    outreach_status: string;
+    sent_at: string;
+    responded_at: string | null;
+    passenger_count: number;
+    request_notes: string | null;
+    request_status: string;
+    request_created_at: string;
+    quote_id: number | null;
+    quote_price: number | null;
+    quote_status: string | null;
+  }>(`
     SELECT
       ol.id as outreach_id,
       ol.request_id,
@@ -36,30 +53,13 @@ export async function GET() {
     LEFT JOIN quotes q ON q.request_id = ol.request_id AND q.operator_id = ol.operator_id
     WHERE ol.operator_id = ?
     ORDER BY ol.sent_at DESC
-  `).all(operator.id) as Array<{
-    outreach_id: number;
-    request_id: number;
-    match_score: number;
-    rfq_subject: string;
-    rfq_body: string;
-    outreach_status: string;
-    sent_at: string;
-    responded_at: string | null;
-    passenger_count: number;
-    request_notes: string | null;
-    request_status: string;
-    request_created_at: string;
-    quote_id: number | null;
-    quote_price: number | null;
-    quote_status: string | null;
-  }>;
+  `, [operator.id]);
 
   // Attach legs to each
-  const getLegs = db.prepare('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order');
-
+  const legs = await legsByRequest(db, inbound.map(i => i.request_id));
   const result = inbound.map(item => ({
     ...item,
-    legs: getLegs.all(item.request_id),
+    legs: legs.get(item.request_id) ?? [],
   }));
 
   return NextResponse.json(result);

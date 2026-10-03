@@ -14,7 +14,7 @@
  * runs, but checkout is completed via simulateStubPayment().
  */
 
-import type Database from 'better-sqlite3';
+import type { Db } from '@/lib/db';
 import type Stripe from 'stripe';
 import { getStripe } from './stripe';
 import {
@@ -39,8 +39,8 @@ export class PaymentError extends Error {
 
 const SETTLED_STATUSES = ['succeeded', 'refunded', 'partially_refunded'] as const;
 
-function getPayment(db: Database.Database, id: number): Payment | undefined {
-  return db.prepare('SELECT * FROM payments WHERE id = ?').get(id) as Payment | undefined;
+function getPayment(db: Db, id: number, forUpdate = false): Promise<Payment | undefined> {
+  return db.one<Payment>(`SELECT * FROM payments WHERE id = ?${forUpdate ? ' FOR UPDATE' : ''}`, [id]);
 }
 
 function todayUtc(): string {
@@ -56,7 +56,7 @@ export interface CheckoutResult {
 }
 
 export async function createCheckout(
-  db: Database.Database,
+  db: Db,
   params: { quoteId: number; customerId: number; baseUrl: string }
 ): Promise<CheckoutResult> {
   const mode = getPaymentsMode();
@@ -64,10 +64,10 @@ export async function createCheckout(
     throw new PaymentError('Payments are not configured', 503);
   }
 
-  const quote = db.prepare('SELECT * FROM quotes WHERE id = ?').get(params.quoteId) as Quote | undefined;
+  const quote = await db.one<Quote>('SELECT * FROM quotes WHERE id = ?', [params.quoteId]);
   if (!quote) throw new PaymentError('Quote not found', 404);
 
-  const request = db.prepare('SELECT * FROM booking_requests WHERE id = ?').get(quote.request_id) as BookingRequest;
+  const request = (await db.one<BookingRequest>('SELECT * FROM booking_requests WHERE id = ?', [quote.request_id]))!;
   if (request.customer_id !== params.customerId) throw new PaymentError('Quote not found', 404);
 
   if (quote.status !== 'pending') throw new PaymentError(`Quote is ${quote.status}`, 409);
@@ -81,7 +81,7 @@ export async function createCheckout(
     throw new PaymentError('Quote amount is below the minimum charge', 400);
   }
 
-  const operator = db.prepare('SELECT * FROM operators WHERE id = ?').get(quote.operator_id) as Operator;
+  const operator = (await db.one<Operator>('SELECT * FROM operators WHERE id = ?', [quote.operator_id]))!;
   if (operator.status !== 'approved') {
     throw new PaymentError('Operator is not currently approved', 409);
   }
@@ -89,9 +89,9 @@ export async function createCheckout(
     throw new PaymentError('Operator has not completed payout setup', 409);
   }
 
-  const inFlight = db.prepare(`
+  const inFlight = await db.one(`
     SELECT id FROM payments WHERE request_id = ? AND status IN ('processing', 'succeeded', 'partially_refunded')
-  `).get(request.id);
+  `, [request.id]);
   if (inFlight) {
     throw new PaymentError('A payment for this request is already in progress or complete', 409);
   }
@@ -102,26 +102,27 @@ export async function createCheckout(
   const fees = computeFees(quote.price_cents, platformFeeBps(operator.platform_fee_bps));
   const provider = mode === 'stripe' ? 'stripe' : 'stub';
 
-  const paymentId = Number(db.prepare(`
+  const paymentId = (await db.one<{ id: number }>(`
     INSERT INTO payments (request_id, quote_id, customer_id, operator_id, amount_cents, platform_fee_cents,
       operator_payout_cents, currency, status, provider, stripe_destination_account)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
-  `).run(
+    RETURNING id
+  `, [
     request.id, quote.id, params.customerId, operator.id,
     fees.amountCents, fees.platformFeeCents, fees.operatorPayoutCents,
     quote.currency.toUpperCase(), provider, operator.stripe_account_id ?? null,
-  ).lastInsertRowid);
+  ]))!.id;
 
   const requestUrl = `${params.baseUrl}/requests/${request.id}`;
 
   if (provider === 'stub') {
     const url = `${requestUrl}?checkout=stub&payment=${paymentId}`;
-    db.prepare('UPDATE payments SET checkout_url = ? WHERE id = ?').run(url, paymentId);
+    await db.run('UPDATE payments SET checkout_url = ? WHERE id = ?', [url, paymentId]);
     return { paymentId, url, provider };
   }
 
-  const customer = db.prepare('SELECT email FROM users WHERE id = ?').get(params.customerId) as { email: string };
-  const route = routeLabel(db, request.id);
+  const customer = (await db.one<{ email: string }>('SELECT email FROM users WHERE id = ?', [params.customerId]))!;
+  const route = await routeLabel(db, request.id);
   const metadata = {
     payment_id: String(paymentId),
     quote_id: String(quote.id),
@@ -159,16 +160,16 @@ export async function createCheckout(
       cancel_url: `${requestUrl}?checkout=canceled`,
     }, { idempotencyKey: `checkout-payment-${paymentId}` });
 
-    db.prepare(`
-      UPDATE payments SET stripe_checkout_session_id = ?, checkout_url = ?, updated_at = datetime('now') WHERE id = ?
-    `).run(session.id, session.url, paymentId);
+    await db.run(`
+      UPDATE payments SET stripe_checkout_session_id = ?, checkout_url = ?, updated_at = now() WHERE id = ?
+    `, [session.id, session.url, paymentId]);
 
     return { paymentId, url: session.url!, provider };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    db.prepare(`
-      UPDATE payments SET status = 'failed', failure_reason = ?, updated_at = datetime('now') WHERE id = ?
-    `).run(`Checkout creation failed: ${message}`, paymentId);
+    await db.run(`
+      UPDATE payments SET status = 'failed', failure_reason = ?, updated_at = now() WHERE id = ?
+    `, [`Checkout creation failed: ${message}`, paymentId]);
     console.error('Stripe checkout creation failed:', message);
     throw new PaymentError('Could not start checkout', 502);
   }
@@ -178,10 +179,10 @@ export async function createCheckout(
  * Cancel open checkouts for a request. A session that turns out to be already
  * complete means the customer has paid; that blocks a new checkout.
  */
-async function supersedePendingPayments(db: Database.Database, requestId: number, exceptPaymentId?: number) {
-  const pending = db.prepare(`
+async function supersedePendingPayments(db: Db, requestId: number, exceptPaymentId?: number) {
+  const pending = await db.query<Payment>(`
     SELECT * FROM payments WHERE request_id = ? AND status = 'pending' AND id != ?
-  `).all(requestId, exceptPaymentId ?? -1) as Payment[];
+  `, [requestId, exceptPaymentId ?? -1]);
 
   for (const payment of pending) {
     if (payment.provider === 'stripe' && payment.stripe_checkout_session_id) {
@@ -195,10 +196,10 @@ async function supersedePendingPayments(db: Database.Database, requestId: number
         }
       }
     }
-    db.prepare(`
-      UPDATE payments SET status = 'canceled', failure_reason = 'Superseded by a new checkout', updated_at = datetime('now')
+    await db.run(`
+      UPDATE payments SET status = 'canceled', failure_reason = 'Superseded by a new checkout', updated_at = now()
       WHERE id = ? AND status = 'pending'
-    `).run(payment.id);
+    `, [payment.id]);
   }
 }
 
@@ -212,103 +213,102 @@ export type FulfillmentOutcome = 'booked' | 'duplicate' | 'conflict';
  * Returns 'conflict' when the request was already booked by a different
  * payment, or the quote is no longer available; the caller must refund.
  */
-export function markPaymentSucceeded(
-  db: Database.Database,
+export async function markPaymentSucceeded(
+  db: Db,
   paymentId: number,
   details: { paymentIntentId?: string | null } = {}
-): FulfillmentOutcome {
-  const run = db.transaction((): FulfillmentOutcome => {
-    const payment = getPayment(db, paymentId);
-    if (!payment) throw new Error(`Payment ${paymentId} not found`);
+): Promise<FulfillmentOutcome> {
+  return db.transaction(async tx => {
+    // Lock the request row first: concurrent fulfillments for the same
+    // request (webhooks on different instances) run one at a time.
+    const requestId = (await tx.one<{ request_id: number }>('SELECT request_id FROM payments WHERE id = ?', [paymentId]))?.request_id;
+    if (requestId === undefined) throw new Error(`Payment ${paymentId} not found`);
+    const request = (await tx.one<BookingRequest>('SELECT * FROM booking_requests WHERE id = ? FOR UPDATE', [requestId]))!;
+    const payment = (await getPayment(tx, paymentId, true))!;
+    const quote = (await tx.one<Quote>('SELECT * FROM quotes WHERE id = ?', [payment.quote_id]))!;
+
     if ((SETTLED_STATUSES as readonly string[]).includes(payment.status)) {
       // A succeeded payment whose quote never got accepted is a conflict whose
       // refund has not gone through yet (e.g. Stripe error, webhook retried).
-      const quoteStatus = (db.prepare('SELECT status FROM quotes WHERE id = ?').get(payment.quote_id) as { status: string }).status;
-      return payment.status === 'succeeded' && quoteStatus !== 'accepted' ? 'conflict' : 'duplicate';
+      return payment.status === 'succeeded' && quote.status !== 'accepted' ? 'conflict' : 'duplicate';
     }
 
-    db.prepare(`
-      UPDATE payments SET status = 'succeeded', paid_at = datetime('now'), updated_at = datetime('now'),
+    await tx.run(`
+      UPDATE payments SET status = 'succeeded', paid_at = now(), updated_at = now(),
         failure_reason = NULL,
         stripe_payment_intent_id = COALESCE(?, stripe_payment_intent_id)
       WHERE id = ?
-    `).run(details.paymentIntentId ?? null, paymentId);
-
-    const quote = db.prepare('SELECT * FROM quotes WHERE id = ?').get(payment.quote_id) as Quote;
-    const request = db.prepare('SELECT * FROM booking_requests WHERE id = ?').get(payment.request_id) as BookingRequest;
+    `, [details.paymentIntentId ?? null, paymentId]);
 
     if (quote.status !== 'pending' || !['open', 'quoted'].includes(request.status)) {
       return 'conflict';
     }
 
-    db.prepare("UPDATE quotes SET status = 'accepted' WHERE id = ?").run(quote.id);
-    db.prepare("UPDATE quotes SET status = 'rejected' WHERE request_id = ? AND id != ? AND status = 'pending'")
-      .run(request.id, quote.id);
-    db.prepare("UPDATE booking_requests SET status = 'booked', updated_at = datetime('now') WHERE id = ?")
-      .run(request.id);
+    await tx.run("UPDATE quotes SET status = 'accepted' WHERE id = ?", [quote.id]);
+    await tx.run("UPDATE quotes SET status = 'rejected' WHERE request_id = ? AND id != ? AND status = 'pending'", [request.id, quote.id]);
+    await tx.run("UPDATE booking_requests SET status = 'booked', updated_at = now() WHERE id = ?", [request.id]);
     return 'booked';
   });
-  return run.immediate();
 }
 
-export function markPaymentProcessing(db: Database.Database, paymentId: number, paymentIntentId?: string | null) {
-  db.prepare(`
-    UPDATE payments SET status = 'processing', updated_at = datetime('now'),
+export async function markPaymentProcessing(db: Db, paymentId: number, paymentIntentId?: string | null) {
+  await db.run(`
+    UPDATE payments SET status = 'processing', updated_at = now(),
       stripe_payment_intent_id = COALESCE(?, stripe_payment_intent_id)
     WHERE id = ? AND status IN ('pending', 'canceled')
-  `).run(paymentIntentId ?? null, paymentId);
+  `, [paymentIntentId ?? null, paymentId]);
 }
 
-export function markPaymentFailed(db: Database.Database, paymentId: number, reason: string) {
-  db.prepare(`
-    UPDATE payments SET status = 'failed', failure_reason = ?, updated_at = datetime('now')
+export async function markPaymentFailed(db: Db, paymentId: number, reason: string) {
+  await db.run(`
+    UPDATE payments SET status = 'failed', failure_reason = ?, updated_at = now()
     WHERE id = ? AND status IN ('pending', 'processing', 'canceled')
-  `).run(reason, paymentId);
+  `, [reason, paymentId]);
 }
 
-export function markPaymentCanceled(db: Database.Database, paymentId: number, reason: string) {
-  db.prepare(`
-    UPDATE payments SET status = 'canceled', failure_reason = ?, updated_at = datetime('now')
+export async function markPaymentCanceled(db: Db, paymentId: number, reason: string) {
+  await db.run(`
+    UPDATE payments SET status = 'canceled', failure_reason = ?, updated_at = now()
     WHERE id = ? AND status = 'pending'
-  `).run(reason, paymentId);
+  `, [reason, paymentId]);
 }
 
 /**
  * Set the refunded total (absolute, so repeated webhook deliveries are safe).
  * A full refund of the payment that booked a request cancels the booking.
  */
-export function applyRefundTotal(db: Database.Database, paymentId: number, refundedCents: number) {
-  db.transaction(() => {
-    const payment = getPayment(db, paymentId);
+export async function applyRefundTotal(db: Db, paymentId: number, refundedCents: number) {
+  await db.transaction(async tx => {
+    const payment = await getPayment(tx, paymentId, true);
     if (!payment) return;
     const total = Math.min(Math.max(refundedCents, payment.refunded_cents), payment.amount_cents);
     if (total <= 0) return;
     const status = total >= payment.amount_cents ? 'refunded' : 'partially_refunded';
 
-    db.prepare(`
-      UPDATE payments SET refunded_cents = ?, status = ?, updated_at = datetime('now') WHERE id = ?
-    `).run(total, status, paymentId);
+    await tx.run(`
+      UPDATE payments SET refunded_cents = ?, status = ?, updated_at = now() WHERE id = ?
+    `, [total, status, paymentId]);
 
     if (status === 'refunded') {
-      const quote = db.prepare('SELECT status FROM quotes WHERE id = ?').get(payment.quote_id) as { status: string };
+      const quote = (await tx.one<{ status: string }>('SELECT status FROM quotes WHERE id = ?', [payment.quote_id]))!;
       if (quote.status === 'accepted') {
-        db.prepare(`
-          UPDATE booking_requests SET status = 'cancelled', updated_at = datetime('now')
+        await tx.run(`
+          UPDATE booking_requests SET status = 'cancelled', updated_at = now()
           WHERE id = ? AND status = 'booked'
-        `).run(payment.request_id);
+        `, [payment.request_id]);
       }
     }
-  })();
+  });
 }
 
 // ─── Refunds ────────────────────────────────────────────────────────
 
 export async function refundPayment(
-  db: Database.Database,
+  db: Db,
   paymentId: number,
   params: { amountCents?: number; reason?: string | null; initiatedBy?: number | null }
 ): Promise<Payment> {
-  const payment = getPayment(db, paymentId);
+  const payment = await getPayment(db, paymentId);
   if (!payment) throw new PaymentError('Payment not found', 404);
   if (!['succeeded', 'partially_refunded'].includes(payment.status)) {
     throw new PaymentError(`Cannot refund a payment that is ${payment.status}`, 409);
@@ -342,28 +342,29 @@ export async function refundPayment(
     }
   }
 
-  db.prepare(`
-    INSERT OR IGNORE INTO refunds (payment_id, amount_cents, reason, stripe_refund_id, initiated_by)
+  await db.run(`
+    INSERT INTO refunds (payment_id, amount_cents, reason, stripe_refund_id, initiated_by)
     VALUES (?, ?, ?, ?, ?)
-  `).run(payment.id, amount, params.reason ?? null, stripeRefundId, params.initiatedBy ?? null);
-  applyRefundTotal(db, payment.id, payment.refunded_cents + amount);
+    ON CONFLICT (stripe_refund_id) DO NOTHING
+  `, [payment.id, amount, params.reason ?? null, stripeRefundId, params.initiatedBy ?? null]);
+  await applyRefundTotal(db, payment.id, payment.refunded_cents + amount);
 
-  return getPayment(db, payment.id)!;
+  return (await getPayment(db, payment.id))!;
 }
 
 // ─── Fulfillment side effects ───────────────────────────────────────
 
 /** Apply a successful payment: book, notify, and refund on conflict. */
 export async function fulfillPayment(
-  db: Database.Database,
+  db: Db,
   paymentId: number,
   details: { paymentIntentId?: string | null; baseUrl: string }
 ): Promise<FulfillmentOutcome> {
-  const outcome = markPaymentSucceeded(db, paymentId, details);
+  const outcome = await markPaymentSucceeded(db, paymentId, details);
 
   if (outcome === 'booked') {
     // Other checkouts for this request can no longer complete a booking.
-    const payment = getPayment(db, paymentId)!;
+    const payment = (await getPayment(db, paymentId))!;
     await supersedePendingPayments(db, payment.request_id, paymentId).catch(err =>
       console.error('Failed to close other checkouts:', err)
     );
@@ -381,13 +382,13 @@ export async function fulfillPayment(
 
 /** Stub mode only: complete a pending payment as if Stripe had confirmed it. */
 export async function simulateStubPayment(
-  db: Database.Database,
+  db: Db,
   paymentId: number,
   customerId: number,
   baseUrl: string
 ): Promise<FulfillmentOutcome> {
   if (getPaymentsMode() !== 'stub') throw new PaymentError('Not available', 404);
-  const payment = getPayment(db, paymentId);
+  const payment = await getPayment(db, paymentId);
   if (!payment || payment.customer_id !== customerId || payment.provider !== 'stub') {
     throw new PaymentError('Payment not found', 404);
   }
@@ -395,13 +396,17 @@ export async function simulateStubPayment(
   return fulfillPayment(db, paymentId, { paymentIntentId: null, baseUrl });
 }
 
-function routeLabel(db: Database.Database, requestId: number): string {
-  const legs = db.prepare('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order').all(requestId) as BookingLeg[];
+async function routeLabel(db: Db, requestId: number): Promise<string> {
+  const legs = await db.query<BookingLeg>('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order', [requestId]);
   return legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).join(' → ');
 }
 
-async function sendBookingEmails(db: Database.Database, paymentId: number, baseUrl: string) {
-  const row = db.prepare(`
+async function sendBookingEmails(db: Db, paymentId: number, baseUrl: string) {
+  const row = (await db.one<Payment & {
+    customer_email: string; passenger_count: number; company_name: string;
+    operator_email: string | null; operator_user_email: string;
+    aircraft_type: string | null; tail_number: string | null;
+  }>(`
     SELECT p.*, u.email AS customer_email, br.passenger_count,
       o.company_name, o.contact_email AS operator_email, ou.email AS operator_user_email,
       a.type AS aircraft_type, a.tail_number
@@ -413,20 +418,16 @@ async function sendBookingEmails(db: Database.Database, paymentId: number, baseU
     JOIN quotes q ON q.id = p.quote_id
     LEFT JOIN aircraft a ON a.id = q.aircraft_id
     WHERE p.id = ?
-  `).get(paymentId) as Payment & {
-    customer_email: string; passenger_count: number; company_name: string;
-    operator_email: string | null; operator_user_email: string;
-    aircraft_type: string | null; tail_number: string | null;
-  };
+  `, [paymentId]))!;
 
-  const legs = db.prepare('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order').all(row.request_id) as BookingLeg[];
+  const legs = await db.query<BookingLeg>('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order', [row.request_id]);
   const dateRange = legs.length > 1
     ? `${legs[0].departure_date} — ${legs[legs.length - 1].departure_date}`
     : legs[0]?.departure_date ?? '';
 
   const data = {
     requestId: row.request_id,
-    route: routeLabel(db, row.request_id),
+    route: await routeLabel(db, row.request_id),
     dateRange,
     passengerCount: row.passenger_count,
     operatorCompany: row.company_name,
@@ -449,20 +450,20 @@ async function sendBookingEmails(db: Database.Database, paymentId: number, baseU
 
 // ─── Stripe Connect (operator payouts) ──────────────────────────────
 
-export function syncConnectAccount(db: Database.Database, account: Stripe.Account) {
-  db.prepare(`
+export async function syncConnectAccount(db: Db, account: Stripe.Account) {
+  await db.run(`
     UPDATE operators SET stripe_charges_enabled = ?, stripe_payouts_enabled = ?, stripe_details_submitted = ?
     WHERE stripe_account_id = ?
-  `).run(account.charges_enabled ? 1 : 0, account.payouts_enabled ? 1 : 0, account.details_submitted ? 1 : 0, account.id);
+  `, [account.charges_enabled ? 1 : 0, account.payouts_enabled ? 1 : 0, account.details_submitted ? 1 : 0, account.id]);
 }
 
 /** Create (if needed) the operator's Express account and return an onboarding link. */
 export async function startConnectOnboarding(
-  db: Database.Database,
+  db: Db,
   operatorId: number,
   baseUrl: string
 ): Promise<string> {
-  const operator = db.prepare('SELECT * FROM operators WHERE id = ?').get(operatorId) as Operator | undefined;
+  const operator = await db.one<Operator>('SELECT * FROM operators WHERE id = ?', [operatorId]);
   if (!operator) throw new PaymentError('Operator not found', 404);
 
   const mode = getPaymentsMode();
@@ -471,18 +472,18 @@ export async function startConnectOnboarding(
   const returnUrl = `${baseUrl}/operator/settings?payouts=return`;
 
   if (mode === 'stub') {
-    db.prepare(`
+    await db.run(`
       UPDATE operators SET stripe_account_id = COALESCE(stripe_account_id, ?),
         stripe_charges_enabled = 1, stripe_payouts_enabled = 1, stripe_details_submitted = 1
       WHERE id = ?
-    `).run(`acct_stub_${operator.id}`, operator.id);
+    `, [`acct_stub_${operator.id}`, operator.id]);
     return returnUrl;
   }
 
   const stripe = getStripe();
   let accountId = operator.stripe_account_id;
   if (!accountId) {
-    const user = db.prepare('SELECT email FROM users WHERE id = ?').get(operator.user_id) as { email: string };
+    const user = (await db.one<{ email: string }>('SELECT email FROM users WHERE id = ?', [operator.user_id]))!;
     const account = await stripe.accounts.create({
       type: 'express',
       country: 'US',
@@ -493,8 +494,8 @@ export async function startConnectOnboarding(
       metadata: { operator_id: String(operator.id) },
     }, { idempotencyKey: `connect-account-${operator.id}` });
     accountId = account.id;
-    db.prepare('UPDATE operators SET stripe_account_id = ? WHERE id = ?').run(accountId, operator.id);
-    syncConnectAccount(db, account);
+    await db.run('UPDATE operators SET stripe_account_id = ? WHERE id = ?', [accountId, operator.id]);
+    await syncConnectAccount(db, account);
   }
 
   const link = await stripe.accountLinks.create({
@@ -507,17 +508,17 @@ export async function startConnectOnboarding(
 }
 
 /** Refresh capability flags from Stripe. */
-export async function refreshConnectAccount(db: Database.Database, operatorId: number): Promise<Operator> {
-  const operator = db.prepare('SELECT * FROM operators WHERE id = ?').get(operatorId) as Operator;
+export async function refreshConnectAccount(db: Db, operatorId: number): Promise<Operator> {
+  const operator = (await db.one<Operator>('SELECT * FROM operators WHERE id = ?', [operatorId]))!;
   if (getPaymentsMode() === 'stripe' && operator.stripe_account_id) {
     const account = await getStripe().accounts.retrieve(operator.stripe_account_id);
-    syncConnectAccount(db, account);
+    await syncConnectAccount(db, account);
   }
-  return db.prepare('SELECT * FROM operators WHERE id = ?').get(operatorId) as Operator;
+  return (await db.one<Operator>('SELECT * FROM operators WHERE id = ?', [operatorId]))!;
 }
 
-export async function connectDashboardLink(db: Database.Database, operatorId: number): Promise<string> {
-  const operator = db.prepare('SELECT * FROM operators WHERE id = ?').get(operatorId) as Operator;
+export async function connectDashboardLink(db: Db, operatorId: number): Promise<string> {
+  const operator = (await db.one<Operator>('SELECT * FROM operators WHERE id = ?', [operatorId]))!;
   if (getPaymentsMode() !== 'stripe' || !operator.stripe_account_id) {
     throw new PaymentError('No payout account', 409);
   }
@@ -527,24 +528,23 @@ export async function connectDashboardLink(db: Database.Database, operatorId: nu
 
 // ─── Webhooks ───────────────────────────────────────────────────────
 
-function paymentForSession(db: Database.Database, session: Stripe.Checkout.Session): Payment | undefined {
-  const byId = db.prepare('SELECT * FROM payments WHERE stripe_checkout_session_id = ?').get(session.id) as Payment | undefined;
+async function paymentForSession(db: Db, session: Stripe.Checkout.Session): Promise<Payment | undefined> {
+  const byId = await db.one<Payment>('SELECT * FROM payments WHERE stripe_checkout_session_id = ?', [session.id]);
   if (byId) return byId;
   const metaId = Number(session.metadata?.payment_id);
   if (!metaId) return undefined;
-  const byMeta = getPayment(db, metaId);
   // Only trust metadata when the session id was never recorded (crash between create and update).
-  if (byMeta && !byMeta.stripe_checkout_session_id) {
-    db.prepare('UPDATE payments SET stripe_checkout_session_id = ? WHERE id = ?').run(session.id, byMeta.id);
-    return byMeta;
-  }
-  return undefined;
+  const claimed = await db.run(
+    'UPDATE payments SET stripe_checkout_session_id = ? WHERE id = ? AND stripe_checkout_session_id IS NULL',
+    [session.id, metaId]
+  );
+  return claimed ? getPayment(db, metaId) : undefined;
 }
 
-function paymentForIntent(db: Database.Database, intent: string | Stripe.PaymentIntent | null): Payment | undefined {
+async function paymentForIntent(db: Db, intent: string | Stripe.PaymentIntent | null): Promise<Payment | undefined> {
   const id = typeof intent === 'string' ? intent : intent?.id;
   if (!id) return undefined;
-  return db.prepare('SELECT * FROM payments WHERE stripe_payment_intent_id = ?').get(id) as Payment | undefined;
+  return db.one<Payment>('SELECT * FROM payments WHERE stripe_payment_intent_id = ?', [id]);
 }
 
 function intentId(intent: string | Stripe.PaymentIntent | null): string | null {
@@ -556,68 +556,69 @@ function intentId(intent: string | Stripe.PaymentIntent | null): string | null {
  * already-processed events are skipped and every handler is idempotent.
  */
 export async function handleStripeEvent(
-  db: Database.Database,
+  db: Db,
   event: Stripe.Event,
   baseUrl: string
 ): Promise<'processed' | 'skipped'> {
-  const existing = db.prepare('SELECT processed_at FROM payment_events WHERE stripe_event_id = ?')
-    .get(event.id) as { processed_at: string | null } | undefined;
+  await db.run(`
+    INSERT INTO payment_events (stripe_event_id, type) VALUES (?, ?)
+    ON CONFLICT (stripe_event_id) DO NOTHING
+  `, [event.id, event.type]);
+  const existing = await db.one<{ processed_at: string | null }>(
+    'SELECT processed_at FROM payment_events WHERE stripe_event_id = ?', [event.id]
+  );
   if (existing?.processed_at) return 'skipped';
-  if (!existing) {
-    db.prepare('INSERT INTO payment_events (stripe_event_id, type) VALUES (?, ?)').run(event.id, event.type);
-  }
 
   switch (event.type) {
     case 'checkout.session.completed':
     case 'checkout.session.async_payment_succeeded': {
       const session = event.data.object as Stripe.Checkout.Session;
-      const payment = paymentForSession(db, session);
+      const payment = await paymentForSession(db, session);
       if (!payment) break;
       if (session.payment_status === 'paid' || session.payment_status === 'no_payment_required') {
         await fulfillPayment(db, payment.id, { paymentIntentId: intentId(session.payment_intent), baseUrl });
       } else {
         // ACH and other delayed methods: funds not yet confirmed.
-        markPaymentProcessing(db, payment.id, intentId(session.payment_intent));
+        await markPaymentProcessing(db, payment.id, intentId(session.payment_intent));
       }
       break;
     }
     case 'checkout.session.async_payment_failed': {
       const session = event.data.object as Stripe.Checkout.Session;
-      const payment = paymentForSession(db, session);
-      if (payment) markPaymentFailed(db, payment.id, 'Bank payment failed');
+      const payment = await paymentForSession(db, session);
+      if (payment) await markPaymentFailed(db, payment.id, 'Bank payment failed');
       break;
     }
     case 'checkout.session.expired': {
       const session = event.data.object as Stripe.Checkout.Session;
-      const payment = paymentForSession(db, session);
-      if (payment) markPaymentCanceled(db, payment.id, 'Checkout expired');
+      const payment = await paymentForSession(db, session);
+      if (payment) await markPaymentCanceled(db, payment.id, 'Checkout expired');
       break;
     }
     case 'charge.refunded': {
       const charge = event.data.object as Stripe.Charge;
-      const payment = paymentForIntent(db, charge.payment_intent);
-      if (payment) applyRefundTotal(db, payment.id, charge.amount_refunded);
+      const payment = await paymentForIntent(db, charge.payment_intent);
+      if (payment) await applyRefundTotal(db, payment.id, charge.amount_refunded);
       break;
     }
     case 'charge.dispute.created':
     case 'charge.dispute.updated':
     case 'charge.dispute.closed': {
       const dispute = event.data.object as Stripe.Dispute;
-      const payment = paymentForIntent(db, dispute.payment_intent);
+      const payment = await paymentForIntent(db, dispute.payment_intent);
       if (payment) {
-        db.prepare("UPDATE payments SET dispute_status = ?, updated_at = datetime('now') WHERE id = ?")
-          .run(dispute.status, payment.id);
+        await db.run("UPDATE payments SET dispute_status = ?, updated_at = now() WHERE id = ?", [dispute.status, payment.id]);
       }
       break;
     }
     case 'account.updated': {
-      syncConnectAccount(db, event.data.object as Stripe.Account);
+      await syncConnectAccount(db, event.data.object as Stripe.Account);
       break;
     }
     default:
       break;
   }
 
-  db.prepare("UPDATE payment_events SET processed_at = datetime('now') WHERE stripe_event_id = ?").run(event.id);
+  await db.run('UPDATE payment_events SET processed_at = now() WHERE stripe_event_id = ?', [event.id]);
   return 'processed';
 }

@@ -13,7 +13,7 @@ import type { Operator } from '@/lib/types';
 async function currentOperator() {
   const session = await getSession();
   if (!session || session.role !== 'operator') return null;
-  return getDb().prepare('SELECT * FROM operators WHERE user_id = ?').get(session.userId) as Operator | undefined ?? null;
+  return (await getDb().one<Operator>('SELECT * FROM operators WHERE user_id = ?', [session.userId])) ?? null;
 }
 
 function errorResponse(err: unknown) {
@@ -32,12 +32,12 @@ export async function GET() {
   try {
     const db = getDb();
     const updated = await refreshConnectAccount(db, operator.id);
-    const totals = db.prepare(`
+    const totals = (await db.one<{ gross_payout_cents: number; paid_bookings: number }>(`
       SELECT
         COALESCE(SUM(CASE WHEN status IN ('succeeded','partially_refunded') THEN operator_payout_cents END), 0) AS gross_payout_cents,
         COUNT(CASE WHEN status IN ('succeeded','partially_refunded','refunded') THEN 1 END) AS paid_bookings
       FROM payments WHERE operator_id = ?
-    `).get(operator.id) as { gross_payout_cents: number; paid_bookings: number };
+    `, [operator.id]))!;
 
     return NextResponse.json({
       mode: getPaymentsMode(),

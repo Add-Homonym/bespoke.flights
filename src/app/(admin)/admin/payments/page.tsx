@@ -21,27 +21,27 @@ export default async function AdminPaymentsPage() {
   const db = getDb();
   const mode = getPaymentsMode();
 
-  const payments = db.prepare(`
+  const payments = await db.query<Payment & { customer_name: string; company_name: string }>(`
     SELECT p.*, u.name AS customer_name, o.company_name
     FROM payments p
     JOIN users u ON u.id = p.customer_id
     JOIN operators o ON o.id = p.operator_id
     ORDER BY p.created_at DESC, p.id DESC
     LIMIT 200
-  `).all() as (Payment & { customer_name: string; company_name: string })[];
+  `);
 
   // Fee revenue net of refunds: refunds return the platform fee pro rata.
-  const totals = db.prepare(`
+  const totals = (await db.one<{ gross_cents: number; refunded_cents: number; net_fee_cents: number; count: number }>(`
     SELECT
       COALESCE(SUM(amount_cents), 0) AS gross_cents,
       COALESCE(SUM(refunded_cents), 0) AS refunded_cents,
       COALESCE(SUM(platform_fee_cents - (platform_fee_cents * refunded_cents) / amount_cents), 0) AS net_fee_cents,
       COUNT(*) AS count
     FROM payments WHERE status IN ('succeeded', 'partially_refunded', 'refunded')
-  `).get() as { gross_cents: number; refunded_cents: number; net_fee_cents: number; count: number };
+  `))!;
 
-  const processing = (db.prepare("SELECT COUNT(*) AS c FROM payments WHERE status = 'processing'").get() as { c: number }).c;
-  const disputed = (db.prepare("SELECT COUNT(*) AS c FROM payments WHERE dispute_status IS NOT NULL AND dispute_status NOT IN ('won', 'lost')").get() as { c: number }).c;
+  const processing = (await db.one<{ c: number }>("SELECT COUNT(*) AS c FROM payments WHERE status = 'processing'"))!.c;
+  const disputed = (await db.one<{ c: number }>("SELECT COUNT(*) AS c FROM payments WHERE dispute_status IS NOT NULL AND dispute_status NOT IN ('won', 'lost')"))!.c;
 
   const stats = [
     { label: 'Gross bookings', value: formatMoney(totals.gross_cents) },

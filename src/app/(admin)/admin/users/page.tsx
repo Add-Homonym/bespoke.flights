@@ -5,7 +5,7 @@ import type { User } from '@/lib/types';
 
 export default async function AdminUsersPage() {
   const db = getDb();
-  const users = db.prepare('SELECT id, email, phone, name, role, created_at FROM users ORDER BY created_at DESC').all() as Omit<User, 'password_hash' | 'updated_at'>[];
+  const users = await db.query<Omit<User, 'password_hash' | 'updated_at'>>('SELECT id, email, phone, name, role, created_at FROM users ORDER BY created_at DESC');
 
   const roleBadge: Record<string, 'gold' | 'success' | 'warning'> = {
     customer: 'gold',

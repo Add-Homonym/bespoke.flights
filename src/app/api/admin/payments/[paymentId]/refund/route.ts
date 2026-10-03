@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
+import { toId } from '@/lib/db/queries';
 import { refundSchema } from '@/lib/validations';
 import { refundPayment, PaymentError } from '@/lib/payments/service';
 
@@ -17,7 +18,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ payment
 
   const { paymentId } = await params;
   try {
-    const payment = await refundPayment(getDb(), Number(paymentId), {
+    const payment = await refundPayment(getDb(), toId(paymentId), {
       amountCents: parsed.data.amountCents,
       reason: parsed.data.reason,
       initiatedBy: session.userId,

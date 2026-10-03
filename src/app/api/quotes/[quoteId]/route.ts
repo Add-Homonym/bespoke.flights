@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
+import { toId } from '@/lib/db/queries';
 import type { Quote, BookingRequest } from '@/lib/types';
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ quoteId: string }> }) {
@@ -17,10 +18,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ quoteI
   }
 
   const db = getDb();
-  const quote = db.prepare('SELECT * FROM quotes WHERE id = ?').get(quoteId) as Quote | undefined;
+  const quote = await db.one<Quote>('SELECT * FROM quotes WHERE id = ?', [toId(quoteId)]);
   if (!quote) return NextResponse.json({ error: 'Quote not found' }, { status: 404 });
 
-  const request = db.prepare('SELECT * FROM booking_requests WHERE id = ?').get(quote.request_id) as BookingRequest;
+  const request = (await db.one<BookingRequest>('SELECT * FROM booking_requests WHERE id = ?', [quote.request_id]))!;
   const isOwner = session.role === 'customer' && request.customer_id === session.userId;
   if (!isOwner && session.role !== 'admin') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -30,7 +31,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ quoteI
     return NextResponse.json({ error: `Quote is ${quote.status}` }, { status: 409 });
   }
 
-  db.prepare("UPDATE quotes SET status = 'rejected' WHERE id = ?").run(quoteId);
+  await db.run("UPDATE quotes SET status = 'rejected' WHERE id = ? AND status = 'pending'", [quote.id]);
 
   return NextResponse.json({ success: true });
 }

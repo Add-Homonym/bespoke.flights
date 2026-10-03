@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
+import { toId } from '@/lib/db/queries';
 import { appBaseUrl } from '@/lib/payments/config';
 import { simulateStubPayment, PaymentError } from '@/lib/payments/service';
 
@@ -13,7 +14,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ payment
 
   const { paymentId } = await params;
   try {
-    const outcome = await simulateStubPayment(getDb(), Number(paymentId), session.userId, appBaseUrl(req));
+    const outcome = await simulateStubPayment(getDb(), toId(paymentId), session.userId, appBaseUrl(req));
     return NextResponse.json({ outcome });
   } catch (err) {
     if (err instanceof PaymentError) {

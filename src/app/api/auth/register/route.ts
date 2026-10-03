@@ -15,22 +15,23 @@ export async function POST(req: Request) {
     const { email, phone, password, name, role, companyName } = parsed.data;
     const db = getDb();
 
-    const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    const existing = await db.one('SELECT id FROM users WHERE email = ?', [email]);
     if (existing) {
       return NextResponse.json({ error: { email: ['Email already registered'] } }, { status: 409 });
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
 
-    const insertUser = db.prepare(
-      'INSERT INTO users (email, phone, password_hash, name, role) VALUES (?, ?, ?, ?, ?)'
-    );
-    const result = insertUser.run(email, phone || null, passwordHash, name, role);
-    const userId = Number(result.lastInsertRowid);
-
-    if (role === 'operator' && companyName) {
-      db.prepare('INSERT INTO operators (user_id, company_name) VALUES (?, ?)').run(userId, companyName);
-    }
+    const userId = await db.transaction(async tx => {
+      const { id } = (await tx.one<{ id: number }>(
+        'INSERT INTO users (email, phone, password_hash, name, role) VALUES (?, ?, ?, ?, ?) RETURNING id',
+        [email, phone || null, passwordHash, name, role]
+      ))!;
+      if (role === 'operator' && companyName) {
+        await tx.run('INSERT INTO operators (user_id, company_name) VALUES (?, ?)', [id, companyName]);
+      }
+      return id;
+    });
 
     await setSessionCookie({ userId, role });
 

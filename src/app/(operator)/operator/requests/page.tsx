@@ -1,18 +1,17 @@
 import Link from 'next/link';
 import { getDb } from '@/lib/db';
+import { legsByRequest, quoteCountsByRequest } from '@/lib/db/queries';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import type { BookingRequest, BookingLeg } from '@/lib/types';
+import type { BookingRequest } from '@/lib/types';
 
 export default async function OperatorRequestsPage() {
   const db = getDb();
 
-  const requests = db.prepare(
-    "SELECT * FROM booking_requests WHERE status IN ('open', 'quoted') ORDER BY created_at DESC"
-  ).all() as BookingRequest[];
+  const requests = await db.query<BookingRequest>("SELECT * FROM booking_requests WHERE status IN ('open', 'quoted') ORDER BY created_at DESC");
 
-  const getLegs = db.prepare('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order');
-  const getQuoteCount = db.prepare('SELECT COUNT(*) as count FROM quotes WHERE request_id = ?');
+  const legsByReq = await legsByRequest(db, requests.map(r => r.id));
+  const quoteCounts = await quoteCountsByRequest(db, requests.map(r => r.id));
 
   return (
     <div>
@@ -28,8 +27,8 @@ export default async function OperatorRequestsPage() {
       ) : (
         <div className="space-y-3">
           {requests.map(req => {
-            const legs = getLegs.all(req.id) as BookingLeg[];
-            const quoteCount = (getQuoteCount.get(req.id) as { count: number }).count;
+            const legs = legsByReq.get(req.id) ?? [];
+            const quoteCount = quoteCounts.get(req.id) ?? 0;
             const route = legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).join(' → ');
             const dateRange = legs.length > 0
               ? `${legs[0].departure_date}${legs.length > 1 ? ` — ${legs[legs.length - 1].departure_date}` : ''}`

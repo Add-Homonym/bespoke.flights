@@ -1,9 +1,10 @@
 import Link from 'next/link';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
+import { legsByRequest } from '@/lib/db/queries';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import type { BookingRequest, BookingLeg, User } from '@/lib/types';
+import type { BookingRequest, User } from '@/lib/types';
 
 const statusBadge: Record<string, 'default' | 'success' | 'warning' | 'error' | 'gold'> = {
   open: 'gold',
@@ -16,13 +17,11 @@ const statusBadge: Record<string, 'default' | 'success' | 'warning' | 'error' | 
 export default async function DashboardPage() {
   const session = await getSession();
   const db = getDb();
-  const user = db.prepare('SELECT name FROM users WHERE id = ?').get(session!.userId) as Pick<User, 'name'>;
+  const user = (await db.one<Pick<User, 'name'>>('SELECT name FROM users WHERE id = ?', [session!.userId]))!;
 
-  const requests = db.prepare(
-    'SELECT * FROM booking_requests WHERE customer_id = ? ORDER BY created_at DESC LIMIT 10'
-  ).all(session!.userId) as BookingRequest[];
+  const requests = await db.query<BookingRequest>('SELECT * FROM booking_requests WHERE customer_id = ? ORDER BY created_at DESC LIMIT 10', [session!.userId]);
 
-  const getLegs = db.prepare('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order');
+  const legsByReq = await legsByRequest(db, requests.map(r => r.id));
 
   return (
     <div>
@@ -65,7 +64,7 @@ export default async function DashboardPage() {
       ) : (
         <div className="space-y-3">
           {requests.map(req => {
-            const legs = getLegs.all(req.id) as BookingLeg[];
+            const legs = legsByReq.get(req.id) ?? [];
             const route = legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).join(' → ');
             return (
               <Link key={req.id} href={`/requests/${req.id}`}>

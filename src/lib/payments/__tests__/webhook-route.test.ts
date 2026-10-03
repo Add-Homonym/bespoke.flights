@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import Stripe from 'stripe';
 import { NextRequest } from 'next/server';
 import { createFixture, row, type Fixture } from './fixtures';
+import { setDb } from '@/lib/db';
 import { setStripeClient } from '../stripe';
 
 const SECRET = 'whsec_test_secret';
@@ -11,20 +12,20 @@ let f: Fixture;
 let POST: (req: Request) => Promise<Response>;
 
 beforeAll(async () => {
-  vi.stubEnv('DATABASE_PATH', ':memory:');
   vi.stubEnv('STRIPE_SECRET_KEY', 'sk_test_dummy');
   vi.stubEnv('STRIPE_WEBHOOK_SECRET', SECRET);
   vi.stubEnv('STRIPE_CONNECT_WEBHOOK_SECRET', CONNECT_SECRET);
   vi.stubEnv('RESEND_API_KEY', '');
   vi.spyOn(console, 'log').mockImplementation(() => {});
   setStripeClient(stripe);
-  const { getDb } = await import('@/lib/db');
-  f = createFixture(getDb());
+  f = await createFixture();
+  setDb(f.db);
   ({ POST } = await import('@/app/api/webhooks/stripe/route'));
 });
 
 afterAll(() => {
   setStripeClient(null);
+  setDb(null);
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
@@ -57,10 +58,11 @@ describe('POST /api/webhooks/stripe', () => {
   });
 
   it('processes a verified checkout completion and books the request', async () => {
-    const paymentId = Number(f.db.prepare(`
+    const { id: paymentId } = await row<{ id: number }>(f.db, `
       INSERT INTO payments (request_id, quote_id, customer_id, operator_id, amount_cents, platform_fee_cents, operator_payout_cents, status, provider, stripe_checkout_session_id)
       VALUES (?, ?, ?, ?, 8500000, 425000, 8075000, 'pending', 'stripe', 'cs_live_1')
-    `).run(f.requestId, f.quoteA, f.customerId, f.operatorA).lastInsertRowid);
+      RETURNING id
+    `, f.requestId, f.quoteA, f.customerId, f.operatorA);
 
     const payload = JSON.stringify({
       id: 'evt_ok', object: 'event', type: 'checkout.session.completed',
@@ -69,8 +71,8 @@ describe('POST /api/webhooks/stripe', () => {
     const res = await POST(signedRequest(payload));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ received: true, result: 'processed' });
-    expect(row<{ status: string }>(f.db, 'SELECT status FROM payments WHERE id = ?', paymentId).status).toBe('succeeded');
-    expect(row<{ status: string }>(f.db, 'SELECT status FROM booking_requests WHERE id = ?', f.requestId).status).toBe('booked');
+    expect((await row<{ status: string }>(f.db, 'SELECT status FROM payments WHERE id = ?', paymentId)).status).toBe('succeeded');
+    expect((await row<{ status: string }>(f.db, 'SELECT status FROM booking_requests WHERE id = ?', f.requestId)).status).toBe('booked');
 
     const again = await POST(signedRequest(payload));
     expect(await again.json()).toEqual({ received: true, result: 'skipped' });
@@ -83,7 +85,7 @@ describe('POST /api/webhooks/stripe', () => {
     });
     const res = await POST(signedRequest(payload, CONNECT_SECRET));
     expect(res.status).toBe(200);
-    expect(row<{ stripe_charges_enabled: number }>(f.db, 'SELECT stripe_charges_enabled FROM operators WHERE id = ?', f.operatorB).stripe_charges_enabled).toBe(0);
+    expect((await row<{ stripe_charges_enabled: number }>(f.db, 'SELECT stripe_charges_enabled FROM operators WHERE id = ?', f.operatorB)).stripe_charges_enabled).toBe(0);
   });
 });
 

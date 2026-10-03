@@ -5,20 +5,20 @@ import { Card } from '@/components/ui/card';
 export default async function AdminDashboardPage() {
   const db = getDb();
 
-  const totalUsers = (db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number }).count;
-  const totalCustomers = (db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'customer'").get() as { count: number }).count;
-  const totalOperators = (db.prepare('SELECT COUNT(*) as count FROM operators').get() as { count: number }).count;
-  const pendingOperators = (db.prepare("SELECT COUNT(*) as count FROM operators WHERE status = 'pending'").get() as { count: number }).count;
-  const totalRequests = (db.prepare('SELECT COUNT(*) as count FROM booking_requests').get() as { count: number }).count;
-  const openRequests = (db.prepare("SELECT COUNT(*) as count FROM booking_requests WHERE status = 'open'").get() as { count: number }).count;
-  const totalQuotes = (db.prepare('SELECT COUNT(*) as count FROM quotes').get() as { count: number }).count;
-  const bookedRequests = (db.prepare("SELECT COUNT(*) as count FROM booking_requests WHERE status = 'booked'").get() as { count: number }).count;
+  const totalUsers = (await db.one<{ count: number }>('SELECT COUNT(*) as count FROM users'))!.count;
+  const totalCustomers = (await db.one<{ count: number }>("SELECT COUNT(*) as count FROM users WHERE role = 'customer'"))!.count;
+  const totalOperators = (await db.one<{ count: number }>('SELECT COUNT(*) as count FROM operators'))!.count;
+  const pendingOperators = (await db.one<{ count: number }>("SELECT COUNT(*) as count FROM operators WHERE status = 'pending'"))!.count;
+  const totalRequests = (await db.one<{ count: number }>('SELECT COUNT(*) as count FROM booking_requests'))!.count;
+  const openRequests = (await db.one<{ count: number }>("SELECT COUNT(*) as count FROM booking_requests WHERE status = 'open'"))!.count;
+  const totalQuotes = (await db.one<{ count: number }>('SELECT COUNT(*) as count FROM quotes'))!.count;
+  const bookedRequests = (await db.one<{ count: number }>("SELECT COUNT(*) as count FROM booking_requests WHERE status = 'booked'"))!.count;
 
   // Discovery stats
-  const discoveredTotal = (db.prepare('SELECT COUNT(*) as count FROM discovered_operators').get() as { count: number }).count;
-  const discoveredNew = (db.prepare("SELECT COUNT(*) as count FROM discovered_operators WHERE status = 'new'").get() as { count: number }).count;
-  const discoveredNoEmail = (db.prepare("SELECT COUNT(*) as count FROM discovered_operators WHERE status = 'no_email'").get() as { count: number }).count;
-  const discoveredEmailed = (db.prepare("SELECT COUNT(*) as count FROM discovered_operators WHERE status = 'emailed'").get() as { count: number }).count;
+  const discoveredTotal = (await db.one<{ count: number }>('SELECT COUNT(*) as count FROM discovered_operators'))!.count;
+  const discoveredNew = (await db.one<{ count: number }>("SELECT COUNT(*) as count FROM discovered_operators WHERE status = 'new'"))!.count;
+  const discoveredNoEmail = (await db.one<{ count: number }>("SELECT COUNT(*) as count FROM discovered_operators WHERE status = 'no_email'"))!.count;
+  const discoveredEmailed = (await db.one<{ count: number }>("SELECT COUNT(*) as count FROM discovered_operators WHERE status = 'emailed'"))!.count;
 
   return (
     <div>
