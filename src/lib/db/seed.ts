@@ -143,12 +143,13 @@ export async function seed() {
     'New charter request...', 'sent'
   );
 
-  // Sample quotes
+  // Sample quotes (valid two weeks from seeding so they can be paid)
+  const validUntil = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
   db.prepare("INSERT INTO quotes (request_id, operator_id, aircraft_id, price_cents, message, valid_until) VALUES (?, ?, ?, ?, ?, ?)").run(
-    1, 1, 1, 8500000, 'G650 available for all three legs. WiFi included. Catering available.', '2026-04-10'
+    1, 1, 1, 8500000, 'G650 available for all three legs. WiFi included. Catering available.', validUntil(14)
   );
   db.prepare("INSERT INTO quotes (request_id, operator_id, aircraft_id, price_cents, message, valid_until) VALUES (?, ?, ?, ?, ?, ?)").run(
-    1, 2, 3, 9200000, 'Global 7500 — ultimate comfort for your trip. Full galley, shower available.', '2026-04-12'
+    1, 2, 3, 9200000, 'Global 7500 — ultimate comfort for your trip. Full galley, shower available.', validUntil(16)
   );
 
   db.prepare("UPDATE outreach_log SET status = 'responded', responded_at = datetime('now') WHERE request_id = 1 AND operator_id IN (1, 2)").run();

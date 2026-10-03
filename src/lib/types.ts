@@ -25,6 +25,12 @@ export interface Operator {
   hi_capable: number;
   transoceanic: number;
   notes: string | null;
+  // Stripe Connect payout account
+  stripe_account_id: string | null;
+  stripe_charges_enabled: number;
+  stripe_payouts_enabled: number;
+  stripe_details_submitted: number;
+  platform_fee_bps: number | null;  // per-operator override of PLATFORM_FEE_BPS
   created_at: string;
 }
 
@@ -85,6 +91,44 @@ export interface OutreachLog {
   status: 'queued' | 'sent' | 'delivered' | 'failed' | 'responded';
   sent_at: string;
   responded_at: string | null;
+}
+
+export type PaymentStatus =
+  | 'pending' | 'processing' | 'succeeded' | 'failed'
+  | 'canceled' | 'refunded' | 'partially_refunded';
+
+export interface Payment {
+  id: number;
+  request_id: number;
+  quote_id: number;
+  customer_id: number;
+  operator_id: number;
+  amount_cents: number;
+  platform_fee_cents: number;
+  operator_payout_cents: number;
+  refunded_cents: number;
+  currency: string;
+  status: PaymentStatus;
+  provider: 'stripe' | 'stub';
+  stripe_checkout_session_id: string | null;
+  stripe_payment_intent_id: string | null;
+  stripe_destination_account: string | null;
+  checkout_url: string | null;
+  failure_reason: string | null;
+  dispute_status: string | null;
+  created_at: string;
+  updated_at: string;
+  paid_at: string | null;
+}
+
+export interface Refund {
+  id: number;
+  payment_id: number;
+  amount_cents: number;
+  reason: string | null;
+  stripe_refund_id: string | null;
+  initiated_by: number | null;
+  created_at: string;
 }
 
 export interface SessionPayload {
