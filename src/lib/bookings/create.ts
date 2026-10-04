@@ -13,7 +13,7 @@ export type BookingRequestInput = z.infer<typeof bookingRequestSchema>;
  * Create a booking request with its legs and dispatch operator outreach.
  * RFQ delivery continues after the response via next/server `after()`.
  */
-export async function createBookingRequest(db: Db, customerId: number, input: BookingRequestInput) {
+export async function createBookingRequest(db: Db, customerId: number, input: BookingRequestInput, baseUrl?: string) {
   const { passengerCount, notes, legs } = input;
   const savedLegs: BookingLeg[] = [];
 
@@ -48,7 +48,7 @@ export async function createBookingRequest(db: Db, customerId: number, input: Bo
   // and delivers via Resend (email) or SMS stub. Non-fatal on failure.
   let outreach = { matched: 0, dispatched: 0 };
   try {
-    const result = await dispatchOutreach(db, requestId, savedLegs, passengerCount, notes || null);
+    const result = await dispatchOutreach(db, requestId, savedLegs, passengerCount, notes || null, baseUrl);
     outreach = result;
     after(() => result.deliveries);
   } catch (err) {
@@ -64,7 +64,7 @@ export async function createBookingRequest(db: Db, customerId: number, input: Bo
  * id, or null when there is no draft or it is incomplete (the cookie is then
  * kept so the visitor can finish it on /book).
  */
-export async function claimBookingDraft(db: Db, customerId: number): Promise<number | null> {
+export async function claimBookingDraft(db: Db, customerId: number, baseUrl?: string): Promise<number | null> {
   const store = await cookies();
   const draft = parseDraft(store.get(DRAFT_COOKIE)?.value);
   if (!draft) return null;
@@ -72,7 +72,7 @@ export async function claimBookingDraft(db: Db, customerId: number): Promise<num
   const parsed = bookingRequestSchema.safeParse(draftToRequest(draft));
   if (!parsed.success) return null;
 
-  const { id } = await createBookingRequest(db, customerId, parsed.data);
+  const { id } = await createBookingRequest(db, customerId, parsed.data, baseUrl);
   store.delete(DRAFT_COOKIE);
   return id;
 }

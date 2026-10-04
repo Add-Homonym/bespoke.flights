@@ -259,3 +259,35 @@ export function tripSheetEmail(data: {
 
   return { subject, html: layout(body) };
 }
+
+// ─── Staff alert (operator's own staff) ─────────────────────────────
+
+export function staffAlertEmail(data: {
+  subject: string;
+  heading: string;
+  intro: string;
+  legLines: string[];
+  passengerCount: number;
+  specialRequests: string | null;
+  aircraft: string | null;
+  leadPassenger: string | null;
+  url: string;
+  buttonLabel: string;
+}): { subject: string; html: string } {
+  const body =
+    '<h1 style="margin:0 0 8px 0;color:' + BRAND.cream + ';font-size:22px;font-weight:600">' + escapeHtml(data.heading) + '</h1>' +
+    p(escapeHtml(data.intro), 'color:' + BRAND.muted + ';font-size:13px') +
+    '<table cellpadding="0" cellspacing="0" style="width:100%;background:#0f1724;border-radius:8px;margin:20px 0">' +
+    '<tr><td style="padding:16px">' +
+    '<table cellpadding="0" cellspacing="0" style="width:100%">' +
+    data.legLines.map((line, i) => summaryRow(i === 0 ? 'Legs' : '', escapeHtml(line.replace(/^Leg \d+: /, '')))).join('') +
+    (data.aircraft ? summaryRow('Aircraft', escapeHtml(data.aircraft)) : '') +
+    summaryRow('Passengers', String(data.passengerCount)) +
+    summaryRow('Special requests', data.specialRequests ? escapeHtml(data.specialRequests) : 'None') +
+    (data.leadPassenger ? summaryRow('Lead passenger', escapeHtml(data.leadPassenger)) : '') +
+    '</table></td></tr></table>' +
+    button(escapeHtml(data.buttonLabel), data.url) +
+    p('You receive this because your company added you to its bespoke.flights alerts.', 'color:' + BRAND.muted + ';font-size:12px');
+
+  return { subject: data.subject, html: layout(body) };
+}

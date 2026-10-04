@@ -30,10 +30,12 @@ export function Header({ user }: { user?: { name: string; role: string } | null 
               )}
               {user.role === 'operator' && (
                 <>
+                  <Link href="/operator/board" className="text-sm text-brand-muted hover:text-brand-cream transition-colors">Board</Link>
                   <Link href="/operator/inbound" className="text-sm text-brand-muted hover:text-brand-cream transition-colors">Inbound</Link>
                   <Link href="/operator/requests" className="text-sm text-brand-muted hover:text-brand-cream transition-colors">All Demand</Link>
                   <Link href="/operator/quotes" className="text-sm text-brand-muted hover:text-brand-cream transition-colors">My Quotes</Link>
                   <Link href="/operator/fleet" className="text-sm text-brand-muted hover:text-brand-cream transition-colors">Fleet</Link>
+                  <Link href="/operator/team" className="text-sm text-brand-muted hover:text-brand-cream transition-colors">Team</Link>
                   <Link href="/operator/settings" className="text-sm text-brand-muted hover:text-brand-cream transition-colors">Settings</Link>
                 </>
               )}

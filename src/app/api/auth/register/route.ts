@@ -4,6 +4,7 @@ import { getDb } from '@/lib/db';
 import { registerSchema } from '@/lib/validations';
 import { setSessionCookie } from '@/lib/auth';
 import { claimBookingDraft } from '@/lib/bookings/create';
+import { appBaseUrl } from '@/lib/payments/config';
 
 export async function POST(req: Request) {
   try {
@@ -37,7 +38,7 @@ export async function POST(req: Request) {
     await setSessionCookie({ userId, role });
 
     // A traveler who built a trip before signing up: submit it now.
-    const requestId = role === 'customer' ? await claimBookingDraft(db, userId) : null;
+    const requestId = role === 'customer' ? await claimBookingDraft(db, userId, appBaseUrl(req)) : null;
 
     return NextResponse.json({
       id: userId, email, name, role,
