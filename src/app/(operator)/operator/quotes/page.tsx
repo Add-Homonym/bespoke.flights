@@ -82,6 +82,9 @@ export default async function OperatorQuotesPage() {
                       ${(quote.price_cents / 100).toLocaleString()}
                     </p>
                     <p className="text-brand-muted/50 text-xs mt-1">{new Date(quote.created_at).toLocaleDateString()}</p>
+                    {quote.status === 'accepted' && quote.payment_status && ['succeeded', 'partially_refunded'].includes(quote.payment_status) && (
+                      <p className="text-brand-gold text-xs mt-1">Booked. Open to share the trip sheet with your team &rarr;</p>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     {quote.payment_status && (

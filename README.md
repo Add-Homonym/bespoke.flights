@@ -46,8 +46,14 @@ There are three user roles — **customer**, **operator**, and **admin** — eac
 3. **Receive inbound RFQs** at `/operator/inbound`. These are charter requests automatically matched to the operator's profile by the matching engine. Each card shows the route, pax count, dates, match score, and time since receipt.
 4. **Submit a quote** inline — price, aircraft (from fleet inventory), valid-until date, and an optional message. One click creates the quote and marks the outreach log as responded.
 5. **Browse all demand** at `/operator/requests` to see every open request on the platform, not just auto-matched ones.
-6. **Manage fleet** at `/operator/fleet` — add aircraft with tail number, type, capacity, range, and year.
-7. **Set up payouts** at `/operator/settings` → Payouts. This opens Stripe Connect Express onboarding. Customers cannot pay for an operator's quotes until onboarding is complete.
+6. **Share a booking with the team.** Once a booking is paid, the winning operator's request page shows **Share with your team**:
+   - **Private link** to a read-only trip sheet at `/trip/<token>`. No login is needed to view it. It shows legs with dates and times, aircraft, passengers, special requests, and the lead passenger's name, phone and email. It prints cleanly and is not indexed by search engines.
+   - **Email** the trip sheet to up to 20 colleagues.
+   - **Calendar file** (`/trip/<token>/calendar`): one event per leg, at the requested local time, or all-day when no time was given.
+   - **Turn off link** stops it working immediately; a new link can be created afterwards. Links also expire 30 days after the last leg.
+   Only the operator whose quote was accepted can create, email or revoke links (`trip_shares` table).
+7. **Manage fleet** at `/operator/fleet` — add aircraft with tail number, type, capacity, range, and year.
+8. **Set up payouts** at `/operator/settings` → Payouts. This opens Stripe Connect Express onboarding. Customers cannot pay for an operator's quotes until onboarding is complete.
 
 ## Admin Workflow
 

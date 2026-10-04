@@ -27,3 +27,11 @@ body {
 input[type="date"]::-webkit-calendar-picker-indicator {
   filter: invert(0.8);
 }
+
+/* Printed pages (trip sheets): white paper, black ink. */
+@media print {
+  body {
+    background: #fff;
+    color: #000;
+  }
+}

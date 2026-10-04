@@ -45,3 +45,20 @@ describe('booking emails show every trip detail', () => {
     expect(escapeHtml(`<a href="x">'&'</a>`)).toBe('&lt;a href=&quot;x&quot;&gt;&#39;&amp;&#39;&lt;/a&gt;');
   });
 });
+
+describe('trip sheet email', () => {
+  it('lists the trip and escapes traveler and staff text', async () => {
+    const { tripSheetEmail } = await import('./templates');
+    const { html, subject } = tripSheetEmail({
+      requestId: 12, route: 'KLAX → PHNL', legLines: ['Leg 1: KLAX → PHNL · Tue, Dec 1, 2026, 9:30 AM'],
+      passengerCount: 3, specialRequests: '<b>Dog</b>', aircraft: 'G650', operatorCompany: 'Alpha & Co',
+      senderName: '<script>x</script>', url: 'https://bespoke.flights/trip/tok',
+    });
+    expect(subject).toBe('Trip sheet: KLAX → PHNL (Booking #12)');
+    expect(html).toContain('KLAX → PHNL · Tue, Dec 1, 2026, 9:30 AM');
+    expect(html).toContain('&lt;b&gt;Dog&lt;/b&gt;');
+    expect(html).toContain('&lt;script&gt;x&lt;/script&gt; at Alpha &amp; Co');
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('https://bespoke.flights/trip/tok');
+  });
+});

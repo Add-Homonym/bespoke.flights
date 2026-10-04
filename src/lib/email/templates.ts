@@ -224,3 +224,38 @@ export function bookingConfirmedOperatorEmail(
 
   return { subject, html: layout(body) };
 }
+
+// ─── Trip Sheet (operator to their own staff) ───────────────────────
+
+export function tripSheetEmail(data: {
+  requestId: number;
+  route: string;
+  legLines: string[];
+  passengerCount: number;
+  specialRequests: string | null;
+  aircraft: string | null;
+  operatorCompany: string;
+  senderName: string;
+  url: string;
+}): { subject: string; html: string } {
+  const subject = 'Trip sheet: ' + data.route + ' (Booking #' + data.requestId + ')';
+
+  const body =
+    '<h1 style="margin:0 0 8px 0;color:' + BRAND.cream + ';font-size:22px;font-weight:600">' +
+    'Confirmed charter: ' + escapeHtml(data.route) +
+    '</h1>' +
+    p(escapeHtml(data.senderName) + ' at ' + escapeHtml(data.operatorCompany) + ' shared this booking with you.', 'color:' + BRAND.muted + ';font-size:13px') +
+    '<table cellpadding="0" cellspacing="0" style="width:100%;background:#0f1724;border-radius:8px;margin:20px 0">' +
+    '<tr><td style="padding:16px">' +
+    '<table cellpadding="0" cellspacing="0" style="width:100%">' +
+    summaryRow('Booking', '#' + data.requestId) +
+    data.legLines.map((line, i) => summaryRow(i === 0 ? 'Legs' : '', escapeHtml(line.replace(/^Leg \d+: /, '')))).join('') +
+    (data.aircraft ? summaryRow('Aircraft', escapeHtml(data.aircraft)) : '') +
+    summaryRow('Passengers', String(data.passengerCount)) +
+    summaryRow('Special requests', data.specialRequests ? escapeHtml(data.specialRequests) : 'None') +
+    '</table></td></tr></table>' +
+    button('Open Trip Sheet', data.url) +
+    p('The trip sheet includes the lead passenger’s contact details. Do not forward it outside your company.', 'color:' + BRAND.muted + ';font-size:12px');
+
+  return { subject, html: layout(body) };
+}
