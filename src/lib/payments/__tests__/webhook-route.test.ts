@@ -100,17 +100,43 @@ describe('POST /api/webhooks/stripe', () => {
   });
 });
 
-describe('middleware', () => {
+describe('proxy', () => {
   it('lets Stripe reach the webhook without a session cookie', async () => {
-    const { middleware } = await import('@/middleware');
-    const res = await middleware(new NextRequest('http://localhost/api/webhooks/stripe', { method: 'POST' }));
+    const { proxy } = await import('@/proxy');
+    const res = await proxy(new NextRequest('http://localhost/api/webhooks/stripe', { method: 'POST' }));
     expect(res.status).toBe(200);
     expect(res.headers.get('x-middleware-next')).toBe('1');
   });
 
   it('still protects payment APIs', async () => {
-    const { middleware } = await import('@/middleware');
-    const res = await middleware(new NextRequest('http://localhost/api/payments/checkout', { method: 'POST' }));
+    const { proxy } = await import('@/proxy');
+    const res = await proxy(new NextRequest('http://localhost/api/payments/checkout', { method: 'POST' }));
+    expect(res.status).toBe(401);
+  });
+
+  it('refuses the cron endpoint to anonymous callers without exposing it as public', async () => {
+    const { proxy } = await import('@/proxy');
+    const res = await proxy(new NextRequest('http://localhost/api/cron/weekly-discovery', { method: 'GET' }));
+    // Passes through: the route itself enforces CRON_SECRET.
+    expect(res.headers.get('x-middleware-next')).toBe('1');
+  });
+
+  it('rejects cross-site mutations of cookie-authenticated APIs', async () => {
+    const { proxy } = await import('@/proxy');
+    const res = await proxy(new NextRequest('http://localhost/api/quotes/1', {
+      method: 'PATCH',
+      headers: { origin: 'https://evil.example', host: 'localhost' },
+    }));
+    expect(res.status).toBe(403);
+  });
+
+  it('accepts same-origin mutations', async () => {
+    const { proxy } = await import('@/proxy');
+    const res = await proxy(new NextRequest('http://localhost/api/quotes/1', {
+      method: 'PATCH',
+      headers: { origin: 'http://localhost', host: 'localhost' },
+    }));
+    // Same origin but no session: falls through to the auth check.
     expect(res.status).toBe(401);
   });
 });

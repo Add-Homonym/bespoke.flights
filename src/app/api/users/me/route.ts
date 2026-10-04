@@ -30,7 +30,11 @@ export async function PATCH(req: Request) {
   const values: (string | number)[] = [];
 
   if (parsed.data.name) { updates.push('name = ?'); values.push(parsed.data.name); }
-  if (parsed.data.email) { updates.push('email = ?'); values.push(parsed.data.email); }
+  if (parsed.data.email) {
+    const taken = await db.one('SELECT id FROM users WHERE email = ? AND id != ?', [parsed.data.email, session.userId]);
+    if (taken) return NextResponse.json({ error: { email: ['Email already in use'] } }, { status: 409 });
+    updates.push('email = ?'); values.push(parsed.data.email);
+  }
   if (parsed.data.phone) { updates.push('phone = ?'); values.push(parsed.data.phone); }
 
   if (updates.length === 0) {

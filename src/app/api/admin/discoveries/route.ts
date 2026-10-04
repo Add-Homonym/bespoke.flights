@@ -9,6 +9,7 @@ import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { toId } from '@/lib/db/queries';
+import { discoveredOperatorPatchSchema } from '@/lib/validations';
 
 export async function GET(req: Request) {
   const session = await getSession();
@@ -78,12 +79,11 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const body = await req.json();
-  const { id, contact_email, phone, status, notes } = body;
-
-  if (!id) {
-    return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+  const parsed = discoveredOperatorPatchSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
   }
+  const { id, contact_email, phone, status, notes } = parsed.data;
 
   const db = getDb();
 

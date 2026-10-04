@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
+import { operatorSettingsSchema } from '@/lib/validations';
 import type { Operator } from '@/lib/types';
 
 export async function GET() {
@@ -30,7 +31,10 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const body = await req.json();
+  const parsed = operatorSettingsSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
+  }
   const db = getDb();
 
   const operator = await db.one<Operator>('SELECT * FROM operators WHERE user_id = ?', [session.userId]);
@@ -48,7 +52,7 @@ export async function PATCH(req: Request) {
     transoceanic,
     certificate,
     notes,
-  } = body;
+  } = parsed.data;
 
   await db.run(`
     UPDATE operators SET

@@ -6,6 +6,8 @@ import { getDb } from '@/lib/db';
 export default async function CustomerLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
   if (!session) redirect('/login');
+  if (session.role === 'operator') redirect('/operator/dashboard');
+  if (session.role === 'admin') redirect('/admin/dashboard');
 
   const db = getDb();
   const user = (await db.one<{ name: string; role: string }>('SELECT name, role FROM users WHERE id = ?', [session.userId]))!;

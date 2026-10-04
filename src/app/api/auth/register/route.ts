@@ -1,11 +1,19 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { getDb } from '@/lib/db';
+import { rateLimit, clientIp } from '@/lib/rate-limit';
 import { registerSchema } from '@/lib/validations';
 import { setSessionCookie } from '@/lib/auth';
 import { claimBookingDraft } from '@/lib/bookings/create';
 
 export async function POST(req: Request) {
+  const limited = rateLimit(`register:${clientIp(req)}`, 5, 15 * 60 * 1000);
+  if (!limited.ok) {
+    return NextResponse.json({ error: 'Too many attempts. Try again later.' }, {
+      status: 429, headers: { 'Retry-After': String(limited.retryAfter) },
+    });
+  }
+
   try {
     const body = await req.json();
     const parsed = registerSchema.safeParse(body);
