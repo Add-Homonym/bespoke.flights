@@ -29,6 +29,7 @@ import {
 import { sendEmail } from '@/lib/email/resend';
 import { paymentReceiptEmail, bookingConfirmedOperatorEmail } from '@/lib/email/templates';
 import type { Payment, Quote, BookingRequest, Operator, BookingLeg } from '@/lib/types';
+import { fromDbLegs, legLine } from '@/lib/trip-format';
 
 export class PaymentError extends Error {
   constructor(message: string, public status: number) {
@@ -123,6 +124,7 @@ export async function createCheckout(
 
   const customer = (await db.one<{ email: string }>('SELECT email FROM users WHERE id = ?', [params.customerId]))!;
   const route = await routeLabel(db, request.id);
+  const legs = await db.query<BookingLeg>('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order', [request.id]);
   const metadata = {
     payment_id: String(paymentId),
     quote_id: String(quote.id),
@@ -143,7 +145,7 @@ export async function createCheckout(
           unit_amount: fees.amountCents,
           product_data: {
             name: `Private charter: ${route}`,
-            description: `${operator.company_name} · Request #${request.id} · ${request.passenger_count} pax`,
+            description: checkoutDescription(operator.company_name, request, legs),
           },
         },
       }],
@@ -396,6 +398,18 @@ export async function simulateStubPayment(
   return fulfillPayment(db, paymentId, { paymentIntentId: null, baseUrl });
 }
 
+/** Full trip details for the Stripe Checkout line item, so the customer sees exactly what they pay for. */
+export function checkoutDescription(company: string, request: Pick<BookingRequest, 'id' | 'passenger_count' | 'notes'>, legs: BookingLeg[]): string {
+  const parts = [
+    `${company} · Request #${request.id}`,
+    ...fromDbLegs(legs).map(legLine),
+    `${request.passenger_count} passenger${request.passenger_count !== 1 ? 's' : ''}`,
+    `Special requests: ${request.notes?.trim() || 'none'}`,
+  ];
+  const text = parts.join(' | ');
+  return text.length > 1000 ? text.slice(0, 997) + '...' : text;
+}
+
 async function routeLabel(db: Db, requestId: number): Promise<string> {
   const legs = await db.query<BookingLeg>('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order', [requestId]);
   return legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).join(' → ');
@@ -403,11 +417,11 @@ async function routeLabel(db: Db, requestId: number): Promise<string> {
 
 async function sendBookingEmails(db: Db, paymentId: number, baseUrl: string) {
   const row = (await db.one<Payment & {
-    customer_email: string; passenger_count: number; company_name: string;
+    customer_email: string; passenger_count: number; request_notes: string | null; company_name: string;
     operator_email: string | null; operator_user_email: string;
     aircraft_type: string | null; tail_number: string | null;
   }>(`
-    SELECT p.*, u.email AS customer_email, br.passenger_count,
+    SELECT p.*, u.email AS customer_email, br.passenger_count, br.notes AS request_notes,
       o.company_name, o.contact_email AS operator_email, ou.email AS operator_user_email,
       a.type AS aircraft_type, a.tail_number
     FROM payments p
@@ -429,6 +443,8 @@ async function sendBookingEmails(db: Db, paymentId: number, baseUrl: string) {
     requestId: row.request_id,
     route: await routeLabel(db, row.request_id),
     dateRange,
+    legLines: fromDbLegs(legs).map(legLine),
+    specialRequests: row.request_notes?.trim() || null,
     passengerCount: row.passenger_count,
     operatorCompany: row.company_name,
     aircraft: row.aircraft_type ? `${row.aircraft_type}${row.tail_number ? ` (${row.tail_number})` : ''}` : null,

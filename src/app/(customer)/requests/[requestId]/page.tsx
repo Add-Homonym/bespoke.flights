@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { Card } from '@/components/ui/card';
+import { formatTripDate, formatTripTime } from '@/lib/trip-format';
 import { Badge } from '@/components/ui/badge';
 import { QuoteActions } from '@/components/booking/quote-actions';
 import { OutreachStatus } from '@/components/operator/outreach-status';
@@ -96,17 +97,19 @@ export default async function RequestDetailPage({
                   <span className="text-brand-cream font-mono">{leg.dest_code}</span>
                 </div>
                 <div className="text-right">
-                  <p className="text-brand-cream text-sm">{leg.departure_date}</p>
-                  {leg.departure_time && <p className="text-brand-muted text-xs">{leg.departure_time}</p>}
+                  <p className="text-brand-cream text-sm">{formatTripDate(leg.departure_date) || leg.departure_date}</p>
+                  <p className="text-brand-muted text-xs">{formatTripTime(leg.departure_time ?? '') || 'Any time'}</p>
                 </div>
               </div>
             </div>
           ))}
         </div>
-        <div className="mt-4 flex gap-4 text-sm text-brand-muted">
-          <span>{request.passenger_count} passenger{request.passenger_count !== 1 ? 's' : ''}</span>
-          {request.notes && <span>&middot; {request.notes}</span>}
-        </div>
+        <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+          <dt className="text-brand-muted">Passengers</dt>
+          <dd className="text-brand-cream">{request.passenger_count}</dd>
+          <dt className="text-brand-muted">Special requests</dt>
+          <dd className="text-brand-cream break-words">{request.notes?.trim() || <span className="text-brand-muted/60">None</span>}</dd>
+        </dl>
       </Card>
 
       {submitted === '1' && (

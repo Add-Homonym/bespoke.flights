@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { AirportInput } from '@/components/ui/airport-input';
 import { AccountStep } from '@/components/booking/account-step';
+import { TripDetails } from '@/components/booking/trip-details';
+import { fromDraftLegs } from '@/lib/trip-format';
 import { bookingRequestSchema } from '@/lib/validations';
 import {
   type BookingDraft,
@@ -97,6 +99,7 @@ export function MultiLegForm({
       // Not signed in: collect an account next. The draft cookie carries the
       // itinerary; the server submits it once the account exists.
       setNeedsAccount(true);
+      window.scrollTo({ top: 0 }); // the account step starts with the trip summary
       return;
     }
     if (viewerRole !== 'customer') {
@@ -131,8 +134,9 @@ export function MultiLegForm({
   if (needsAccount) {
     return (
       <AccountStep
-        summary={routeSummary(legs)}
+        legs={fromDraftLegs(legs)}
         passengerCount={passengerCount}
+        notes={notes}
         onBack={() => setNeedsAccount(false)}
       />
     );
@@ -169,7 +173,7 @@ export function MultiLegForm({
         </div>
         <div className="flex-1">
           <Input
-            label="Special Notes"
+            label="Special Requests"
             placeholder="Pets, luggage, catering preferences..."
             value={notes}
             onChange={e => setNotes(e.target.value)}
@@ -255,23 +259,10 @@ export function MultiLegForm({
         </button>
       </div>
 
-      {/* Route summary */}
-      {legs.some(l => l.originCode && l.destCode) && (
+      {/* Trip summary: every detail entered so far */}
+      {draftHasContent({ legs, passengerCount, notes }) && (
         <div className="rounded-lg bg-brand-navy/50 border border-brand-border px-5 py-4">
-          <p className="text-xs text-brand-muted mb-2 uppercase tracking-wider">Route Summary</p>
-          <p className="text-brand-cream font-mono text-lg tracking-wider">
-            {legs
-              .filter(l => l.originCode)
-              .map((l, i, arr) => (
-                <span key={i}>
-                  <span className="text-brand-gold">{l.originCode.toUpperCase()}</span>
-                  {(l.destCode || i < arr.length - 1) && <span className="text-brand-muted mx-2">&rarr;</span>}
-                </span>
-              ))}
-            {legs[legs.length - 1].destCode && (
-              <span className="text-brand-gold">{legs[legs.length - 1].destCode.toUpperCase()}</span>
-            )}
-          </p>
+          <TripDetails title="Trip summary" legs={fromDraftLegs(legs)} passengerCount={passengerCount} notes={notes} />
         </div>
       )}
 
@@ -287,6 +278,3 @@ export function MultiLegForm({
   );
 }
 
-function routeSummary(legs: LegInput[]): string {
-  return legs.map(l => l.originCode).concat(legs[legs.length - 1]?.destCode ?? '').filter(Boolean).join(' → ');
-}

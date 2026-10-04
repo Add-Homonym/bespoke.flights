@@ -3,6 +3,8 @@ import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { legsByRequest, quoteCountsByRequest } from '@/lib/db/queries';
 import { Card } from '@/components/ui/card';
+import { TripDetails } from '@/components/booking/trip-details';
+import { fromDbLegs } from '@/lib/trip-format';
 import { Badge } from '@/components/ui/badge';
 import type { BookingRequest } from '@/lib/types';
 
@@ -47,21 +49,13 @@ export default async function RequestsPage() {
           {requests.map(req => {
             const legs = legsByReq.get(req.id) ?? [];
             const quoteCount = quoteCounts.get(req.id) ?? 0;
-            const route = legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).join(' → ');
-            const dateRange = legs.length > 0
-              ? `${legs[0].departure_date}${legs.length > 1 ? ` — ${legs[legs.length - 1].departure_date}` : ''}`
-              : '';
-
             return (
               <Link key={req.id} href={`/requests/${req.id}`}>
-                <Card hover className="flex items-center justify-between">
+                <Card hover className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-brand-cream font-mono tracking-wide text-lg">{route}</p>
-                    <p className="text-brand-muted text-xs mt-1">
-                      {legs.length} leg{legs.length !== 1 ? 's' : ''} &middot; {req.passenger_count} pax &middot; {dateRange}
-                    </p>
+                    <TripDetails compact legs={fromDbLegs(legs)} passengerCount={req.passenger_count} notes={req.notes} />
                     {quoteCount > 0 && (
-                      <p className="text-brand-gold text-xs mt-1">{quoteCount} quote{quoteCount !== 1 ? 's' : ''} received</p>
+                      <p className="text-brand-gold text-xs mt-2">{quoteCount} quote{quoteCount !== 1 ? 's' : ''} received</p>
                     )}
                   </div>
                   <Badge variant={statusBadge[req.status]}>{req.status}</Badge>

@@ -67,6 +67,12 @@ describe('createCheckout (Stripe)', () => {
     expect(params.line_items![0].price_data!.unit_amount).toBe(8_500_000);
     expect(params.line_items![0].price_data!.currency).toBe('usd');
     expect(params.line_items![0].price_data!.product_data!.name).toBe('Private charter: KLAX → PHNL → KLAX');
+    const description = params.line_items![0].price_data!.product_data!.description!;
+    expect(description).toContain('Alpha Air · Request #');
+    expect(description).toMatch(/Leg 1: KLAX → PHNL · \w{3}, \w{3} \d{1,2}, \d{4}, any time/);
+    expect(description).toMatch(/Leg 2: PHNL → KLAX · /);
+    expect(description).toContain('4 passengers');
+    expect(description).toContain('Special requests: none');
     expect(params.payment_intent_data!.application_fee_amount).toBe(425_000);
     expect(params.payment_intent_data!.transfer_data!.destination).toBe('acct_alpha');
     expect(params.payment_intent_data!.on_behalf_of).toBe('acct_alpha');
