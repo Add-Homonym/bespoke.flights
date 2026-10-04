@@ -3,6 +3,8 @@ import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { legsByRequest } from '@/lib/db/queries';
 import { Card } from '@/components/ui/card';
+import { TripDetails } from '@/components/booking/trip-details';
+import { fromDbLegs } from '@/lib/trip-format';
 import { Badge } from '@/components/ui/badge';
 import type { BookingRequest, User } from '@/lib/types';
 
@@ -65,15 +67,12 @@ export default async function DashboardPage() {
         <div className="space-y-3">
           {requests.map(req => {
             const legs = legsByReq.get(req.id) ?? [];
-            const route = legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).join(' → ');
             return (
               <Link key={req.id} href={`/requests/${req.id}`}>
-                <Card hover className="flex items-center justify-between">
+                <Card hover className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-brand-cream font-mono tracking-wide">{route}</p>
-                    <p className="text-brand-muted text-xs mt-1">
-                      {legs.length} leg{legs.length !== 1 ? 's' : ''} &middot; {req.passenger_count} pax &middot; {new Date(req.created_at).toLocaleDateString()}
-                    </p>
+                    <TripDetails compact legs={fromDbLegs(legs)} passengerCount={req.passenger_count} notes={req.notes} />
+                    <p className="text-brand-muted/60 text-xs mt-2">Requested {new Date(req.created_at).toLocaleDateString()}</p>
                   </div>
                   <Badge variant={statusBadge[req.status]}>{req.status}</Badge>
                 </Card>

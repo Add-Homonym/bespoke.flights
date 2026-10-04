@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { getDb } from '@/lib/db';
 import { legsByRequest, quoteCountsByRequest } from '@/lib/db/queries';
 import { Card } from '@/components/ui/card';
+import { TripDetails } from '@/components/booking/trip-details';
+import { fromDbLegs } from '@/lib/trip-format';
 import { Badge } from '@/components/ui/badge';
 import { Table, Thead, Th, Td, Tr } from '@/components/ui/table';
 import type { BookingRequest } from '@/lib/types';
@@ -40,9 +42,8 @@ export default async function AdminRequestsPage() {
           <Thead>
             <tr>
               <Th>ID</Th>
-              <Th>Route</Th>
+              <Th>Trip</Th>
               <Th>Customer</Th>
-              <Th>Pax</Th>
               <Th>Quotes</Th>
               <Th>Status</Th>
               <Th>Date</Th>
@@ -52,21 +53,19 @@ export default async function AdminRequestsPage() {
             {requests.map(req => {
               const legs = legsByReq.get(req.id) ?? [];
               const quoteCount = quoteCounts.get(req.id) ?? 0;
-              const route = legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).join(' → ');
 
               return (
                 <Tr key={req.id}>
                   <Td className="font-mono text-xs">#{req.id}</Td>
                   <Td>
-                    <Link href={`/requests/${req.id}`} className="text-brand-cream font-mono hover:text-brand-gold transition-colors">
-                      {route}
+                    <Link href={`/requests/${req.id}`} className="block hover:opacity-80 transition-opacity">
+                      <TripDetails compact legs={fromDbLegs(legs)} passengerCount={req.passenger_count} notes={req.notes} />
                     </Link>
                   </Td>
                   <Td>
                     <div className="text-brand-cream text-sm">{req.customer_name}</div>
                     <div className="text-brand-muted text-xs">{req.customer_email}</div>
                   </Td>
-                  <Td>{req.passenger_count}</Td>
                   <Td>{quoteCount}</Td>
                   <Td><Badge variant={statusBadge[req.status]}>{req.status}</Badge></Td>
                   <Td className="text-brand-muted text-xs">{new Date(req.created_at).toLocaleDateString()}</Td>

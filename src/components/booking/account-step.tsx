@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { TripDetails } from '@/components/booking/trip-details';
+import type { TripLeg } from '@/lib/trip-format';
 
 /**
  * Final step of booking for a visitor without a session. The itinerary is
@@ -11,12 +13,14 @@ import { Button } from '@/components/ui/button';
  * returns the new request's URL.
  */
 export function AccountStep({
-  summary,
+  legs,
   passengerCount,
+  notes,
   onBack,
 }: {
-  summary: string;
+  legs: TripLeg[];
   passengerCount: number;
+  notes: string;
   onBack: () => void;
 }) {
   const router = useRouter();
@@ -74,13 +78,9 @@ export function AccountStep({
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg bg-brand-navy/50 border border-brand-border px-5 py-4 flex items-center justify-between">
-        <div>
-          <p className="text-xs text-brand-muted mb-1 uppercase tracking-wider">Your trip</p>
-          <p className="text-brand-cream font-mono tracking-wider">{summary}</p>
-          <p className="text-brand-muted text-xs mt-1">{passengerCount} passenger{passengerCount !== 1 ? 's' : ''}</p>
-        </div>
-        <button type="button" onClick={onBack} className="text-sm text-brand-muted hover:text-brand-cream cursor-pointer">
+      <div className="rounded-lg bg-brand-navy/50 border border-brand-border px-5 py-4 flex items-start justify-between gap-4">
+        <TripDetails title="Your trip" legs={legs} passengerCount={passengerCount} notes={notes} />
+        <button type="button" onClick={onBack} className="text-sm text-brand-muted hover:text-brand-cream cursor-pointer shrink-0">
           Edit trip
         </button>
       </div>

@@ -12,6 +12,11 @@ const BRAND = {
   muted: '#8b95a5',
 };
 
+/** Escape user-entered text before it goes into email HTML. */
+export function escapeHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 function layout(body: string): string {
   return '<!DOCTYPE html>' +
     '<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>' +
@@ -105,7 +110,7 @@ export function rfqNotificationEmail(data: RFQEmailData): { subject: string; htm
   const subject = 'Charter Quote Request #' + data.requestId + ' — ' + data.route;
 
   const legsHtml = data.legDetails.map(leg =>
-    '<tr><td style="padding:8px 12px;color:' + BRAND.cream + ';font-size:14px;font-family:monospace;border-bottom:1px solid #2a3444">' + leg + '</td></tr>'
+    '<tr><td style="padding:8px 12px;color:' + BRAND.cream + ';font-size:14px;font-family:monospace;border-bottom:1px solid #2a3444">' + escapeHtml(leg) + '</td></tr>'
   ).join('');
 
   const body =
@@ -119,7 +124,7 @@ export function rfqNotificationEmail(data: RFQEmailData): { subject: string; htm
     summaryRow('Route', data.route) +
     summaryRow('Dates', data.dateRange) +
     summaryRow('Passengers', String(data.passengerCount)) +
-    (data.notes ? summaryRow('Notes', data.notes) : '') +
+    summaryRow('Special requests', data.notes ? escapeHtml(data.notes) : 'None') +
     '</table></td></tr></table>' +
     '<h2 style="margin:24px 0 12px 0;color:' + BRAND.muted + ';font-size:12px;text-transform:uppercase;letter-spacing:1px">Itinerary</h2>' +
     '<table cellpadding="0" cellspacing="0" style="width:100%;background:#0f1724;border-radius:8px">' +
@@ -153,6 +158,9 @@ export interface BookingPaymentEmailData {
   requestId: number;
   route: string;
   dateRange: string;
+  /** One line per leg with date and time. */
+  legLines: string[];
+  specialRequests: string | null;
   passengerCount: number;
   operatorCompany: string;
   aircraft: string | null;
@@ -173,7 +181,9 @@ export function paymentReceiptEmail(data: BookingPaymentEmailData): { subject: s
     '<table cellpadding="0" cellspacing="0" style="width:100%">' +
     summaryRow('Route', data.route) +
     summaryRow('Dates', data.dateRange) +
+    data.legLines.map((line, i) => summaryRow(i === 0 ? 'Legs' : '', escapeHtml(line.replace(/^Leg \d+: /, '')))).join('') +
     summaryRow('Passengers', String(data.passengerCount)) +
+    summaryRow('Special requests', data.specialRequests ? escapeHtml(data.specialRequests) : 'None') +
     summaryRow('Operator', data.operatorCompany) +
     (data.aircraft ? summaryRow('Aircraft', data.aircraft) : '') +
     summaryRow('Total paid', data.amount) +
@@ -201,7 +211,9 @@ export function bookingConfirmedOperatorEmail(
     '<table cellpadding="0" cellspacing="0" style="width:100%">' +
     summaryRow('Route', data.route) +
     summaryRow('Dates', data.dateRange) +
+    data.legLines.map((line, i) => summaryRow(i === 0 ? 'Legs' : '', escapeHtml(line.replace(/^Leg \d+: /, '')))).join('') +
     summaryRow('Passengers', String(data.passengerCount)) +
+    summaryRow('Special requests', data.specialRequests ? escapeHtml(data.specialRequests) : 'None') +
     (data.aircraft ? summaryRow('Aircraft', data.aircraft) : '') +
     summaryRow('Quote', data.amount) +
     summaryRow('Platform fee', data.platformFee) +

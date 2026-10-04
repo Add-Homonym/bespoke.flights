@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { getDb } from '@/lib/db';
 import { legsByRequest, quoteCountsByRequest } from '@/lib/db/queries';
 import { Card } from '@/components/ui/card';
+import { TripDetails } from '@/components/booking/trip-details';
+import { fromDbLegs } from '@/lib/trip-format';
 import { Badge } from '@/components/ui/badge';
 import type { BookingRequest } from '@/lib/types';
 
@@ -29,21 +31,14 @@ export default async function OperatorRequestsPage() {
           {requests.map(req => {
             const legs = legsByReq.get(req.id) ?? [];
             const quoteCount = quoteCounts.get(req.id) ?? 0;
-            const route = legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).join(' → ');
-            const dateRange = legs.length > 0
-              ? `${legs[0].departure_date}${legs.length > 1 ? ` — ${legs[legs.length - 1].departure_date}` : ''}`
-              : '';
             const timeAgo = getTimeAgo(req.created_at);
 
             return (
               <Link key={req.id} href={`/operator/requests/${req.id}`}>
-                <Card hover className="flex items-center justify-between">
+                <Card hover className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-brand-cream font-mono tracking-wide text-lg">{route}</p>
-                    <p className="text-brand-muted text-xs mt-1">
-                      {legs.length} leg{legs.length !== 1 ? 's' : ''} &middot; {req.passenger_count} pax &middot; {dateRange}
-                    </p>
-                    <p className="text-brand-muted/50 text-xs mt-1">Posted {timeAgo}</p>
+                    <TripDetails compact legs={fromDbLegs(legs)} passengerCount={req.passenger_count} notes={req.notes} />
+                    <p className="text-brand-muted/50 text-xs mt-2">Posted {timeAgo}</p>
                   </div>
                   <div className="text-right">
                     <Badge variant={quoteCount > 0 ? 'warning' : 'gold'}>
