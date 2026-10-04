@@ -66,9 +66,18 @@ export const MIN_CHARGE_CENTS = 50;
 /** How long a Checkout Session stays open (Stripe allows 30 min – 24 h). */
 export const CHECKOUT_TTL_SECONDS = 60 * 60;
 
-/** Absolute base URL for redirects. Prefers APP_URL, falls back to the request origin. */
+/**
+ * Absolute base URL for redirects and email links. APP_URL, else the Vercel
+ * production domain. Outside production the request origin is an acceptable
+ * fallback; in production it is not, since the Host header is attacker
+ * controlled and would end up in Stripe redirects and emails.
+ */
 export function appBaseUrl(req?: Request): string {
   if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, '');
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('APP_URL must be set in production');
+  }
   if (req) return new URL(req.url).origin;
   return 'http://localhost:3000';
 }

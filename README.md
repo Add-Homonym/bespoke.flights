@@ -353,15 +353,15 @@ Created by `npm run seed` locally, or automatically in [test mode](#test-mode). 
 
 | Variable | Required | Description |
 |---|---|---|
-| `JWT_SECRET` | Yes | Random string for signing session tokens |
+| `JWT_SECRET` | Yes | Random string of at least 32 characters for signing session tokens. Production refuses to start without one (e.g. `openssl rand -base64 48`) |
 | `RESEND_API_KEY` | No | Resend API key. Without it, emails log to stdout. |
 | `EMAIL_FROM` | No | Verified sender address (default: `hello@bespoke.flights`) |
-| `CRON_SECRET` | Production | Secures the `/api/cron/weekly-discovery` endpoint |
+| `CRON_SECRET` | Yes (for discovery) | Secures `/api/cron/weekly-discovery`. The endpoint refuses every call until it is set; a signed-in admin can also trigger it from the console |
 | `STRIPE_SECRET_KEY` | Production | Stripe secret key. Without it, payments run in stub mode (development) or are disabled (production). |
 | `STRIPE_WEBHOOK_SECRET` | Production | Signing secret for the platform webhook endpoint |
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | Production | Signing secret for the connected-accounts webhook endpoint |
 | `PLATFORM_FEE_BPS` | No | Platform commission in basis points (default `500` = 5%) |
-| `APP_URL` | No | Public base URL for Stripe redirect URLs and email links (defaults to the request origin) |
+| `APP_URL` | Production | Public base URL for Stripe redirect URLs and email links. In development it defaults to the request origin; in production it falls back to `VERCEL_PROJECT_PRODUCTION_URL` and is otherwise required (the Host header is never trusted) |
 | `APP_TEST_MODE` | No | `true` simulates all payments, shows a test banner, and loads demo data into an empty database |
 | `DATABASE_URL` | Production | Postgres connection string. Set automatically by the Vercel Neon integration (pooled). |
 | `DATABASE_POOL_MAX` | No | Max connections per function instance (default 5) |
@@ -384,7 +384,7 @@ Optional: enable Neon's preview-branch option in the integration so each preview
 
 ### 2. Other environment variables
 
-Set `JWT_SECRET` (required: a long random string; without it, session tokens are signed with a public development key), `CRON_SECRET`, and the Stripe and Resend variables from the table above.
+Set `JWT_SECRET` (required: a random string of at least 32 characters; production refuses to start otherwise), `CRON_SECRET`, `APP_URL`, and the Stripe and Resend variables from the table above.
 
 ### 3. Deploy
 

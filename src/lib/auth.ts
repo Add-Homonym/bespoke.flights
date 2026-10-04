@@ -3,9 +3,26 @@ import { cookies } from 'next/headers';
 import { NextRequest } from 'next/server';
 import type { SessionPayload } from './types';
 
-const SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'bespoke-flights-dev-secret-change-in-production'
-);
+const DEV_SECRET = 'bespoke-flights-dev-secret-change-in-production';
+
+let secretKey: Uint8Array | undefined;
+
+/**
+ * Session signing key, resolved on first use (not at build time). Production
+ * refuses to sign or verify without a real JWT_SECRET: a known or short key
+ * lets anyone mint an admin session.
+ */
+function signingSecret(): Uint8Array {
+  if (secretKey) return secretKey;
+  const secret = process.env.JWT_SECRET;
+  if (process.env.NODE_ENV === 'production') {
+    if (!secret || secret === DEV_SECRET || secret === 'change-me' || secret.length < 32) {
+      throw new Error('JWT_SECRET must be set to a random value of at least 32 characters in production');
+    }
+  }
+  secretKey = new TextEncoder().encode(secret || DEV_SECRET);
+  return secretKey;
+}
 
 const COOKIE_NAME = 'session';
 
@@ -14,13 +31,15 @@ export async function createToken(payload: SessionPayload): Promise<string> {
     .setProtectedHeader({ alg: 'HS256' })
     .setExpirationTime('7d')
     .setIssuedAt()
-    .sign(SECRET);
+    .sign(signingSecret());
 }
 
 export async function verifyToken(token: string): Promise<SessionPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, SECRET);
-    return payload as unknown as SessionPayload;
+    const { payload } = await jwtVerify(token, signingSecret(), { algorithms: ['HS256'] });
+    const { userId, role } = payload as Record<string, unknown>;
+    if (typeof userId !== 'number' || !['customer', 'operator', 'admin'].includes(role as string)) return null;
+    return { userId, role: role as SessionPayload['role'] };
   } catch {
     return null;
   }

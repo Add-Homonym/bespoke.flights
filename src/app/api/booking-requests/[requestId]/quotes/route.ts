@@ -3,7 +3,7 @@ import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { toId } from '@/lib/db/queries';
 import { quoteSchema } from '@/lib/validations';
-import type { Quote, Operator } from '@/lib/types';
+import type { Quote, Operator, BookingRequest } from '@/lib/types';
 
 export async function GET(_req: Request, { params }: { params: Promise<{ requestId: string }> }) {
   const session = await getSession();
@@ -12,14 +12,30 @@ export async function GET(_req: Request, { params }: { params: Promise<{ request
   const { requestId } = await params;
   const db = getDb();
 
+  const request = await db.one<BookingRequest>('SELECT * FROM booking_requests WHERE id = ?', [toId(requestId)]);
+  if (!request) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  // Customers see the quotes on their own requests; operators only their own
+  // quote (competitors' prices are not disclosed); admins see everything.
+  let scope = '';
+  const scopeParams: number[] = [request.id];
+  if (session.role === 'customer') {
+    if (request.customer_id !== session.userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  } else if (session.role === 'operator') {
+    const operator = await db.one<Operator>('SELECT id FROM operators WHERE user_id = ?', [session.userId]);
+    if (!operator) return NextResponse.json({ error: 'Operator profile not found' }, { status: 404 });
+    scope = ' AND q.operator_id = ?';
+    scopeParams.push(operator.id);
+  }
+
   const quotes = await db.query<Quote & { company_name: string; aircraft_type?: string; aircraft_capacity?: number; tail_number?: string }>(`
     SELECT q.*, o.company_name, a.type as aircraft_type, a.capacity as aircraft_capacity, a.tail_number
     FROM quotes q
     JOIN operators o ON o.id = q.operator_id
     LEFT JOIN aircraft a ON a.id = q.aircraft_id
-    WHERE q.request_id = ?
+    WHERE q.request_id = ?${scope}
     ORDER BY q.created_at DESC
-  `, [toId(requestId)]);
+  `, scopeParams);
 
   return NextResponse.json(quotes);
 }
@@ -41,8 +57,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ request
   if (!operator) return NextResponse.json({ error: 'Operator profile not found' }, { status: 404 });
   if (operator.status !== 'approved') return NextResponse.json({ error: 'Operator not approved' }, { status: 403 });
 
-  const request = await db.one<{ id: number }>('SELECT id FROM booking_requests WHERE id = ?', [toId(requestId)]);
+  const request = await db.one<{ id: number; status: string }>('SELECT id, status FROM booking_requests WHERE id = ?', [toId(requestId)]);
   if (!request) return NextResponse.json({ error: 'Request not found' }, { status: 404 });
+  if (!['open', 'quoted'].includes(request.status)) {
+    return NextResponse.json({ error: `Request is ${request.status}` }, { status: 409 });
+  }
 
   // Check for existing quote
   const existingQuote = await db.one('SELECT id FROM quotes WHERE request_id = ? AND operator_id = ?', [request.id, operator.id]);

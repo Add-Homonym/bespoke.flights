@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
+import { toId } from '@/lib/db/queries';
 import { Card } from '@/components/ui/card';
 import { formatTripDate, formatTripTime } from '@/lib/trip-format';
 import { Badge } from '@/components/ui/badge';
@@ -14,7 +15,7 @@ export default async function OperatorRequestDetailPage({ params }: { params: Pr
   const { requestId } = await params;
   const db = getDb();
 
-  const request = await db.one<BookingRequest>('SELECT * FROM booking_requests WHERE id = ?', [requestId]);
+  const request = await db.one<BookingRequest>('SELECT * FROM booking_requests WHERE id = ?', [toId(requestId)]);
   if (!request) notFound();
 
   const legs = await db.query<BookingLeg>('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order', [request.id]);

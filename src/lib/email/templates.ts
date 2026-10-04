@@ -45,7 +45,7 @@ function layout(body: string): string {
 
 function button(text: string, url: string): string {
   return '<table cellpadding="0" cellspacing="0" style="margin:28px 0"><tr><td>' +
-    '<a href="' + url + '" style="display:inline-block;background:' + BRAND.gold +
+    '<a href="' + escapeHtml(url) + '" style="display:inline-block;background:' + BRAND.gold +
     ';color:' + BRAND.dark + ';font-size:15px;font-weight:600;padding:14px 32px;border-radius:8px;text-decoration:none">' +
     text + '</a></td></tr></table>';
 }
@@ -58,14 +58,16 @@ function p(text: string, style?: string): string {
 
 export function operatorInviteEmail(companyName: string, certNumber?: string): { subject: string; html: string } {
   const subject = companyName + ' — Receive Charter Quote Requests, No Broker Markup';
+  const company = escapeHtml(companyName);
+  const cert = certNumber ? escapeHtml(certNumber) : '';
 
   const body =
     '<h1 style="margin:0 0 24px 0;color:' + BRAND.cream + ';font-size:22px;font-weight:600">' +
     'Charter requests, direct to your dispatch' +
     '</h1>' +
-    p('Hi ' + companyName + ' team,') +
+    p('Hi ' + company + ' team,') +
     p('We found your FAA Part 135 certificate' +
-      (certNumber ? ' (' + certNumber + ')' : '') +
+      (cert ? ' (' + cert + ')' : '') +
       ' and wanted to introduce Bespoke Flights &mdash; a charter marketplace that connects travelers directly with operators like you.') +
     p('<strong style="color:' + BRAND.gold + '">How it works:</strong>') +
     '<table cellpadding="0" cellspacing="0" style="margin:0 0 20px 0;width:100%">' +
@@ -121,8 +123,8 @@ export function rfqNotificationEmail(data: RFQEmailData): { subject: string; htm
     '<table cellpadding="0" cellspacing="0" style="width:100%;background:#0f1724;border-radius:8px;margin:20px 0">' +
     '<tr><td style="padding:16px">' +
     '<table cellpadding="0" cellspacing="0" style="width:100%">' +
-    summaryRow('Route', data.route) +
-    summaryRow('Dates', data.dateRange) +
+    summaryRow('Route', escapeHtml(data.route)) +
+    summaryRow('Dates', escapeHtml(data.dateRange)) +
     summaryRow('Passengers', String(data.passengerCount)) +
     summaryRow('Special requests', data.notes ? escapeHtml(data.notes) : 'None') +
     '</table></td></tr></table>' +
@@ -179,16 +181,16 @@ export function paymentReceiptEmail(data: BookingPaymentEmailData): { subject: s
     '<table cellpadding="0" cellspacing="0" style="width:100%;background:#0f1724;border-radius:8px;margin:20px 0">' +
     '<tr><td style="padding:16px">' +
     '<table cellpadding="0" cellspacing="0" style="width:100%">' +
-    summaryRow('Route', data.route) +
-    summaryRow('Dates', data.dateRange) +
+    summaryRow('Route', escapeHtml(data.route)) +
+    summaryRow('Dates', escapeHtml(data.dateRange)) +
     data.legLines.map((line, i) => summaryRow(i === 0 ? 'Legs' : '', escapeHtml(line.replace(/^Leg \d+: /, '')))).join('') +
     summaryRow('Passengers', String(data.passengerCount)) +
     summaryRow('Special requests', data.specialRequests ? escapeHtml(data.specialRequests) : 'None') +
-    summaryRow('Operator', data.operatorCompany) +
-    (data.aircraft ? summaryRow('Aircraft', data.aircraft) : '') +
-    summaryRow('Total paid', data.amount) +
+    summaryRow('Operator', escapeHtml(data.operatorCompany)) +
+    (data.aircraft ? summaryRow('Aircraft', escapeHtml(data.aircraft)) : '') +
+    summaryRow('Total paid', escapeHtml(data.amount)) +
     '</table></td></tr></table>' +
-    p(data.operatorCompany + ' will contact you to confirm passenger details and flight logistics.') +
+    p(escapeHtml(data.operatorCompany) + ' will contact you to confirm passenger details and flight logistics.') +
     button('View Booking', data.baseUrl + '/requests/' + data.requestId);
 
   return { subject, html: layout(body) };
@@ -209,15 +211,15 @@ export function bookingConfirmedOperatorEmail(
     '<table cellpadding="0" cellspacing="0" style="width:100%;background:#0f1724;border-radius:8px;margin:20px 0">' +
     '<tr><td style="padding:16px">' +
     '<table cellpadding="0" cellspacing="0" style="width:100%">' +
-    summaryRow('Route', data.route) +
-    summaryRow('Dates', data.dateRange) +
+    summaryRow('Route', escapeHtml(data.route)) +
+    summaryRow('Dates', escapeHtml(data.dateRange)) +
     data.legLines.map((line, i) => summaryRow(i === 0 ? 'Legs' : '', escapeHtml(line.replace(/^Leg \d+: /, '')))).join('') +
     summaryRow('Passengers', String(data.passengerCount)) +
     summaryRow('Special requests', data.specialRequests ? escapeHtml(data.specialRequests) : 'None') +
-    (data.aircraft ? summaryRow('Aircraft', data.aircraft) : '') +
-    summaryRow('Quote', data.amount) +
-    summaryRow('Platform fee', data.platformFee) +
-    summaryRow('Your payout', data.payout) +
+    (data.aircraft ? summaryRow('Aircraft', escapeHtml(data.aircraft)) : '') +
+    summaryRow('Quote', escapeHtml(data.amount)) +
+    summaryRow('Platform fee', escapeHtml(data.platformFee)) +
+    summaryRow('Your payout', escapeHtml(data.payout)) +
     '</table></td></tr></table>' +
     p('Funds are transferred to your connected payout account and paid out on your Stripe payout schedule.') +
     button('View Request', data.baseUrl + '/operator/requests/' + data.requestId);
