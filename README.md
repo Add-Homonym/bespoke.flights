@@ -24,9 +24,9 @@ There are three user roles — **customer**, **operator**, and **admin** — eac
 
 ## Customer Workflow
 
-1. **Register** at `/register` (role: customer).
-2. **Build an itinerary** at `/book` — origin, destination, date, and time for each leg. Supports multi-leg trips (A → B → C → A).
-3. **Submit the request.** The matching engine immediately runs, scoring all approved operators on market coverage, fleet fit, safety rating, and past performance. The top 10 matches receive the RFQ automatically.
+1. **Build an itinerary** at `/book`. "Start Booking" on the home page goes straight here; no account is needed. Add origin, destination, date and time for each leg; multi-leg trips (A → B → C → A) are supported. The itinerary is saved in the `bf_booking_draft` cookie on every change (30 days, `SameSite=Lax`), so reloading or returning later restores it.
+2. **Sign up or sign in at submit.** A visitor without a session gets an inline account step on `/book`. After registering or signing in, the server turns the saved itinerary into a booking request, clears the cookie, and opens the new request. Signing in through `/login` or `/register` with a saved itinerary does the same. Signed-in travelers submit directly.
+3. **Matching runs on submit.** The matching engine immediately runs, scoring all approved operators on market coverage, fleet fit, safety rating, and past performance. The top 10 matches receive the RFQ automatically.
 4. **View request status** at `/requests/[id]`. The Operator Outreach section shows which operators were contacted, their match scores, and whether they've responded. Quotes appear below, sorted by price.
 5. **Accept & pay.** Choosing a quote opens Stripe Checkout (card or US bank account). When payment succeeds, that quote is accepted, all others are rejected, and the request is marked booked. See [Payments](#payments).
 

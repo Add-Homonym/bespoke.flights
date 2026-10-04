@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { getDb } from '@/lib/db';
 import { loginSchema } from '@/lib/validations';
 import { setSessionCookie } from '@/lib/auth';
+import { claimBookingDraft } from '@/lib/bookings/create';
 import type { User } from '@/lib/types';
 
 export async function POST(req: Request) {
@@ -28,7 +29,13 @@ export async function POST(req: Request) {
 
     await setSessionCookie({ userId: user.id, role: user.role });
 
-    return NextResponse.json({ id: user.id, email: user.email, name: user.name, role: user.role });
+    // A traveler who built a trip before signing in: submit it now.
+    const requestId = user.role === 'customer' ? await claimBookingDraft(db, user.id) : null;
+
+    return NextResponse.json({
+      id: user.id, email: user.email, name: user.name, role: user.role,
+      redirectTo: requestId ? `/requests/${requestId}?submitted=1` : null,
+    });
   } catch (err) {
     console.error('Login error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

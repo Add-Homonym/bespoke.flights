@@ -1,10 +1,12 @@
-import { NextResponse, after } from 'next/server';
+import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { bookingRequestSchema } from '@/lib/validations';
-import { dispatchOutreach } from '@/lib/outreach/engine';
+import { createBookingRequest } from '@/lib/bookings/create';
+import { DRAFT_COOKIE } from '@/lib/bookings/draft';
 import { legsByRequest } from '@/lib/db/queries';
-import type { BookingRequest, BookingLeg } from '@/lib/types';
+import type { BookingRequest } from '@/lib/types';
 
 export async function POST(req: Request) {
   const session = await getSession();
@@ -17,55 +19,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
   }
 
-  const { passengerCount, notes, legs } = parsed.data;
-  const db = getDb();
+  const { id, outreach } = await createBookingRequest(getDb(), session.userId, parsed.data);
 
-  const savedLegs: BookingLeg[] = [];
-
-  const requestId = await db.transaction(async tx => {
-    const { id: requestId } = (await tx.one<{ id: number }>(
-      'INSERT INTO booking_requests (customer_id, passenger_count, notes) VALUES (?, ?, ?) RETURNING id',
-      [session.userId, passengerCount, notes || null]
-    ))!;
-
-    for (let i = 0; i < legs.length; i++) {
-      const leg = legs[i];
-      await tx.run(
-        'INSERT INTO booking_legs (request_id, leg_order, origin_code, origin_name, dest_code, dest_name, departure_date, departure_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [
-          requestId, i + 1,
-          leg.originCode, leg.originName || null,
-          leg.destCode, leg.destName || null,
-          leg.departureDate, leg.departureTime || null,
-        ]
-      );
-      savedLegs.push({
-        id: 0, request_id: requestId, leg_order: i + 1,
-        origin_code: leg.originCode, origin_name: leg.originName || null,
-        dest_code: leg.destCode, dest_name: leg.destName || null,
-        departure_date: leg.departureDate, departure_time: leg.departureTime || null,
-      });
-    }
-
-    return requestId;
-  });
-
-  // ── AUTOMATIC OUTREACH ──
-  // Matches approved operators by market/fleet/safety, logs RFQs,
-  // and delivers via Resend (email) or SMS stub.
-  let outreach = { matched: 0, dispatched: 0 };
-  try {
-    const result = await dispatchOutreach(db, requestId, savedLegs, passengerCount, notes || null);
-    outreach = result;
-    // Keep the function alive until RFQ emails finish sending.
-    after(() => result.deliveries);
-  } catch (err) {
-    console.error('Outreach dispatch error:', err);
-    // Non-fatal: the request is still created even if outreach fails
-  }
+  // The itinerary is submitted; the browser no longer needs its draft.
+  (await cookies()).delete(DRAFT_COOKIE);
 
   return NextResponse.json({
-    id: requestId,
+    id,
     outreach: {
       operatorsMatched: outreach.matched,
       rfqsDispatched: outreach.dispatched,

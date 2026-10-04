@@ -6,7 +6,7 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // Public routes that don't need auth. Stripe webhooks authenticate by signature.
-  const publicPaths = ['/', '/login', '/register', '/api/auth', '/api/webhooks'];
+  const publicPaths = ['/', '/login', '/register', '/book', '/api/auth', '/api/webhooks'];
   if (publicPaths.some(p => pathname === p || pathname.startsWith(p + '/'))) {
     return NextResponse.next();
   }

@@ -36,7 +36,8 @@ export default function LoginPage() {
       }
 
       const user = await res.json();
-      if (user.role === 'operator') router.push('/operator/dashboard');
+      if (user.redirectTo) router.push(user.redirectTo);
+      else if (user.role === 'operator') router.push('/operator/dashboard');
       else if (user.role === 'admin') router.push('/admin/dashboard');
       else router.push('/dashboard');
       router.refresh();

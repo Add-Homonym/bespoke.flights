@@ -32,7 +32,7 @@ export default async function HomePage() {
             </p>
             <div className="flex items-center justify-center gap-4">
               <Link
-                href="/register"
+                href="/book"
                 className="rounded-lg bg-brand-gold px-8 py-3.5 text-base font-semibold text-brand-dark hover:bg-brand-accent transition-colors"
               >
                 Start Booking
@@ -100,12 +100,12 @@ export default async function HomePage() {
         <section className="border-t border-brand-border bg-brand-navy/30">
           <div className="mx-auto max-w-3xl px-6 py-24 text-center">
             <h2 className="font-display text-3xl text-brand-cream mb-6">Ready to Elevate Your Travel?</h2>
-            <p className="text-brand-muted text-lg mb-10">Create your free account and start building your first itinerary in minutes.</p>
+            <p className="text-brand-muted text-lg mb-10">Build your first itinerary in minutes. No account needed until you request quotes.</p>
             <Link
-              href="/register"
+              href="/book"
               className="rounded-lg bg-brand-gold px-10 py-4 text-base font-semibold text-brand-dark hover:bg-brand-accent transition-colors"
             >
-              Create Your Account
+              Start Your Itinerary
             </Link>
           </div>
         </section>

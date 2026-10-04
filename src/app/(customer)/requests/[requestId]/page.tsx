@@ -26,13 +26,13 @@ export default async function RequestDetailPage({
   searchParams,
 }: {
   params: Promise<{ requestId: string }>;
-  searchParams: Promise<{ checkout?: string }>;
+  searchParams: Promise<{ checkout?: string; submitted?: string }>;
 }) {
   const session = await getSession();
   if (!session) redirect('/login');
 
   const { requestId } = await params;
-  const { checkout } = await searchParams;
+  const { checkout, submitted } = await searchParams;
   const db = getDb();
 
   const request = await db.one<BookingRequest>('SELECT * FROM booking_requests WHERE id = ?', [requestId]);
@@ -108,6 +108,14 @@ export default async function RequestDetailPage({
           {request.notes && <span>&middot; {request.notes}</span>}
         </div>
       </Card>
+
+      {submitted === '1' && (
+        <Card className="mb-8 border-brand-success/30">
+          <p className="text-brand-cream text-sm">
+            Your request is submitted. Matching operators have been notified; quotes will appear below as they respond.
+          </p>
+        </Card>
+      )}
 
       {checkout === 'canceled' && (!payment || payment.status === 'pending') && (
         <Card className="mb-8 border-brand-warning/30">

@@ -1,32 +1,56 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { AirportInput } from '@/components/ui/airport-input';
+import { AccountStep } from '@/components/booking/account-step';
+import { bookingRequestSchema } from '@/lib/validations';
+import {
+  type BookingDraft,
+  type DraftLeg,
+  emptyDraft,
+  emptyLeg,
+  draftHasContent,
+  draftToRequest,
+  writeDraftCookie,
+} from '@/lib/bookings/draft';
 
-interface LegInput {
-  originCode: string;
-  destCode: string;
-  departureDate: string;
-  departureTime: string;
-}
+type LegInput = DraftLeg;
 
-const emptyLeg = (): LegInput => ({
-  originCode: '',
-  destCode: '',
-  departureDate: '',
-  departureTime: '',
-});
-
-export function MultiLegForm() {
+export function MultiLegForm({
+  initialDraft,
+  viewerRole,
+}: {
+  initialDraft: BookingDraft | null;
+  viewerRole: 'customer' | 'operator' | 'admin' | null;
+}) {
   const router = useRouter();
-  const [legs, setLegs] = useState<LegInput[]>([emptyLeg()]);
-  const [passengerCount, setPassengerCount] = useState(1);
-  const [notes, setNotes] = useState('');
+  const start = initialDraft ?? emptyDraft();
+  const [legs, setLegs] = useState<LegInput[]>(start.legs);
+  const [passengerCount, setPassengerCount] = useState(start.passengerCount);
+  const [notes, setNotes] = useState(start.notes);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [needsAccount, setNeedsAccount] = useState(false);
+  const [restored, setRestored] = useState(initialDraft !== null && draftHasContent(initialDraft));
+
+  // Remember the itinerary in a cookie on every change, so a reload or a later
+  // visit restores it and it survives the sign-up step.
+  useEffect(() => {
+    writeDraftCookie({ legs, passengerCount, notes });
+  }, [legs, passengerCount, notes]);
+
+  const startOver = () => {
+    const fresh = emptyDraft();
+    setLegs(fresh.legs);
+    setPassengerCount(fresh.passengerCount);
+    setNotes(fresh.notes);
+    setNeedsAccount(false);
+    setError('');
+    setRestored(false);
+  };
 
   const updateLeg = (index: number, field: keyof LegInput, value: string) => {
     setLegs(prev => {
@@ -62,22 +86,30 @@ export function MultiLegForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
 
+    const payload = draftToRequest({ legs, passengerCount, notes });
+    if (!bookingRequestSchema.safeParse(payload).success) {
+      setError('Please choose an origin, destination and date for every leg.');
+      return;
+    }
+
+    if (viewerRole === null) {
+      // Not signed in: collect an account next. The draft cookie carries the
+      // itinerary; the server submits it once the account exists.
+      setNeedsAccount(true);
+      return;
+    }
+    if (viewerRole !== 'customer') {
+      setError('You are signed in as an operator or admin. Sign in with a traveler account to request quotes.');
+      return;
+    }
+
+    setLoading(true);
     try {
       const res = await fetch('/api/booking-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          passengerCount,
-          notes: notes || undefined,
-          legs: legs.map(l => ({
-            originCode: l.originCode.toUpperCase(),
-            destCode: l.destCode.toUpperCase(),
-            departureDate: l.departureDate,
-            departureTime: l.departureTime || undefined,
-          })),
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
@@ -86,7 +118,8 @@ export function MultiLegForm() {
         return;
       }
 
-      router.push('/requests');
+      const { id } = await res.json();
+      router.push(`/requests/${id}?submitted=1`);
       router.refresh();
     } catch {
       setError('Something went wrong');
@@ -95,8 +128,27 @@ export function MultiLegForm() {
     }
   };
 
+  if (needsAccount) {
+    return (
+      <AccountStep
+        summary={routeSummary(legs)}
+        passengerCount={passengerCount}
+        onBack={() => setNeedsAccount(false)}
+      />
+    );
+  }
+
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
+      {restored && (
+        <div className="flex items-center justify-between rounded-lg border border-brand-border bg-brand-navy/40 px-4 py-3 text-sm">
+          <span className="text-brand-cream">We saved the trip you started.</span>
+          <button type="button" onClick={startOver} className="text-brand-muted hover:text-brand-cream cursor-pointer">
+            Start over
+          </button>
+        </div>
+      )}
+
       {error && (
         <div className="rounded-lg bg-brand-error/10 border border-brand-error/30 px-4 py-3 text-sm text-brand-error">
           {error}
@@ -224,8 +276,17 @@ export function MultiLegForm() {
       )}
 
       <Button type="submit" disabled={loading} size="lg" className="w-full">
-        {loading ? 'Submitting Request...' : 'Submit Flight Request'}
+        {loading ? 'Submitting Request...' : viewerRole === null ? 'Continue' : 'Submit Flight Request'}
       </Button>
+      {viewerRole === null && (
+        <p className="text-center text-xs text-brand-muted">
+          Next: create an account or sign in so operators can send you quotes.
+        </p>
+      )}
     </form>
   );
+}
+
+function routeSummary(legs: LegInput[]): string {
+  return legs.map(l => l.originCode).concat(legs[legs.length - 1]?.destCode ?? '').filter(Boolean).join(' → ');
 }
