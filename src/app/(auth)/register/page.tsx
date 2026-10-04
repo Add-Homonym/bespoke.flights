@@ -49,7 +49,9 @@ function RegisterForm() {
         return;
       }
 
-      if (role === 'operator') router.push('/operator/dashboard');
+      const data = await res.json();
+      if (data.redirectTo) router.push(data.redirectTo);
+      else if (role === 'operator') router.push('/operator/dashboard');
       else router.push('/dashboard');
       router.refresh();
     } catch {

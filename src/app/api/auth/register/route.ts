@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { getDb } from '@/lib/db';
 import { registerSchema } from '@/lib/validations';
 import { setSessionCookie } from '@/lib/auth';
+import { claimBookingDraft } from '@/lib/bookings/create';
 
 export async function POST(req: Request) {
   try {
@@ -35,7 +36,13 @@ export async function POST(req: Request) {
 
     await setSessionCookie({ userId, role });
 
-    return NextResponse.json({ id: userId, email, name, role }, { status: 201 });
+    // A traveler who built a trip before signing up: submit it now.
+    const requestId = role === 'customer' ? await claimBookingDraft(db, userId) : null;
+
+    return NextResponse.json({
+      id: userId, email, name, role,
+      redirectTo: requestId ? `/requests/${requestId}?submitted=1` : null,
+    }, { status: 201 });
   } catch (err) {
     console.error('Registration error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
