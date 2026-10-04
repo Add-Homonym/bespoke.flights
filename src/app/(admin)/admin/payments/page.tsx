@@ -61,7 +61,7 @@ export default async function AdminPaymentsPage() {
           </p>
         </div>
         <Badge variant={mode === 'stripe' ? 'success' : mode === 'stub' ? 'warning' : 'error'}>
-          {mode === 'stripe' ? 'Stripe live' : mode === 'stub' ? 'Development stub' : 'Payments disabled'}
+          {mode === 'stripe' ? 'Stripe' : mode === 'stub' ? 'Test mode: simulated' : 'Payments disabled'}
         </Badge>
       </div>
 
@@ -116,7 +116,7 @@ export default async function AdminPaymentsPage() {
                     <div className="text-brand-muted text-xs mt-1">{p.failure_reason}</div>
                   )}
                 </Td>
-                <Td className="text-brand-muted text-xs">{new Date(p.created_at + 'Z').toLocaleDateString()}</Td>
+                <Td className="text-brand-muted text-xs">{new Date(p.created_at).toLocaleDateString()}</Td>
                 <Td>
                   {['succeeded', 'partially_refunded'].includes(p.status) && (
                     <RefundButton paymentId={p.id} remainingCents={p.amount_cents - p.refunded_cents} />

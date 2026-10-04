@@ -125,7 +125,7 @@ export default async function RequestDetailPage({
             amount: formatMoney(payment.amount_cents, payment.currency),
             refunded: payment.refunded_cents > 0 ? formatMoney(payment.refunded_cents, payment.currency) : null,
             companyName: payment.company_name,
-            paidAt: payment.paid_at,
+            paidAt: payment.paid_at ? payment.paid_at.slice(0, 16).replace('T', ' ') : null,
             failureReason: payment.failure_reason,
             checkoutUrl: payment.status === 'pending' && session.role === 'customer' ? payment.checkout_url : null,
           }}

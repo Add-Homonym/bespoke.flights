@@ -75,7 +75,7 @@ export function PayoutSettings() {
             <p className="text-brand-warning text-sm">Payments are not yet enabled on the platform.</p>
           )}
           {status.mode === 'stub' && (
-            <p className="text-brand-muted text-xs mb-4">Development mode: Stripe is not configured; setup is simulated.</p>
+            <p className="text-brand-muted text-xs mb-4">Test mode: payout setup is simulated. No Stripe account is created.</p>
           )}
 
           {status.connected && (

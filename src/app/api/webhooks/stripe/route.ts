@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type Stripe from 'stripe';
 import { getDb } from '@/lib/db';
 import { getStripe, webhookSecrets } from '@/lib/payments/stripe';
-import { appBaseUrl } from '@/lib/payments/config';
+import { appBaseUrl, getPaymentsMode } from '@/lib/payments/config';
 import { handleStripeEvent } from '@/lib/payments/service';
 
 export const dynamic = 'force-dynamic';
@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(req: Request) {
   const secrets = webhookSecrets();
-  if (secrets.length === 0 || !process.env.STRIPE_SECRET_KEY) {
+  if (secrets.length === 0 || getPaymentsMode() !== 'stripe') {
     return NextResponse.json({ error: 'Webhooks not configured' }, { status: 503 });
   }
 

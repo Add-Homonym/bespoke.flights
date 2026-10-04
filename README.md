@@ -182,9 +182,20 @@ Admins refund from `/admin/payments`, in full or in part. Refunds use `reverse_t
 
 | Mode | When | Behavior |
 |---|---|---|
+| `stub` (test mode) | `APP_TEST_MODE=true`, in any environment; a Stripe key is ignored | Payments are simulated (see [Test mode](#test-mode)) |
 | `stripe` | `STRIPE_SECRET_KEY` set | Real Checkout and Connect |
 | `stub` | No key, `NODE_ENV` ≠ production | Payments are simulated: the request page shows a "Simulate successful payment" button, and payout setup completes instantly |
 | `disabled` | No key in production | Checkout returns 503, so no booking can be made without payment |
+
+### Test mode
+
+Set `APP_TEST_MODE=true` (for example on a Vercel deployment) to try the full flow with dummy transactions:
+
+- **Payments are simulated.** "Accept & Pay" leads to a "Simulate successful payment" button; no card is charged. Operator payout setup completes instantly, without a Stripe account. Admin refunds work and move no money. Stripe webhooks are refused.
+- **A banner on every page** says the site is in test mode and lists the demo logins.
+- **Demo data loads automatically** the first time the app connects to an empty database: the test accounts below, three approved operators with fleets, two requests (one with two quotes ready to pay), and sample FAA discoveries. A database that already has users is never touched.
+
+To go live: remove `APP_TEST_MODE`, set the Stripe variables, and delete the demo accounts (or start from a fresh database).
 
 ### Stripe setup
 
@@ -324,7 +335,7 @@ TEST_DATABASE_URL=postgres://… npm run test:pg
 
 ### Test Accounts
 
-All use password `password123`:
+Created by `npm run seed` locally, or automatically in [test mode](#test-mode). All use password `password123`:
 
 | Email | Role | Notes |
 |---|---|---|
@@ -349,6 +360,7 @@ All use password `password123`:
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | Production | Signing secret for the connected-accounts webhook endpoint |
 | `PLATFORM_FEE_BPS` | No | Platform commission in basis points (default `500` = 5%) |
 | `APP_URL` | No | Public base URL for Stripe redirect URLs and email links (defaults to the request origin) |
+| `APP_TEST_MODE` | No | `true` simulates all payments, shows a test banner, and loads demo data into an empty database |
 | `DATABASE_URL` | Production | Postgres connection string. Set automatically by the Vercel Neon integration (pooled). |
 | `DATABASE_POOL_MAX` | No | Max connections per function instance (default 5) |
 | `PGLITE_DIR` | No | Local PGlite data directory when `DATABASE_URL` is unset (default `data/pglite`; `memory` for in-memory) |
@@ -356,6 +368,8 @@ All use password `password123`:
 ---
 
 ## Deployment (Vercel)
+
+Vercel is the only host. `netlify.toml` tells Netlify to skip every build of this repository; Netlify's dashboard connection can also be removed.
 
 ### 1. Database: Neon through the Vercel Marketplace
 

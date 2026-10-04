@@ -3,15 +3,25 @@
  *
  * Modes:
  *   stripe   — STRIPE_SECRET_KEY is set. Real Checkout + Connect.
- *   stub     — no key, not production. Payments are simulated in-app so the
- *              full booking flow can be exercised locally.
+ *   stub     — payments are simulated in-app so the full booking flow can be
+ *              exercised: always when APP_TEST_MODE=true (any environment,
+ *              Stripe key ignored), or with no key outside production.
  *   disabled — no key in production. Checkout is refused rather than
  *              letting bookings through unpaid.
  */
 
 export type PaymentsMode = 'stripe' | 'stub' | 'disabled';
 
+/**
+ * Test mode: every transaction is simulated, a banner marks the site as a
+ * test, and an empty database is loaded with demo accounts.
+ */
+export function isTestMode(): boolean {
+  return process.env.APP_TEST_MODE === 'true';
+}
+
 export function getPaymentsMode(): PaymentsMode {
+  if (isTestMode()) return 'stub';
   if (process.env.STRIPE_SECRET_KEY) return 'stripe';
   if (process.env.NODE_ENV === 'production') return 'disabled';
   return 'stub';

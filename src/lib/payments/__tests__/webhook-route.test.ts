@@ -57,6 +57,17 @@ describe('POST /api/webhooks/stripe', () => {
     expect(res.status).toBe(400);
   });
 
+  it('refuses webhooks in test mode', async () => {
+    vi.stubEnv('APP_TEST_MODE', 'true');
+    try {
+      const payload = JSON.stringify({ id: 'evt_test_mode', type: 'account.updated', data: { object: {} } });
+      const res = await POST(signedRequest(payload));
+      expect(res.status).toBe(503);
+    } finally {
+      vi.stubEnv('APP_TEST_MODE', '');
+    }
+  });
+
   it('processes a verified checkout completion and books the request', async () => {
     const { id: paymentId } = await row<{ id: number }>(f.db, `
       INSERT INTO payments (request_id, quote_id, customer_id, operator_id, amount_cents, platform_fee_cents, operator_payout_cents, status, provider, stripe_checkout_session_id)

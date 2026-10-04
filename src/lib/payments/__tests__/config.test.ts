@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { computeFees, platformFeeBps, getPaymentsMode, DEFAULT_PLATFORM_FEE_BPS, allowedPaymentMethods } from '../config';
+import { computeFees, platformFeeBps, getPaymentsMode, isTestMode, DEFAULT_PLATFORM_FEE_BPS, allowedPaymentMethods } from '../config';
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -59,6 +59,21 @@ describe('getPaymentsMode', () => {
     vi.stubEnv('STRIPE_SECRET_KEY', '');
     vi.stubEnv('NODE_ENV', 'development');
     expect(getPaymentsMode()).toBe('stub');
+  });
+
+  it('is stub in test mode, even in production with a Stripe key', () => {
+    vi.stubEnv('APP_TEST_MODE', 'true');
+    vi.stubEnv('STRIPE_SECRET_KEY', 'sk_live_x');
+    vi.stubEnv('NODE_ENV', 'production');
+    expect(isTestMode()).toBe(true);
+    expect(getPaymentsMode()).toBe('stub');
+  });
+
+  it('only treats APP_TEST_MODE=true as test mode', () => {
+    vi.stubEnv('APP_TEST_MODE', '1');
+    vi.stubEnv('STRIPE_SECRET_KEY', 'sk_test_x');
+    expect(isTestMode()).toBe(false);
+    expect(getPaymentsMode()).toBe('stripe');
   });
 
   it('is disabled in production without a key', () => {

@@ -97,7 +97,7 @@ export function PaymentStatus({ payment, returnedFromCheckout }: {
           {payment.provider === 'stub' ? (
             <>
               <Button size="sm" onClick={simulate} disabled={loading}>Simulate successful payment</Button>
-              <span className="text-brand-muted text-xs">Development mode: Stripe is not configured.</span>
+              <span className="text-brand-muted text-xs">Test mode: no card is charged.</span>
             </>
           ) : payment.checkoutUrl ? (
             <a href={payment.checkoutUrl}>
