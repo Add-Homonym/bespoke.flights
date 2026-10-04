@@ -9,6 +9,6 @@ export async function GET() {
   }
 
   const db = getDb();
-  const users = db.prepare('SELECT id, email, phone, name, role, created_at FROM users ORDER BY created_at DESC').all();
+  const users = await db.query('SELECT id, email, phone, name, role, created_at FROM users ORDER BY created_at DESC');
   return NextResponse.json(users);
 }

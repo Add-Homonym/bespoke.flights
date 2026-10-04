@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { PayoutSettings } from '@/components/operator/payout-settings';
 import { MARKET_LABELS, FLEET_TYPE_LABELS, SAFETY_RATINGS } from '@/lib/types';
 import type { MarketKey } from '@/lib/types';
 
@@ -67,6 +68,8 @@ export default function OperatorSettingsPage() {
         </div>
         {message && <Badge variant="success">{message}</Badge>}
       </div>
+
+      <PayoutSettings />
 
       {/* Contact Method */}
       <Card className="mb-6">

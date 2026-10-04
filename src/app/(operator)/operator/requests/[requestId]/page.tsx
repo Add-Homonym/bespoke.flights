@@ -13,18 +13,18 @@ export default async function OperatorRequestDetailPage({ params }: { params: Pr
   const { requestId } = await params;
   const db = getDb();
 
-  const request = db.prepare('SELECT * FROM booking_requests WHERE id = ?').get(requestId) as BookingRequest | undefined;
+  const request = await db.one<BookingRequest>('SELECT * FROM booking_requests WHERE id = ?', [requestId]);
   if (!request) notFound();
 
-  const legs = db.prepare('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order').all(request.id) as BookingLeg[];
-  const operator = db.prepare('SELECT * FROM operators WHERE user_id = ?').get(session.userId) as Operator | undefined;
+  const legs = await db.query<BookingLeg>('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order', [request.id]);
+  const operator = await db.one<Operator>('SELECT * FROM operators WHERE user_id = ?', [session.userId]);
 
   const aircraft = operator
-    ? db.prepare('SELECT * FROM aircraft WHERE operator_id = ?').all(operator.id) as Aircraft[]
+    ? (await db.query<Aircraft>('SELECT * FROM aircraft WHERE operator_id = ?', [operator.id]))
     : [];
 
   const existingQuote = operator
-    ? db.prepare('SELECT * FROM quotes WHERE request_id = ? AND operator_id = ?').get(request.id, operator.id) as Quote | undefined
+    ? (await db.one<Quote>('SELECT * FROM quotes WHERE request_id = ? AND operator_id = ?', [request.id, operator.id]))
     : undefined;
 
   const route = legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).join(' → ');

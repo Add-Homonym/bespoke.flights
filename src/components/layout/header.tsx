@@ -43,6 +43,7 @@ export function Header({ user }: { user?: { name: string; role: string } | null 
                   <Link href="/admin/users" className="text-sm text-brand-muted hover:text-brand-cream transition-colors">Users</Link>
                   <Link href="/admin/operators" className="text-sm text-brand-muted hover:text-brand-cream transition-colors">Operators</Link>
                   <Link href="/admin/requests" className="text-sm text-brand-muted hover:text-brand-cream transition-colors">Requests</Link>
+                  <Link href="/admin/payments" className="text-sm text-brand-muted hover:text-brand-cream transition-colors">Payments</Link>
                   <Link href="/admin/discoveries" className="text-sm text-brand-muted hover:text-brand-cream transition-colors">Discoveries</Link>
                 </>
               )}

@@ -11,10 +11,10 @@ export async function GET() {
   }
 
   const db = getDb();
-  const operator = db.prepare('SELECT * FROM operators WHERE user_id = ?').get(session.userId) as Operator | undefined;
+  const operator = await db.one<Operator>('SELECT * FROM operators WHERE user_id = ?', [session.userId]);
   if (!operator) return NextResponse.json({ error: 'Operator not found' }, { status: 404 });
 
-  const aircraft = db.prepare('SELECT * FROM aircraft WHERE operator_id = ? ORDER BY created_at DESC').all(operator.id) as Aircraft[];
+  const aircraft = await db.query<Aircraft>('SELECT * FROM aircraft WHERE operator_id = ? ORDER BY created_at DESC', [operator.id]);
   return NextResponse.json(aircraft);
 }
 
@@ -31,13 +31,14 @@ export async function POST(req: Request) {
   }
 
   const db = getDb();
-  const operator = db.prepare('SELECT * FROM operators WHERE user_id = ?').get(session.userId) as Operator | undefined;
+  const operator = await db.one<Operator>('SELECT * FROM operators WHERE user_id = ?', [session.userId]);
   if (!operator) return NextResponse.json({ error: 'Operator not found' }, { status: 404 });
 
   const { tailNumber, type, capacity, rangeNm, year } = parsed.data;
-  const result = db.prepare(
-    'INSERT INTO aircraft (operator_id, tail_number, type, capacity, range_nm, year) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(operator.id, tailNumber, type, capacity, rangeNm || null, year || null);
+  const { id } = (await db.one<{ id: number }>(
+    'INSERT INTO aircraft (operator_id, tail_number, type, capacity, range_nm, year) VALUES (?, ?, ?, ?, ?, ?) RETURNING id',
+    [operator.id, tailNumber, type, capacity, rangeNm || null, year || null]
+  ))!;
 
-  return NextResponse.json({ id: Number(result.lastInsertRowid) }, { status: 201 });
+  return NextResponse.json({ id }, { status: 201 });
 }

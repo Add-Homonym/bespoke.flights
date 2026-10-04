@@ -5,8 +5,8 @@ import { getSessionFromRequest } from '@/lib/auth';
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Public routes that don't need auth
-  const publicPaths = ['/', '/login', '/register', '/api/auth'];
+  // Public routes that don't need auth. Stripe webhooks authenticate by signature.
+  const publicPaths = ['/', '/login', '/register', '/api/auth', '/api/webhooks'];
   if (publicPaths.some(p => pathname === p || pathname.startsWith(p + '/'))) {
     return NextResponse.next();
   }

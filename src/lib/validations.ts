@@ -67,3 +67,12 @@ export const operatorSettingsSchema = z.object({
   certificate: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
 });
+
+export const checkoutSchema = z.object({
+  quoteId: z.number().int().positive(),
+});
+
+export const refundSchema = z.object({
+  amountCents: z.number().int().positive().optional(),
+  reason: z.string().max(500).optional(),
+});

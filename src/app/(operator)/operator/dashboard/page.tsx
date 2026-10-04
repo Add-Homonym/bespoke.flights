@@ -9,22 +9,22 @@ export default async function OperatorDashboardPage() {
   const session = await getSession();
   const db = getDb();
 
-  const user = db.prepare('SELECT name FROM users WHERE id = ?').get(session!.userId) as { name: string };
-  const operator = db.prepare('SELECT * FROM operators WHERE user_id = ?').get(session!.userId) as Operator | undefined;
+  const user = (await db.one<{ name: string }>('SELECT name FROM users WHERE id = ?', [session!.userId]))!;
+  const operator = await db.one<Operator>('SELECT * FROM operators WHERE user_id = ?', [session!.userId]);
 
-  const openRequests = (db.prepare("SELECT COUNT(*) as count FROM booking_requests WHERE status IN ('open', 'quoted')").get() as { count: number }).count;
-  const myQuotes = operator ? (db.prepare('SELECT COUNT(*) as count FROM quotes WHERE operator_id = ?').get(operator.id) as { count: number }).count : 0;
-  const acceptedQuotes = operator ? (db.prepare("SELECT COUNT(*) as count FROM quotes WHERE operator_id = ? AND status = 'accepted'").get(operator.id) as { count: number }).count : 0;
-  const fleetSize = operator ? (db.prepare('SELECT COUNT(*) as count FROM aircraft WHERE operator_id = ?').get(operator.id) as { count: number }).count : 0;
+  const openRequests = (await db.one<{ count: number }>("SELECT COUNT(*) as count FROM booking_requests WHERE status IN ('open', 'quoted')"))!.count;
+  const myQuotes = operator ? (await db.one<{ count: number }>('SELECT COUNT(*) as count FROM quotes WHERE operator_id = ?', [operator.id]))!.count : 0;
+  const acceptedQuotes = operator ? (await db.one<{ count: number }>("SELECT COUNT(*) as count FROM quotes WHERE operator_id = ? AND status = 'accepted'", [operator.id]))!.count : 0;
+  const fleetSize = operator ? (await db.one<{ count: number }>('SELECT COUNT(*) as count FROM aircraft WHERE operator_id = ?', [operator.id]))!.count : 0;
 
   // Inbound RFQs (auto-matched to this operator)
-  const inboundTotal = operator ? (db.prepare('SELECT COUNT(*) as count FROM outreach_log WHERE operator_id = ?').get(operator.id) as { count: number }).count : 0;
-  const inboundPending = operator ? (db.prepare(`
+  const inboundTotal = operator ? (await db.one<{ count: number }>('SELECT COUNT(*) as count FROM outreach_log WHERE operator_id = ?', [operator.id]))!.count : 0;
+  const inboundPending = operator ? (await db.one<{ count: number }>(`
     SELECT COUNT(*) as count FROM outreach_log ol
     WHERE ol.operator_id = ?
       AND NOT EXISTS (SELECT 1 FROM quotes q WHERE q.request_id = ol.request_id AND q.operator_id = ol.operator_id)
       AND EXISTS (SELECT 1 FROM booking_requests br WHERE br.id = ol.request_id AND br.status IN ('open', 'quoted'))
-  `).get(operator.id) as { count: number }).count : 0;
+  `, [operator.id]))!.count : 0;
 
   // Profile completeness check
   const profileComplete = operator && operator.markets && operator.fleet_types && operator.safety_rating && (operator.contact_email || operator.contact_phone);

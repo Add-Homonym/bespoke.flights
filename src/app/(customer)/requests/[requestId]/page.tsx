@@ -5,7 +5,9 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { QuoteActions } from '@/components/booking/quote-actions';
 import { OutreachStatus } from '@/components/operator/outreach-status';
-import type { BookingRequest, BookingLeg, Quote } from '@/lib/types';
+import { PaymentStatus } from '@/components/booking/payment-status';
+import { formatMoney, getPaymentsMode } from '@/lib/payments/config';
+import type { BookingRequest, BookingLeg, Quote, Payment } from '@/lib/types';
 
 const statusBadge: Record<string, 'default' | 'success' | 'warning' | 'error' | 'gold'> = {
   open: 'gold',
@@ -15,31 +17,56 @@ const statusBadge: Record<string, 'default' | 'success' | 'warning' | 'error' | 
   completed: 'default',
 };
 
-export default async function RequestDetailPage({ params }: { params: Promise<{ requestId: string }> }) {
+function isExpired(validUntil: string | null, today: string): boolean {
+  return !!validUntil && validUntil < today;
+}
+
+export default async function RequestDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ requestId: string }>;
+  searchParams: Promise<{ checkout?: string }>;
+}) {
   const session = await getSession();
   if (!session) redirect('/login');
 
   const { requestId } = await params;
+  const { checkout } = await searchParams;
   const db = getDb();
 
-  const request = db.prepare('SELECT * FROM booking_requests WHERE id = ?').get(requestId) as BookingRequest | undefined;
+  const request = await db.one<BookingRequest>('SELECT * FROM booking_requests WHERE id = ?', [requestId]);
   if (!request || (session.role === 'customer' && request.customer_id !== session.userId)) {
     notFound();
   }
 
-  const legs = db.prepare('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order').all(request.id) as BookingLeg[];
+  const legs = await db.query<BookingLeg>('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order', [request.id]);
 
-  const quotes = db.prepare(`
-    SELECT q.*, o.company_name, a.type as aircraft_type, a.capacity as aircraft_capacity, a.tail_number, a.year as aircraft_year
+  const quotes = await db.query<Quote & { company_name: string; stripe_charges_enabled: number; aircraft_type?: string; aircraft_capacity?: number; tail_number?: string; aircraft_year?: number }>(`
+    SELECT q.*, o.company_name, o.stripe_charges_enabled, a.type as aircraft_type, a.capacity as aircraft_capacity, a.tail_number, a.year as aircraft_year
     FROM quotes q
     JOIN operators o ON o.id = q.operator_id
     LEFT JOIN aircraft a ON a.id = q.aircraft_id
     WHERE q.request_id = ?
     ORDER BY q.price_cents ASC
-  `).all(request.id) as (Quote & { company_name: string; aircraft_type?: string; aircraft_capacity?: number; tail_number?: string; aircraft_year?: number })[];
+  `, [request.id]);
+
+  // Most relevant payment: settled or in flight first, then the latest failure.
+  const payment = await db.one<(Payment & { company_name: string })>(`
+    SELECT p.*, o.company_name FROM payments p
+    JOIN operators o ON o.id = p.operator_id
+    WHERE p.request_id = ? AND p.status != 'canceled'
+    ORDER BY CASE p.status
+      WHEN 'succeeded' THEN 0 WHEN 'partially_refunded' THEN 0 WHEN 'refunded' THEN 0
+      WHEN 'processing' THEN 1 WHEN 'pending' THEN 2 ELSE 3 END, p.id DESC
+    LIMIT 1
+  `, [request.id]);
+  const paymentInFlight = payment && ['processing', 'succeeded', 'partially_refunded'].includes(payment.status);
+  const stripeMode = getPaymentsMode() === 'stripe';
+  const today = new Date().toISOString().slice(0, 10);
 
   // Count operators contacted via outreach
-  const outreachCount = (db.prepare('SELECT COUNT(*) as count FROM outreach_log WHERE request_id = ?').get(request.id) as { count: number }).count;
+  const outreachCount = (await db.one<{ count: number }>('SELECT COUNT(*) as count FROM outreach_log WHERE request_id = ?', [request.id]))!.count;
 
   const route = legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).join(' → ');
 
@@ -82,6 +109,29 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
         </div>
       </Card>
 
+      {checkout === 'canceled' && (!payment || payment.status === 'pending') && (
+        <Card className="mb-8 border-brand-warning/30">
+          <p className="text-brand-cream text-sm">Checkout was canceled. No payment was taken.</p>
+        </Card>
+      )}
+
+      {payment && (
+        <PaymentStatus
+          returnedFromCheckout={checkout === 'success'}
+          payment={{
+            id: payment.id,
+            status: payment.status,
+            provider: payment.provider,
+            amount: formatMoney(payment.amount_cents, payment.currency),
+            refunded: payment.refunded_cents > 0 ? formatMoney(payment.refunded_cents, payment.currency) : null,
+            companyName: payment.company_name,
+            paidAt: payment.paid_at ? payment.paid_at.slice(0, 16).replace('T', ' ') : null,
+            failureReason: payment.failure_reason,
+            checkoutUrl: payment.status === 'pending' && session.role === 'customer' ? payment.checkout_url : null,
+          }}
+        />
+      )}
+
       {/* Outreach Status — shows which operators were auto-contacted */}
       {outreachCount > 0 && <OutreachStatus requestId={request.id} />}
 
@@ -121,7 +171,7 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
                 </div>
                 <div className="text-right">
                   <p className="text-brand-gold font-display text-2xl">
-                    ${(quote.price_cents / 100).toLocaleString()}
+                    {formatMoney(quote.price_cents, quote.currency)}
                   </p>
                   <p className="text-brand-muted text-xs">{quote.currency}</p>
                   {quote.status !== 'pending' && (
@@ -131,8 +181,13 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
                   )}
                 </div>
               </div>
-              {quote.status === 'pending' && request.status !== 'booked' && session.role === 'customer' && (
-                <QuoteActions quoteId={quote.id} />
+              {quote.status === 'pending' && ['open', 'quoted'].includes(request.status) && !paymentInFlight && session.role === 'customer' && (
+                <QuoteActions
+                  quoteId={quote.id}
+                  amountLabel={formatMoney(quote.price_cents, quote.currency)}
+                  payable={!isExpired(quote.valid_until, today) && (!stripeMode || !!quote.stripe_charges_enabled)}
+                  unavailableReason={isExpired(quote.valid_until, today) ? 'This quote has expired.' : 'Operator is completing payment setup.'}
+                />
               )}
             </Card>
           ))}

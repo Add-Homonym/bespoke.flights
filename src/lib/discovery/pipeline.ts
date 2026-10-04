@@ -8,7 +8,7 @@
  * across multiple weeks.
  */
 
-import type Database from 'better-sqlite3';
+import type { Db } from '@/lib/db';
 import { scrapeStates, getNextStateBatch } from './faa-scraper';
 import type { FAAOperator } from './faa-scraper';
 import { sendEmail } from '@/lib/email/resend';
@@ -28,25 +28,24 @@ export interface DiscoveryResult {
  * Skips duplicates (by certificate_number).
  * Returns count of newly inserted records.
  */
-function storeDiscoveries(db: Database.Database, operators: FAAOperator[]): number {
-  const insert = db.prepare(`
-    INSERT OR IGNORE INTO discovered_operators
-      (company_name, dba_name, certificate_number, phone, address, city, state, zip, status, source)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  let inserted = 0;
-
-  const tx = db.transaction(() => {
+async function storeDiscoveries(db: Db, operators: FAAOperator[]): Promise<number> {
+  return db.transaction(async tx => {
+    let inserted = 0;
     for (const op of operators) {
       // Skip operators already registered on the platform
-      const existing = db.prepare(
-        "SELECT id FROM operators WHERE certificate = ? OR company_name = ?"
-      ).get(op.certificate_number, op.company_name);
+      const existing = await tx.one(
+        'SELECT id FROM operators WHERE certificate = ? OR company_name = ?',
+        [op.certificate_number, op.company_name]
+      );
       if (existing) continue;
 
       const status = op.phone ? 'new' : 'no_email'; // 'new' if we have some contact info
-      const result = insert.run(
+      inserted += await tx.run(`
+        INSERT INTO discovered_operators
+          (company_name, dba_name, certificate_number, phone, address, city, state, zip, status, source)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'faa_registry')
+        ON CONFLICT (certificate_number) DO NOTHING
+      `, [
         op.company_name,
         op.dba_name,
         op.certificate_number,
@@ -56,14 +55,10 @@ function storeDiscoveries(db: Database.Database, operators: FAAOperator[]): numb
         op.state,
         op.zip,
         status,
-        'faa_registry'
-      );
-      if (result.changes > 0) inserted++;
+      ]);
     }
+    return inserted;
   });
-
-  tx();
-  return inserted;
 }
 
 /**
@@ -73,37 +68,25 @@ function storeDiscoveries(db: Database.Database, operators: FAAOperator[]): numb
  * @param limit - Max emails to send per run (respect Resend rate limits).
  */
 async function sendInviteEmails(
-  db: Database.Database,
+  db: Db,
   limit = 20
 ): Promise<{ sent: number; failed: number; errors: string[] }> {
   // Get operators with emails that haven't been emailed
-  const pending = db.prepare(`
-    SELECT * FROM discovered_operators
-    WHERE status = 'new' AND contact_email IS NOT NULL AND contact_email != ''
-    ORDER BY discovered_at ASC
-    LIMIT ?
-  `).all(limit) as Array<{
+  const pending = await db.query<{
     id: number;
     company_name: string;
     certificate_number: string | null;
     contact_email: string;
-  }>;
+  }>(`
+    SELECT * FROM discovered_operators
+    WHERE status = 'new' AND contact_email IS NOT NULL AND contact_email != ''
+    ORDER BY discovered_at ASC
+    LIMIT ?
+  `, [limit]);
 
   let sent = 0;
   let failed = 0;
   const errors: string[] = [];
-
-  const updateSent = db.prepare(`
-    UPDATE discovered_operators
-    SET status = 'emailed', emailed_at = datetime('now'), invite_resend_id = ?
-    WHERE id = ?
-  `);
-
-  const updateFailed = db.prepare(`
-    UPDATE discovered_operators
-    SET notes = COALESCE(notes || ' | ', '') || ?
-    WHERE id = ?
-  `);
 
   for (const op of pending) {
     const { subject, html } = operatorInviteEmail(
@@ -123,11 +106,19 @@ async function sendInviteEmails(
     });
 
     if (result.id && !result.error) {
-      updateSent.run(result.id, op.id);
+      await db.run(`
+        UPDATE discovered_operators
+        SET status = 'emailed', emailed_at = now(), updated_at = now(), invite_resend_id = ?
+        WHERE id = ?
+      `, [result.id, op.id]);
       sent++;
     } else {
       const errMsg = result.error || 'Unknown error';
-      updateFailed.run('Send failed: ' + errMsg, op.id);
+      await db.run(`
+        UPDATE discovered_operators
+        SET notes = COALESCE(notes || ' | ', '') || ?
+        WHERE id = ?
+      `, ['Send failed: ' + errMsg, op.id]);
       errors.push(`${op.company_name}: ${errMsg}`);
       failed++;
     }
@@ -142,14 +133,15 @@ async function sendInviteEmails(
 /**
  * Get which states were last scraped (from the most recent discovery run).
  */
-function getLastScrapedStates(db: Database.Database): string[] {
+async function getLastScrapedStates(db: Db): Promise<string[]> {
   // Look at the most recently discovered operators to infer which states were last done
-  const recent = db.prepare(`
-    SELECT DISTINCT state FROM discovered_operators
-    WHERE source = 'faa_registry'
-    ORDER BY discovered_at DESC
+  const recent = await db.query<{ state: string }>(`
+    SELECT state FROM discovered_operators
+    WHERE source = 'faa_registry' AND state IS NOT NULL
+    GROUP BY state
+    ORDER BY MAX(discovered_at) DESC
     LIMIT 10
-  `).all() as Array<{ state: string }>;
+  `);
 
   return recent.map(r => r.state);
 }
@@ -163,7 +155,7 @@ function getLastScrapedStates(db: Database.Database): string[] {
  * 4. Send invite emails to operators with email addresses
  */
 export async function runDiscoveryPipeline(
-  db: Database.Database,
+  db: Db,
   options: {
     statesPerRun?: number;
     emailsPerRun?: number;
@@ -175,7 +167,7 @@ export async function runDiscoveryPipeline(
 
   // Step 1: Determine which states to scrape
   const stateBatch = forceStates || getNextStateBatch(
-    getLastScrapedStates(db),
+    await getLastScrapedStates(db),
     statesPerRun
   );
 
@@ -191,7 +183,7 @@ export async function runDiscoveryPipeline(
     console.log(`[Discovery] Found ${operatorsFound} operators across ${scrapeResult.statesQueried.length} states`);
 
     // Step 3: Store in DB
-    newOperators = storeDiscoveries(db, scrapeResult.operators);
+    newOperators = await storeDiscoveries(db, scrapeResult.operators);
     console.log(`[Discovery] ${newOperators} new operators stored`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

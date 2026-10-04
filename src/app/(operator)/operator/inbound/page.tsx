@@ -263,7 +263,7 @@ function RFQCard({
 
 function getTimeAgo(dateStr: string): string {
   const now = Date.now();
-  const then = new Date(dateStr + (dateStr.includes('Z') ? '' : 'Z')).getTime();
+  const then = new Date(dateStr).getTime();
   const diff = now - then;
   const mins = Math.floor(diff / 60000);
   if (mins < 60) return `${mins}m ago`;

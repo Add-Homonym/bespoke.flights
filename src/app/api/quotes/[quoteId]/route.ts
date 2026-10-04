@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
+import { toId } from '@/lib/db/queries';
 import type { Quote, BookingRequest } from '@/lib/types';
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ quoteId: string }> }) {
@@ -9,34 +10,28 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ quoteI
 
   const { quoteId } = await params;
   const body = await req.json();
-  const { status } = body as { status: 'accepted' | 'rejected' };
+  const { status } = body as { status: 'rejected' };
 
-  if (!['accepted', 'rejected'].includes(status)) {
-    return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
+  // Acceptance happens only through payment: POST /api/payments/checkout.
+  if (status !== 'rejected') {
+    return NextResponse.json({ error: 'Invalid status. Accept a quote by paying for it.' }, { status: 400 });
   }
 
   const db = getDb();
-  const quote = db.prepare('SELECT * FROM quotes WHERE id = ?').get(quoteId) as Quote | undefined;
+  const quote = await db.one<Quote>('SELECT * FROM quotes WHERE id = ?', [toId(quoteId)]);
   if (!quote) return NextResponse.json({ error: 'Quote not found' }, { status: 404 });
 
-  const request = db.prepare('SELECT * FROM booking_requests WHERE id = ?').get(quote.request_id) as BookingRequest;
-  if (session.role === 'customer' && request.customer_id !== session.userId) {
+  const request = (await db.one<BookingRequest>('SELECT * FROM booking_requests WHERE id = ?', [quote.request_id]))!;
+  const isOwner = session.role === 'customer' && request.customer_id === session.userId;
+  if (!isOwner && session.role !== 'admin') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  if (status === 'accepted') {
-    const transaction = db.transaction(() => {
-      // Accept this quote
-      db.prepare("UPDATE quotes SET status = 'accepted' WHERE id = ?").run(quoteId);
-      // Reject all other quotes for this request
-      db.prepare("UPDATE quotes SET status = 'rejected' WHERE request_id = ? AND id != ?").run(quote.request_id, quoteId);
-      // Mark request as booked
-      db.prepare("UPDATE booking_requests SET status = 'booked', updated_at = datetime('now') WHERE id = ?").run(quote.request_id);
-    });
-    transaction();
-  } else {
-    db.prepare("UPDATE quotes SET status = 'rejected' WHERE id = ?").run(quoteId);
+  if (quote.status !== 'pending') {
+    return NextResponse.json({ error: `Quote is ${quote.status}` }, { status: 409 });
   }
+
+  await db.run("UPDATE quotes SET status = 'rejected' WHERE id = ? AND status = 'pending'", [quote.id]);
 
   return NextResponse.json({ success: true });
 }

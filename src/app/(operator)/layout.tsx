@@ -9,7 +9,7 @@ export default async function OperatorLayout({ children }: { children: React.Rea
   if (session.role !== 'operator') redirect('/dashboard');
 
   const db = getDb();
-  const user = db.prepare('SELECT name, role FROM users WHERE id = ?').get(session.userId) as { name: string; role: string };
+  const user = (await db.one<{ name: string; role: string }>('SELECT name, role FROM users WHERE id = ?', [session.userId]))!;
 
   return (
     <>

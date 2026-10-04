@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3';
+import type { Db } from '@/lib/db';
 import type { BookingLeg, Operator, MarketKey } from '@/lib/types';
 import { sendEmail } from '@/lib/email/resend';
 import { rfqNotificationEmail, rfqSmsBody } from '@/lib/email/templates';
@@ -70,12 +70,12 @@ export interface MatchedOperator {
   reasons: string[];
 }
 
-export function matchOperators(
-  db: Database.Database,
+export async function matchOperators(
+  db: Db,
   requestId: number,
   legs: BookingLeg[],
   passengerCount: number
-): MatchedOperator[] {
+): Promise<MatchedOperator[]> {
   const market = classifyMarket(legs);
   const distance = estimateDistance(legs);
   const viableFleetTypes = paxToFleetTypes(passengerCount);
@@ -83,9 +83,9 @@ export function matchOperators(
 
   const fleetFilter = viableForRange.length > 0 ? viableForRange : ['heavy', 'ultra_long'];
 
-  const operators = db.prepare(
+  const operators = await db.query<Operator>(
     "SELECT * FROM operators WHERE status = 'approved'"
-  ).all() as Operator[];
+  );
 
   const results: MatchedOperator[] = [];
 
@@ -116,9 +116,10 @@ export function matchOperators(
       score += 20;
       reasons.push('Fleet type match');
     } else if (opFleet.length === 0) {
-      const aircraftCount = (db.prepare(
-        'SELECT COUNT(*) as c FROM aircraft WHERE operator_id = ? AND capacity >= ?'
-      ).get(op.id, passengerCount) as { c: number }).c;
+      const aircraftCount = (await db.one<{ c: number }>(
+        'SELECT COUNT(*) as c FROM aircraft WHERE operator_id = ? AND capacity >= ?',
+        [op.id, passengerCount]
+      ))!.c;
       if (aircraftCount > 0) {
         score += 20;
         reasons.push('Aircraft in fleet match capacity');
@@ -143,9 +144,10 @@ export function matchOperators(
       score -= 20;
     }
 
-    const accepted = (db.prepare(
-      "SELECT COUNT(*) as c FROM quotes WHERE operator_id = ? AND status = 'accepted'"
-    ).get(op.id) as { c: number }).c;
+    const accepted = (await db.one<{ c: number }>(
+      "SELECT COUNT(*) as c FROM quotes WHERE operator_id = ? AND status = 'accepted'",
+      [op.id]
+    ))!.c;
     const perfScore = Math.min(accepted * 3, 15);
     score += perfScore;
     if (accepted > 0) reasons.push(`${accepted} bookings won`);
@@ -271,15 +273,18 @@ async function deliverRFQ(
  * Called automatically when a booking request is created.
  *
  * Matches operators → logs outreach → delivers via Resend (email) or SMS stub.
+ * Delivery runs in the background; `deliveries` settles when it finishes.
+ * Route handlers pass it to next/server `after()` so serverless functions
+ * stay alive until delivery completes.
  */
 export async function dispatchOutreach(
-  db: Database.Database,
+  db: Db,
   requestId: number,
   legs: BookingLeg[],
   passengerCount: number,
   notes: string | null
-): Promise<{ matched: number; dispatched: number }> {
-  const matches = matchOperators(db, requestId, legs, passengerCount);
+): Promise<{ matched: number; dispatched: number; deliveries: Promise<void> }> {
+  const matches = await matchOperators(db, requestId, legs, passengerCount);
   const { subject, body } = generateRFQ(legs, passengerCount, notes, requestId);
 
   const route = legs.map(l => l.origin_code).join(' → ') + ' → ' + legs[legs.length - 1].dest_code;
@@ -290,31 +295,23 @@ export async function dispatchOutreach(
     `Leg ${i + 1}: ${l.origin_code} → ${l.dest_code} | ${l.departure_date}${l.departure_time ? ` @ ${l.departure_time}` : ''}`
   );
 
-  const insertLog = db.prepare(`
-    INSERT OR IGNORE INTO outreach_log (request_id, operator_id, method, match_score, rfq_subject, rfq_body, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  const updateDelivered = db.prepare(`
-    UPDATE outreach_log SET status = 'delivered' WHERE request_id = ? AND operator_id = ?
-  `);
-
-  const updateFailed = db.prepare(`
-    UPDATE outreach_log SET status = 'failed' WHERE request_id = ? AND operator_id = ?
-  `);
-
   let dispatched = 0;
+  const pending: Promise<void>[] = [];
 
   for (const match of matches) {
     const op = match.operator;
     const method = op.contact_method || 'pending';
 
-    try {
-      // Log the outreach first as 'sent'
-      insertLog.run(requestId, op.id, method, match.score, subject, body, 'sent');
-      dispatched++;
+    // Log the outreach first as 'sent'; skip operators already contacted for this request
+    const inserted = await db.run(`
+      INSERT INTO outreach_log (request_id, operator_id, method, match_score, rfq_subject, rfq_body, status)
+      VALUES (?, ?, ?, ?, ?, ?, 'sent')
+      ON CONFLICT (request_id, operator_id) DO NOTHING
+    `, [requestId, op.id, method, match.score, subject, body]);
+    if (inserted === 0) continue;
+    dispatched++;
 
-      // Deliver asynchronously (fire-and-forget, don't block request creation)
+    pending.push(
       deliverRFQ(op, {
         requestId,
         route,
@@ -323,21 +320,18 @@ export async function dispatchOutreach(
         notes,
         legDetails,
         matchScore: match.score,
-      }).then(result => {
+      }).then(async result => {
         if (result.emailId && !result.error) {
-          updateDelivered.run(requestId, op.id);
+          await db.run("UPDATE outreach_log SET status = 'delivered' WHERE request_id = ? AND operator_id = ?", [requestId, op.id]);
         } else if (result.error) {
-          updateFailed.run(requestId, op.id);
+          await db.run("UPDATE outreach_log SET status = 'failed' WHERE request_id = ? AND operator_id = ?", [requestId, op.id]);
           console.error(`RFQ delivery failed for operator ${op.id}:`, result.error);
         }
       }).catch(err => {
         console.error(`RFQ delivery error for operator ${op.id}:`, err);
-      });
-
-    } catch {
-      // UNIQUE constraint — already contacted for this request
-    }
+      })
+    );
   }
 
-  return { matched: matches.length, dispatched };
+  return { matched: matches.length, dispatched, deliveries: Promise.all(pending).then(() => {}) };
 }

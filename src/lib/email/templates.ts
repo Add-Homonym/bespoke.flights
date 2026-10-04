@@ -146,3 +146,69 @@ export function rfqSmsBody(data: { requestId: number; route: string; dateRange: 
     '\n' + data.dateRange + ' | ' + data.passengerCount + ' pax' +
     '\nQuote at: bespoke.flights/operator/inbound';
 }
+
+// ─── Payment Receipt (to customer) ──────────────────────────────────
+
+export interface BookingPaymentEmailData {
+  requestId: number;
+  route: string;
+  dateRange: string;
+  passengerCount: number;
+  operatorCompany: string;
+  aircraft: string | null;
+  amount: string;
+  baseUrl: string;
+}
+
+export function paymentReceiptEmail(data: BookingPaymentEmailData): { subject: string; html: string } {
+  const subject = 'Booking confirmed — ' + data.route;
+
+  const body =
+    '<h1 style="margin:0 0 8px 0;color:' + BRAND.cream + ';font-size:22px;font-weight:600">' +
+    'Your charter is booked' +
+    '</h1>' +
+    p('Request #' + data.requestId + ' &middot; Payment received', 'color:' + BRAND.muted + ';font-size:13px') +
+    '<table cellpadding="0" cellspacing="0" style="width:100%;background:#0f1724;border-radius:8px;margin:20px 0">' +
+    '<tr><td style="padding:16px">' +
+    '<table cellpadding="0" cellspacing="0" style="width:100%">' +
+    summaryRow('Route', data.route) +
+    summaryRow('Dates', data.dateRange) +
+    summaryRow('Passengers', String(data.passengerCount)) +
+    summaryRow('Operator', data.operatorCompany) +
+    (data.aircraft ? summaryRow('Aircraft', data.aircraft) : '') +
+    summaryRow('Total paid', data.amount) +
+    '</table></td></tr></table>' +
+    p(data.operatorCompany + ' will contact you to confirm passenger details and flight logistics.') +
+    button('View Booking', data.baseUrl + '/requests/' + data.requestId);
+
+  return { subject, html: layout(body) };
+}
+
+// ─── Booking Confirmed (to operator) ────────────────────────────────
+
+export function bookingConfirmedOperatorEmail(
+  data: BookingPaymentEmailData & { platformFee: string; payout: string }
+): { subject: string; html: string } {
+  const subject = 'Quote accepted and paid — Request #' + data.requestId + ' — ' + data.route;
+
+  const body =
+    '<h1 style="margin:0 0 8px 0;color:' + BRAND.cream + ';font-size:22px;font-weight:600">' +
+    'You have a confirmed booking' +
+    '</h1>' +
+    p('Request #' + data.requestId + ' &middot; Customer payment received', 'color:' + BRAND.muted + ';font-size:13px') +
+    '<table cellpadding="0" cellspacing="0" style="width:100%;background:#0f1724;border-radius:8px;margin:20px 0">' +
+    '<tr><td style="padding:16px">' +
+    '<table cellpadding="0" cellspacing="0" style="width:100%">' +
+    summaryRow('Route', data.route) +
+    summaryRow('Dates', data.dateRange) +
+    summaryRow('Passengers', String(data.passengerCount)) +
+    (data.aircraft ? summaryRow('Aircraft', data.aircraft) : '') +
+    summaryRow('Quote', data.amount) +
+    summaryRow('Platform fee', data.platformFee) +
+    summaryRow('Your payout', data.payout) +
+    '</table></td></tr></table>' +
+    p('Funds are transferred to your connected payout account and paid out on your Stripe payout schedule.') +
+    button('View Request', data.baseUrl + '/operator/requests/' + data.requestId);
+
+  return { subject, html: layout(body) };
+}

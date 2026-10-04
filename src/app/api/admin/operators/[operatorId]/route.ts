@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
+import { toId } from '@/lib/db/queries';
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ operatorId: string }> }) {
   const session = await getSession();
@@ -17,7 +18,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ operat
   }
 
   const db = getDb();
-  db.prepare('UPDATE operators SET status = ? WHERE id = ?').run(status, operatorId);
+  await db.run('UPDATE operators SET status = ? WHERE id = ?', [status, toId(operatorId)]);
 
   return NextResponse.json({ success: true });
 }

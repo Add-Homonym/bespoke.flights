@@ -7,7 +7,7 @@ async function getUser() {
   const session = await getSession();
   if (!session) return null;
   const db = getDb();
-  const user = db.prepare('SELECT name, role FROM users WHERE id = ?').get(session.userId) as { name: string; role: string } | undefined;
+  const user = await db.one<{ name: string; role: string }>('SELECT name, role FROM users WHERE id = ?', [session.userId]);
   return user || null;
 }
 

@@ -27,7 +27,7 @@ export default function AdminSettingsPage() {
 
         <Card>
           <h2 className="text-brand-cream font-semibold mb-4">Database</h2>
-          <p className="text-brand-muted text-sm">SQLite database stored locally. Data persists between sessions.</p>
+          <p className="text-brand-muted text-sm">Postgres (Neon in production, provisioned through the Vercel integration). Local development without DATABASE_URL uses an embedded PGlite database in data/pglite.</p>
         </Card>
       </div>
     </div>

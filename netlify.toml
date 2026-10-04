@@ -1,0 +1,4 @@
+# Netlify is not used for this app (it deploys on Vercel). Skip every
+# Netlify build for this repository; delete this file to re-enable.
+[build]
+  ignore = "exit 0"
