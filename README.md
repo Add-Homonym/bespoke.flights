@@ -46,8 +46,27 @@ There are three user roles — **customer**, **operator**, and **admin** — eac
 3. **Receive inbound RFQs** at `/operator/inbound`. These are charter requests automatically matched to the operator's profile by the matching engine. Each card shows the route, pax count, dates, match score, and time since receipt.
 4. **Submit a quote** inline — price, aircraft (from fleet inventory), valid-until date, and an optional message. One click creates the quote and marks the outreach log as responded.
 5. **Browse all demand** at `/operator/requests` to see every open request on the platform, not just auto-matched ones.
-6. **Manage fleet** at `/operator/fleet` — add aircraft with tail number, type, capacity, range, and year.
-7. **Set up payouts** at `/operator/settings` → Payouts. This opens Stripe Connect Express onboarding. Customers cannot pay for an operator's quotes until onboarding is complete.
+6. **Share a booking with the team.** Once a booking is paid, the winning operator's request page shows **Share with your team**:
+   - **Private link** to a read-only trip sheet at `/trip/<token>`. No login is needed to view it. It shows legs with dates and times, aircraft, passengers, special requests, and the lead passenger's name, phone and email. It prints cleanly and is not indexed by search engines.
+   - **Email** the trip sheet to up to 20 colleagues.
+   - **Calendar file** (`/trip/<token>/calendar`): one event per leg, at the requested local time, or all-day when no time was given.
+   - **Turn off link** stops it working immediately; a new link can be created afterwards. Links also expire 30 days after the last leg.
+   Only the operator whose quote was accepted can create, email or revoke links (`trip_shares` table).
+7. **Company board** at `/operator/board`. It is a live view of every charter that concerns the company. It refreshes every 15 seconds without a reload, pausing while the tab is hidden. It has four sections:
+   - **Upcoming charters**: booked and paid, with legs, times, passengers, special requests, aircraft, price and lead passenger contact.
+   - **New requests to quote**: matched to the company, with no quote yet.
+   - **Quoted, awaiting client**.
+   - **Recently cancelled**: the last 14 days.
+
+   Charters that appear or change while the board is open are marked *New* or *Updated*, and the tab title shows the count.
+8. **Staff alerts** at `/operator/team`. Add up to 50 staff, each with an email and/or a mobile number. Choose per person:
+   - **Channels**: email and/or text.
+   - **Events**: charter booked, charter cancelled, and new request to quote.
+
+   Alerts go out automatically when a payment completes, when a booking is cancelled (by the customer or a full refund) and when the matching engine sends the company an RFQ. Booking alerts include the private trip sheet link. Each person gets each alert once per channel: redelivered webhooks do not duplicate it, and failed sends are retried on the next trigger (`staff_notifications` table). **Send test** checks a person's setup.
+   - **Staff board link**: a private, read-only `/board/<token>` URL of the company board for dispatch screens or staff without an account. It can be replaced or turned off at any time.
+9. **Manage fleet** at `/operator/fleet` — add aircraft with tail number, type, capacity, range, and year.
+10. **Set up payouts** at `/operator/settings` → Payouts. This opens Stripe Connect Express onboarding. Customers cannot pay for an operator's quotes until onboarding is complete.
 
 ## Admin Workflow
 
@@ -100,7 +119,7 @@ Routes are classified into one of 10 markets based on ICAO airport codes:
 
 ### RFQ Delivery
 
-Matched operators receive a branded HTML email via Resend containing the full itinerary, passenger count, notes, and a link to submit their quote. SMS delivery is stubbed for future Twilio integration. Without a `RESEND_API_KEY`, emails are logged to stdout.
+Matched operators receive a branded HTML email via Resend containing the full itinerary, passenger count, notes, and a link to submit their quote. Operators whose contact method is `text` or `both` also get a text through Twilio. Without a `RESEND_API_KEY`, emails are logged to stdout. Without Twilio credentials, or in test mode, texts are logged instead.
 
 ---
 
@@ -218,6 +237,10 @@ All email is sent through Resend's API via `src/lib/email/resend.ts`. Four email
 | **RFQ Notification** | Customer submits a booking request | Full itinerary, passenger count, match score, link to `/operator/inbound` |
 | **Payment Receipt** | Payment succeeds | Sent to the customer: route, dates, operator, aircraft, total paid |
 | **Booking Confirmed** | Payment succeeds | Sent to the operator: itinerary, quote amount, platform fee, payout |
+| **Trip Sheet** | Operator emails a booking to colleagues | Itinerary and the private trip sheet link |
+| **Staff Alert** | Booking, cancellation or new request, per staff preferences | Itinerary, passengers, special requests, aircraft, lead passenger and a link |
+
+Texts go through Twilio (`src/lib/notify/sms.ts`). Phone numbers are normalized to E.164: 10-digit numbers are treated as US/Canada.
 
 A `sendBatch` helper handles rate limiting (1 email/second for Resend's free tier). Without `RESEND_API_KEY` set, all emails are logged to the console in stub mode.
 
@@ -280,7 +303,7 @@ src/
 
 ## Database Schema
 
-Eleven tables in Postgres:
+Fifteen tables in Postgres:
 
 | Table | Purpose |
 |---|---|
@@ -295,6 +318,10 @@ Eleven tables in Postgres:
 | `payments` | One row per checkout attempt. Amount, platform fee, operator payout, refunded total, Stripe session and PaymentIntent IDs, status. |
 | `refunds` | Ledger of refunds issued from the app. |
 | `payment_events` | Stripe webhook event IDs that have been processed, used for idempotency. |
+| `trip_shares` | Private trip sheet links for booked charters. Revocable; expire 30 days after the last leg. |
+| `operator_staff` | An operator's staff roster: contact details, alert channels and which events each person receives. |
+| `staff_notifications` | One row per staff alert per channel. Unique on (staff_id, event_key, channel) so alerts are never duplicated. |
+| `operator_boards` | The private staff board link token for each operator. |
 
 The `operators` table also stores the Stripe Connect account ID, capability flags, and an optional fee override.
 
@@ -361,7 +388,11 @@ Created by `npm run seed` locally, or automatically in [test mode](#test-mode). 
 | `STRIPE_WEBHOOK_SECRET` | Production | Signing secret for the platform webhook endpoint |
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | Production | Signing secret for the connected-accounts webhook endpoint |
 | `PLATFORM_FEE_BPS` | No | Platform commission in basis points (default `500` = 5%) |
-| `APP_URL` | No | Public base URL for Stripe redirect URLs and email links (defaults to the request origin) |
+| `APP_URL` | Production | Public base URL for Stripe redirect URLs and links in emails and texts (defaults to the request origin; set it so links sent from webhooks point at the right domain) |
+| `TWILIO_ACCOUNT_SID` | No | Twilio account for RFQ texts and staff text alerts. Without the Twilio variables, texts log to stdout. |
+| `TWILIO_AUTH_TOKEN` | No | Twilio auth token |
+| `TWILIO_MESSAGING_SERVICE_SID` | No | Twilio Messaging Service to send from (or set `TWILIO_FROM_NUMBER`) |
+| `TWILIO_FROM_NUMBER` | No | Sending number in E.164, used when no Messaging Service is set |
 | `APP_TEST_MODE` | No | `true` simulates all payments, shows a test banner, and loads demo data into an empty database |
 | `DATABASE_URL` | Production | Postgres connection string. Set automatically by the Vercel Neon integration (pooled). |
 | `DATABASE_POOL_MAX` | No | Max connections per function instance (default 5) |
@@ -384,7 +415,7 @@ Optional: enable Neon's preview-branch option in the integration so each preview
 
 ### 2. Other environment variables
 
-Set `JWT_SECRET` (required: a long random string; without it, session tokens are signed with a public development key), `CRON_SECRET`, and the Stripe and Resend variables from the table above.
+Set `JWT_SECRET` (required: a long random string; without it, session tokens are signed with a public development key), `CRON_SECRET`, `APP_URL`, and the Stripe, Resend and Twilio variables from the table above.
 
 ### 3. Deploy
 
@@ -406,7 +437,7 @@ curl -X POST http://localhost:3000/api/cron/weekly-discovery \
 
 ## Pending / Future Work
 
-- **Twilio SMS integration** — contact method `text` and `both` are supported in the data model and UI but SMS delivery is stubbed.
+- **SMS delivery status** — Twilio status callbacks are not tracked; a text counts as sent once Twilio accepts it.
 - **Resend webhooks** — track email bounces and mark discovered operators as `bounced` automatically.
 - **Secondary email discovery** — the FAA registry doesn't publish emails. A future enrichment step (website scraping or data API) could automate email collection for `no_email` operators.
 - **AI phone outreach** — the contact method enum can be extended with `phone` for Bland.ai / Vapi voice agent integration.

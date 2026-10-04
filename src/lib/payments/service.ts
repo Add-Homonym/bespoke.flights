@@ -19,6 +19,7 @@ import type Stripe from 'stripe';
 import { getStripe } from './stripe';
 import {
   getPaymentsMode,
+  appBaseUrl,
   platformFeeBps,
   computeFees,
   MIN_CHARGE_CENTS,
@@ -27,6 +28,7 @@ import {
   formatMoney,
 } from './config';
 import { sendEmail } from '@/lib/email/resend';
+import { alertStaff } from '@/lib/staff/alerts';
 import { paymentReceiptEmail, bookingConfirmedOperatorEmail } from '@/lib/email/templates';
 import type { Payment, Quote, BookingRequest, Operator, BookingLeg } from '@/lib/types';
 import { fromDbLegs, legLine } from '@/lib/trip-format';
@@ -279,12 +281,12 @@ export async function markPaymentCanceled(db: Db, paymentId: number, reason: str
  * Set the refunded total (absolute, so repeated webhook deliveries are safe).
  * A full refund of the payment that booked a request cancels the booking.
  */
-export async function applyRefundTotal(db: Db, paymentId: number, refundedCents: number) {
-  await db.transaction(async tx => {
+export async function applyRefundTotal(db: Db, paymentId: number, refundedCents: number, baseUrl = appBaseUrl()) {
+  const cancelled = await db.transaction(async tx => {
     const payment = await getPayment(tx, paymentId, true);
-    if (!payment) return;
+    if (!payment) return null;
     const total = Math.min(Math.max(refundedCents, payment.refunded_cents), payment.amount_cents);
-    if (total <= 0) return;
+    if (total <= 0) return null;
     const status = total >= payment.amount_cents ? 'refunded' : 'partially_refunded';
 
     await tx.run(`
@@ -294,13 +296,18 @@ export async function applyRefundTotal(db: Db, paymentId: number, refundedCents:
     if (status === 'refunded') {
       const quote = (await tx.one<{ status: string }>('SELECT status FROM quotes WHERE id = ?', [payment.quote_id]))!;
       if (quote.status === 'accepted') {
-        await tx.run(`
+        const changed = await tx.run(`
           UPDATE booking_requests SET status = 'cancelled', updated_at = now()
           WHERE id = ? AND status = 'booked'
         `, [payment.request_id]);
+        if (changed) return { requestId: payment.request_id, operatorId: payment.operator_id };
       }
     }
+    return null;
   });
+
+  // A full refund cancelled the booking: tell the operator's staff.
+  if (cancelled) await alertStaff(db, { kind: 'cancellation', ...cancelled }, baseUrl);
 }
 
 // ─── Refunds ────────────────────────────────────────────────────────
@@ -308,7 +315,7 @@ export async function applyRefundTotal(db: Db, paymentId: number, refundedCents:
 export async function refundPayment(
   db: Db,
   paymentId: number,
-  params: { amountCents?: number; reason?: string | null; initiatedBy?: number | null }
+  params: { amountCents?: number; reason?: string | null; initiatedBy?: number | null; baseUrl?: string }
 ): Promise<Payment> {
   const payment = await getPayment(db, paymentId);
   if (!payment) throw new PaymentError('Payment not found', 404);
@@ -349,7 +356,7 @@ export async function refundPayment(
     VALUES (?, ?, ?, ?, ?)
     ON CONFLICT (stripe_refund_id) DO NOTHING
   `, [payment.id, amount, params.reason ?? null, stripeRefundId, params.initiatedBy ?? null]);
-  await applyRefundTotal(db, payment.id, payment.refunded_cents + amount);
+  await applyRefundTotal(db, payment.id, payment.refunded_cents + amount, params.baseUrl);
 
   return (await getPayment(db, payment.id))!;
 }
@@ -373,9 +380,11 @@ export async function fulfillPayment(
     await sendBookingEmails(db, paymentId, details.baseUrl).catch(err =>
       console.error('Booking email failed:', err)
     );
+    await alertStaff(db, { kind: 'booking', requestId: payment.request_id, operatorId: payment.operator_id }, details.baseUrl);
   } else if (outcome === 'conflict') {
     await refundPayment(db, paymentId, {
       reason: 'Automatic refund: request already booked or quote no longer available',
+      baseUrl: details.baseUrl,
     });
   }
 
@@ -614,7 +623,7 @@ export async function handleStripeEvent(
     case 'charge.refunded': {
       const charge = event.data.object as Stripe.Charge;
       const payment = await paymentForIntent(db, charge.payment_intent);
-      if (payment) await applyRefundTotal(db, payment.id, charge.amount_refunded);
+      if (payment) await applyRefundTotal(db, payment.id, charge.amount_refunded, baseUrl);
       break;
     }
     case 'charge.dispute.created':

@@ -32,7 +32,8 @@ export function testDb(): Promise<Db> {
 
 export async function resetDb(db: Db) {
   await db.run(`TRUNCATE users, operators, aircraft, booking_requests, booking_legs, quotes, outreach_log,
-    discovered_operators, payments, refunds, payment_events RESTART IDENTITY CASCADE`);
+    discovered_operators, payments, refunds, payment_events, trip_shares,
+    operator_staff, staff_notifications, operator_boards RESTART IDENTITY CASCADE`);
 }
 
 const future = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);

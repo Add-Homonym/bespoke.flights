@@ -4,6 +4,7 @@ import { getDb } from '@/lib/db';
 import { toId } from '@/lib/db/queries';
 import { refundSchema } from '@/lib/validations';
 import { refundPayment, PaymentError } from '@/lib/payments/service';
+import { appBaseUrl } from '@/lib/payments/config';
 
 export async function POST(req: Request, { params }: { params: Promise<{ paymentId: string }> }) {
   const session = await getSession();
@@ -22,6 +23,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ payment
       amountCents: parsed.data.amountCents,
       reason: parsed.data.reason,
       initiatedBy: session.userId,
+      baseUrl: appBaseUrl(req),
     });
     return NextResponse.json(payment);
   } catch (err) {

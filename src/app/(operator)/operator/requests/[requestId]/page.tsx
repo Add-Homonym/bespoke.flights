@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { formatTripDate, formatTripTime } from '@/lib/trip-format';
 import { Badge } from '@/components/ui/badge';
 import { SubmitQuoteForm } from '@/components/booking/submit-quote-form';
+import { TripShare } from '@/components/operator/trip-share';
 import type { BookingRequest, BookingLeg, Operator, Aircraft, Quote } from '@/lib/types';
 
 export default async function OperatorRequestDetailPage({ params }: { params: Promise<{ requestId: string }> }) {
@@ -72,6 +73,10 @@ export default async function OperatorRequestDetailPage({ params }: { params: Pr
       </Card>
 
       {/* Quote submission */}
+      {existingQuote?.status === 'accepted' && ['booked', 'completed'].includes(request.status) && (
+        <TripShare requestId={request.id} />
+      )}
+
       {existingQuote ? (
         <Card>
           <h2 className="text-sm font-semibold text-brand-muted uppercase tracking-wider mb-4">Your Quote</h2>

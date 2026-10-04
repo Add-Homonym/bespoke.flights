@@ -5,7 +5,7 @@ import { DEMO_PASSWORD } from '@/lib/db/demo-data';
 export function TestModeBanner() {
   if (!isTestMode()) return null;
   return (
-    <div role="status" className="bg-brand-warning text-brand-dark text-sm text-center px-4 py-2 font-medium">
+    <div role="status" className="bg-brand-warning text-brand-dark text-sm text-center px-4 py-2 font-medium print:hidden">
       Test mode: all payments and payouts are simulated. No money moves.
       <span className="font-normal">
         {' '}Demo logins: admin@bespoke.flights, john@example.com, ops@eliteair.com (password {DEMO_PASSWORD}).

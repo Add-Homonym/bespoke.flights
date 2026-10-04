@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { toId } from '@/lib/db/queries';
+import { alertStaff, bookedOperatorId } from '@/lib/staff/alerts';
+import { appBaseUrl } from '@/lib/payments/config';
 import type { BookingRequest, BookingLeg } from '@/lib/types';
 
 export async function GET(_req: Request, { params }: { params: Promise<{ requestId: string }> }) {
@@ -40,8 +42,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ reques
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  if (body.status === 'cancelled') {
+  if (body.status === 'cancelled' && request.status !== 'cancelled') {
     await db.run("UPDATE booking_requests SET status = 'cancelled', updated_at = now() WHERE id = ?", [request.id]);
+    // A booked charter was called off: tell the operator's staff.
+    const operatorId = request.status === 'booked' ? await bookedOperatorId(db, request.id) : null;
+    if (operatorId) await alertStaff(db, { kind: 'cancellation', requestId: request.id, operatorId }, appBaseUrl(req));
   }
 
   return NextResponse.json({ success: true });

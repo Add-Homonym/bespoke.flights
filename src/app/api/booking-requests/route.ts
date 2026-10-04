@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { bookingRequestSchema } from '@/lib/validations';
 import { createBookingRequest } from '@/lib/bookings/create';
+import { appBaseUrl } from '@/lib/payments/config';
 import { DRAFT_COOKIE } from '@/lib/bookings/draft';
 import { legsByRequest } from '@/lib/db/queries';
 import type { BookingRequest } from '@/lib/types';
@@ -19,7 +20,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
   }
 
-  const { id, outreach } = await createBookingRequest(getDb(), session.userId, parsed.data);
+  const { id, outreach } = await createBookingRequest(getDb(), session.userId, parsed.data, appBaseUrl(req));
 
   // The itinerary is submitted; the browser no longer needs its draft.
   (await cookies()).delete(DRAFT_COOKIE);

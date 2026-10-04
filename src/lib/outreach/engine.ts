@@ -2,6 +2,9 @@ import type { Db } from '@/lib/db';
 import type { BookingLeg, Operator, MarketKey } from '@/lib/types';
 import { sendEmail } from '@/lib/email/resend';
 import { rfqNotificationEmail, rfqSmsBody } from '@/lib/email/templates';
+import { sendSms } from '@/lib/notify/sms';
+import { alertStaff } from '@/lib/staff/alerts';
+import { appBaseUrl } from '@/lib/payments/config';
 
 // Route distance estimates for range filtering (nm)
 const ROUTE_DISTANCES: Record<string, number> = {
@@ -250,18 +253,22 @@ async function deliverRFQ(
     }
   }
 
-  // SMS delivery — stubbed for Twilio
+  // SMS delivery via Twilio (logged when Twilio is not configured)
   if (method === 'text' || method === 'both') {
     if (op.contact_phone) {
-      const _smsBody = rfqSmsBody({
-        requestId: rfqData.requestId,
-        route: rfqData.route,
-        dateRange: rfqData.dateRange,
-        passengerCount: rfqData.passengerCount,
+      const sms = await sendSms({
+        to: op.contact_phone,
+        body: rfqSmsBody({
+          requestId: rfqData.requestId,
+          route: rfqData.route,
+          dateRange: rfqData.dateRange,
+          passengerCount: rfqData.passengerCount,
+        }),
       });
-      // TODO: Twilio integration
-      // await twilioClient.messages.create({ to: op.contact_phone, from: TWILIO_FROM, body: smsBody });
-      console.log(`[SMS STUB] Would text ${op.contact_phone}: RFQ #${rfqData.requestId}`);
+      if (sms.error) {
+        console.error(`RFQ SMS failed for operator ${op.id}:`, sms.error);
+        error = error ?? sms.error;
+      }
     }
   }
 
@@ -282,7 +289,8 @@ export async function dispatchOutreach(
   requestId: number,
   legs: BookingLeg[],
   passengerCount: number,
-  notes: string | null
+  notes: string | null,
+  baseUrl: string = appBaseUrl()
 ): Promise<{ matched: number; dispatched: number; deliveries: Promise<void> }> {
   const matches = await matchOperators(db, requestId, legs, passengerCount);
   const { subject, body } = generateRFQ(legs, passengerCount, notes, requestId);
@@ -329,7 +337,7 @@ export async function dispatchOutreach(
         }
       }).catch(err => {
         console.error(`RFQ delivery error for operator ${op.id}:`, err);
-      })
+      }).then(() => alertStaff(db, { kind: 'new_request', requestId, operatorId: op.id }, baseUrl).then(() => {}))
     );
   }
 
