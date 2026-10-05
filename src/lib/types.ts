@@ -2,7 +2,8 @@ export interface User {
   id: number;
   email: string;
   phone: string | null;
-  password_hash: string;
+  password_hash: string | null;
+  auth_id: string | null;
   name: string;
   role: 'customer' | 'operator' | 'admin';
   created_at: string;

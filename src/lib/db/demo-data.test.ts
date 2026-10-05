@@ -39,11 +39,21 @@ describe('seedDemoData', () => {
     expect((await db.one<{ c: number }>('SELECT COUNT(*) AS c FROM users'))!.c).toBe(DEMO_ACCOUNTS.length);
   });
 
-  it('does nothing when users already exist', async () => {
+  it('does nothing when a demo account already exists', async () => {
+    const db = await testDb();
+    await resetDb(db);
+    await db.run("INSERT INTO users (email, password_hash, name, role) VALUES ('john@example.com', 'x', 'Real John', 'customer')");
+    expect(await seedDemoData(db)).toBe(false);
+    expect((await db.one<{ c: number }>('SELECT COUNT(*) AS c FROM users'))!.c).toBe(1);
+  });
+});
+
+describe('seedDemoData alongside real users', () => {
+  it('still loads the demo accounts when someone has already signed up', async () => {
     const db = await testDb();
     await resetDb(db);
     await db.run("INSERT INTO users (email, password_hash, name, role) VALUES ('real@x.com', 'x', 'Real', 'customer')");
-    expect(await seedDemoData(db)).toBe(false);
-    expect((await db.one<{ c: number }>('SELECT COUNT(*) AS c FROM users'))!.c).toBe(1);
+    expect(await seedDemoData(db)).toBe(true);
+    expect((await db.one<{ c: number }>('SELECT COUNT(*) AS c FROM users'))!.c).toBe(DEMO_ACCOUNTS.length + 1);
   });
 });

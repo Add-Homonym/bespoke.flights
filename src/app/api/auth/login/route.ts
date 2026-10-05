@@ -1,11 +1,9 @@
 import { NextResponse } from 'next/server';
-import bcrypt from 'bcryptjs';
 import { getDb } from '@/lib/db';
 import { loginSchema } from '@/lib/validations';
-import { setSessionCookie } from '@/lib/auth';
+import { authenticate } from '@/lib/auth';
 import { claimBookingDraft } from '@/lib/bookings/create';
 import { appBaseUrl } from '@/lib/payments/config';
-import type { User } from '@/lib/types';
 
 export async function POST(req: Request) {
   try {
@@ -18,17 +16,10 @@ export async function POST(req: Request) {
     const { email, password } = parsed.data;
     const db = getDb();
 
-    const user = await db.one<User>('SELECT * FROM users WHERE email = ?', [email]);
+    const user = await authenticate(db, email, password);
     if (!user) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
-
-    const valid = await bcrypt.compare(password, user.password_hash);
-    if (!valid) {
-      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
-    }
-
-    await setSessionCookie({ userId: user.id, role: user.role });
 
     // A traveler who built a trip before signing in: submit it now.
     const requestId = user.role === 'customer' ? await claimBookingDraft(db, user.id, appBaseUrl(req)) : null;

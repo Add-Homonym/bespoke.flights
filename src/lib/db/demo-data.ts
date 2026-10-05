@@ -17,8 +17,12 @@ export const DEMO_ACCOUNTS = [
 const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
 
 /**
- * Load demo accounts, operators, fleet, requests and quotes into an empty
- * database. Returns false (and changes nothing) if any user already exists.
+ * Load demo accounts, operators, fleet, requests and quotes. Returns false (and
+ * changes nothing) if any demo account already exists. Other users do not block
+ * it: a real signup before the first load must not leave the demo accounts missing.
+ *
+ * Demo rows carry a bcrypt hash and no auth_id. With Neon Auth, the first sign-in
+ * with DEMO_PASSWORD creates the Neon Auth identity and links it (see authenticate()).
  * Safe to call concurrently: serialized with an advisory lock.
  */
 export async function seedDemoData(db: Db): Promise<boolean> {
@@ -26,7 +30,8 @@ export async function seedDemoData(db: Db): Promise<boolean> {
 
   return db.transaction(async tx => {
     await tx.query('SELECT pg_advisory_xact_lock(727275)');
-    const { count } = (await tx.one<{ count: number }>('SELECT COUNT(*) AS count FROM users'))!;
+    const { count } = (await tx.one<{ count: number }>(
+      'SELECT COUNT(*) AS count FROM users WHERE lower(email) = ANY(?)', [DEMO_ACCOUNTS.map(a => a.email)]))!;
     if (count > 0) return false;
 
     const id = async (sql: string, params: unknown[]) =>

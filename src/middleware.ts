@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { getSessionFromRequest } from '@/lib/auth';
+import { hasSessionCookie } from '@/lib/session-cookie';
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -11,28 +11,13 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  const session = await getSessionFromRequest(req);
-
-  // Protected routes require authentication
-  if (!session) {
+  // Protected routes require a session. Role checks (operator, admin) happen in the
+  // route-group layouts and API handlers, which verify the session against the database.
+  if (!(await hasSessionCookie(req))) {
     if (pathname.startsWith('/api/')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     return NextResponse.redirect(new URL('/login', req.url));
-  }
-
-  // Operator routes
-  if (pathname.startsWith('/operator')) {
-    if (session.role !== 'operator') {
-      return NextResponse.redirect(new URL('/dashboard', req.url));
-    }
-  }
-
-  // Admin routes
-  if (pathname.startsWith('/admin')) {
-    if (session.role !== 'admin') {
-      return NextResponse.redirect(new URL('/dashboard', req.url));
-    }
   }
 
   return NextResponse.next();
