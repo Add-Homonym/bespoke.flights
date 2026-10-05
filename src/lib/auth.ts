@@ -69,6 +69,9 @@ async function profileForNeonUser(
 }
 
 export async function getSession(): Promise<SessionPayload | null> {
+  // Reading cookies first marks the calling page dynamic, so a missing Neon Auth
+  // setting fails the request instead of the build's prerender step.
+  const cookieStore = await cookies();
   requireConfigured();
   if (neonAuthEnabled()) {
     const { data } = await neonAuth().getSession();
@@ -77,7 +80,7 @@ export async function getSession(): Promise<SessionPayload | null> {
     return profile ? { userId: profile.id, role: profile.role } : null;
   }
 
-  const token = (await cookies()).get(COOKIE_NAME)?.value;
+  const token = cookieStore.get(COOKIE_NAME)?.value;
   return token ? verifyToken(token) : null;
 }
 

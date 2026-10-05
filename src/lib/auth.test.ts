@@ -7,6 +7,8 @@ import { seedDemoData, DEMO_PASSWORD } from '@/lib/db/demo-data';
 interface FakeUser { id: string; email: string; name: string; password: string; emailVerified: boolean }
 const store = vi.hoisted(() => ({ users: [] as FakeUser[], current: null as FakeUser | null }));
 
+vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => undefined, set: () => {}, delete: () => {} }) }));
+
 vi.mock('@/lib/neon-auth', () => {
   const ok = (u: FakeUser) => ({ data: { user: u }, error: null });
   return {
