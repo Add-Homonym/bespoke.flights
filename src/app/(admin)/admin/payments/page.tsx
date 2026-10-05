@@ -54,8 +54,8 @@ export default async function AdminPaymentsPage() {
     <div>
       <div className="flex items-start justify-between mb-10">
         <div>
-          <h1 className="font-display text-3xl text-brand-cream mb-2">Payments</h1>
-          <p className="text-brand-muted">
+          <h1 className="font-display text-3xl text-ink mb-2">Payments</h1>
+          <p className="text-ink-muted">
             {totals.count} paid booking{totals.count !== 1 ? 's' : ''} &middot; default platform fee{' '}
             {(platformFeeBps() / 100).toFixed(2).replace(/\.00$/, '')}%
           </p>
@@ -68,14 +68,14 @@ export default async function AdminPaymentsPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
         {stats.map(s => (
           <Card key={s.label}>
-            <p className="text-brand-muted text-xs uppercase tracking-wider">{s.label}</p>
-            <p className="text-brand-cream font-display text-2xl mt-2">{s.value}</p>
+            <p className="text-ink-muted text-xs uppercase tracking-wider">{s.label}</p>
+            <p className="text-ink font-display text-2xl mt-2">{s.value}</p>
           </Card>
         ))}
       </div>
 
       {payments.length === 0 ? (
-        <Card><p className="text-brand-muted text-center py-12">No payments yet.</p></Card>
+        <Card><p className="text-ink-muted text-center py-12">No payments yet.</p></Card>
       ) : (
         <Table>
           <Thead>
@@ -98,25 +98,25 @@ export default async function AdminPaymentsPage() {
                 <Td className="font-mono text-xs">
                   #{p.id}
                   {p.stripe_payment_intent_id && (
-                    <div className="text-brand-muted">{p.stripe_payment_intent_id}</div>
+                    <div className="text-ink-muted">{p.stripe_payment_intent_id}</div>
                   )}
                 </Td>
                 <Td>
-                  <Link href={`/requests/${p.request_id}`} className="hover:text-brand-gold">#{p.request_id}</Link>
+                  <Link href={`/requests/${p.request_id}`} className="hover:text-brass-ink">#{p.request_id}</Link>
                 </Td>
                 <Td>{p.customer_name}</Td>
                 <Td>{p.company_name}</Td>
                 <Td>{formatMoney(p.amount_cents, p.currency)}</Td>
-                <Td className="text-brand-muted">{formatMoney(p.platform_fee_cents, p.currency)}</Td>
-                <Td className="text-brand-muted">{p.refunded_cents > 0 ? formatMoney(p.refunded_cents, p.currency) : '—'}</Td>
+                <Td className="text-ink-muted">{formatMoney(p.platform_fee_cents, p.currency)}</Td>
+                <Td className="text-ink-muted">{p.refunded_cents > 0 ? formatMoney(p.refunded_cents, p.currency) : '—'}</Td>
                 <Td>
                   <Badge variant={statusBadge[p.status] ?? 'default'}>{p.status.replace('_', ' ')}</Badge>
                   {p.dispute_status && <Badge variant="error" className="ml-1">dispute: {p.dispute_status}</Badge>}
                   {p.failure_reason && ['failed', 'canceled'].includes(p.status) && (
-                    <div className="text-brand-muted text-xs mt-1">{p.failure_reason}</div>
+                    <div className="text-ink-muted text-xs mt-1">{p.failure_reason}</div>
                   )}
                 </Td>
-                <Td className="text-brand-muted text-xs">{new Date(p.created_at).toLocaleDateString()}</Td>
+                <Td className="text-ink-muted text-xs">{new Date(p.created_at).toLocaleDateString()}</Td>
                 <Td>
                   {['succeeded', 'partially_refunded'].includes(p.status) && (
                     <RefundButton paymentId={p.id} remainingCents={p.amount_cents - p.refunded_cents} />

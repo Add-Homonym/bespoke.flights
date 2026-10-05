@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Notice } from '@/components/ui/notice';
+import { Segmented } from '@/components/ui/segmented';
 
 function RegisterForm() {
   const router = useRouter();
@@ -55,61 +57,46 @@ function RegisterForm() {
       else router.push('/dashboard');
       router.refresh();
     } catch {
-      setError('Something went wrong');
+      setError('Something went wrong. Try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="rounded-xl border border-brand-border bg-brand-card p-8">
-      <h1 className="font-display text-2xl text-brand-cream mb-2">Create Your Account</h1>
-      <p className="text-brand-muted text-sm mb-6">Join bespoke.flights today</p>
+    <div className="rounded-lg border border-hairline bg-surface-raised p-6 shadow-raised">
+      <h1 className="text-title text-ink mb-2">Create your account</h1>
+      <p className="text-body text-ink-muted mb-6">Join bespoke.flights.</p>
 
-      {/* Role Toggle */}
-      <div className="flex rounded-lg border border-brand-border overflow-hidden mb-8">
-        <button
-          type="button"
-          onClick={() => setRole('customer')}
-          className={`flex-1 py-2.5 text-sm font-medium transition-colors cursor-pointer ${
-            role === 'customer' ? 'bg-brand-gold text-brand-dark' : 'text-brand-muted hover:text-brand-cream'
-          }`}
-        >
-          Traveler
-        </button>
-        <button
-          type="button"
-          onClick={() => setRole('operator')}
-          className={`flex-1 py-2.5 text-sm font-medium transition-colors cursor-pointer ${
-            role === 'operator' ? 'bg-brand-gold text-brand-dark' : 'text-brand-muted hover:text-brand-cream'
-          }`}
-        >
-          Charter Operator
-        </button>
-      </div>
+      <Segmented
+        label="Account type"
+        className="mb-8"
+        value={role}
+        onChange={v => setRole(v as 'customer' | 'operator')}
+        options={[
+          { value: 'customer', label: 'Traveler' },
+          { value: 'operator', label: 'Charter operator' },
+        ]}
+      />
 
-      {error && (
-        <div className="rounded-lg bg-brand-error/10 border border-brand-error/30 px-4 py-3 text-sm text-brand-error mb-6">
-          {error}
-        </div>
-      )}
+      {error && <Notice tone="danger" className="mb-6">{error}</Notice>}
 
       <form onSubmit={handleSubmit} className="space-y-5">
-        <Input name="name" label="Full Name" placeholder="John Doe" required />
-        <Input name="email" label="Email" type="email" placeholder="you@example.com" required />
-        <Input name="phone" label="Phone Number" type="tel" placeholder="+1 (555) 123-4567" />
-        <Input name="password" label="Password" type="password" placeholder="Min. 8 characters" required minLength={8} />
+        <Input name="name" label="Full name" placeholder="John Doe" required autoComplete="name" />
+        <Input name="email" label="Email" type="email" placeholder="you@example.com" required autoComplete="email" />
+        <Input name="phone" label="Phone number" type="tel" placeholder="+1 (555) 123-4567" autoComplete="tel" />
+        <Input name="password" label="Password" type="password" placeholder="At least 8 characters" required minLength={8} autoComplete="new-password" />
         {role === 'operator' && (
-          <Input name="companyName" label="Company Name" placeholder="Your charter company" required />
+          <Input name="companyName" label="Company name" placeholder="Your charter company" required />
         )}
-        <Button type="submit" disabled={loading} className="w-full" size="lg">
-          {loading ? 'Creating account...' : 'Create Account'}
+        <Button type="submit" disabled={loading} block>
+          {loading ? 'Creating account…' : 'Create account'}
         </Button>
       </form>
 
-      <p className="mt-6 text-center text-sm text-brand-muted">
+      <p className="mt-6 text-center text-body text-ink-muted">
         Already have an account?{' '}
-        <Link href="/login" className="text-brand-gold hover:underline">Sign in</Link>
+        <Link href="/login" className="inline-flex min-h-11 items-center text-brass-ink underline underline-offset-4">Sign in</Link>
       </p>
     </div>
   );
@@ -117,7 +104,7 @@ function RegisterForm() {
 
 export default function RegisterPage() {
   return (
-    <Suspense fallback={<div className="text-brand-muted text-center">Loading...</div>}>
+    <Suspense fallback={<div role="status" className="text-ink-muted text-center">Loading…</div>}>
       <RegisterForm />
     </Suspense>
   );

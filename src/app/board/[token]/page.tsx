@@ -21,9 +21,9 @@ export default async function SharedBoardPage({ params }: { params: Promise<{ to
   return (
     <main className="flex-1 mx-auto max-w-7xl w-full px-6 py-10">
       <div className="mb-8">
-        <p className="text-brand-muted text-sm">{company}</p>
-        <h1 className="font-display text-3xl text-brand-cream">Company Board</h1>
-        <p className="text-brand-muted text-xs mt-2">Internal use only. Contains passenger contact details.</p>
+        <p className="text-ink-muted text-sm">{company}</p>
+        <h1 className="font-display text-3xl text-ink">Company Board</h1>
+        <p className="text-ink-muted text-xs mt-2">Internal use only. Contains passenger contact details.</p>
       </div>
       <CompanyBoard source={`/api/board/${token}`} linkTrips={false} />
     </main>

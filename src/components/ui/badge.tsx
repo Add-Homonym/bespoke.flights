@@ -1,11 +1,15 @@
+import type { ReactNode } from 'react';
+import { StatusBadge, type StatusVariant } from './status-badge';
+
 type BadgeVariant = 'default' | 'success' | 'warning' | 'error' | 'gold';
 
-const variants: Record<BadgeVariant, string> = {
-  default: 'bg-brand-slate text-brand-muted',
-  success: 'bg-brand-success/10 text-brand-success',
-  warning: 'bg-brand-warning/10 text-brand-warning',
-  error: 'bg-brand-error/10 text-brand-error',
-  gold: 'bg-brand-gold/10 text-brand-gold',
+// Legacy variant names used by the operator and admin pages.
+const map: Record<BadgeVariant, StatusVariant> = {
+  default: 'neutral',
+  success: 'confirmed',
+  warning: 'warning',
+  error: 'danger',
+  gold: 'neutral',
 };
 
 export function Badge({
@@ -14,12 +18,8 @@ export function Badge({
   className = '',
 }: {
   variant?: BadgeVariant;
-  children: React.ReactNode;
+  children: ReactNode;
   className?: string;
 }) {
-  return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${variants[variant]} ${className}`}>
-      {children}
-    </span>
-  );
+  return <StatusBadge variant={map[variant]} className={className}>{children}</StatusBadge>;
 }

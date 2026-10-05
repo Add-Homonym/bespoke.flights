@@ -221,3 +221,16 @@ export function searchAirports(query: string): Airport[] {
     a.city.toLowerCase().includes(q)
   ).slice(0, 8);
 }
+
+/** Resolve an ICAO or IATA code (any case) to its airport, if known. */
+export function findAirport(code: string): Airport | undefined {
+  const c = code.trim().toUpperCase();
+  if (!c) return undefined;
+  return AIRPORTS.find(a => a.icao === c || a.iata === c);
+}
+
+/** 'Honolulu · HNL'. Falls back to the code as given when the airport is unknown. */
+export function airportLabel(code: string): string {
+  const a = findAirport(code);
+  return a ? `${a.city} · ${a.iata}` : code;
+}

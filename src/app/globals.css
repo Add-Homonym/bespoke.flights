@@ -1,37 +1,231 @@
 @import "tailwindcss";
 
+/*
+ * "Charter" design system tokens.
+ * Light is the default; dark follows prefers-color-scheme. Set
+ * data-theme="light" or data-theme="dark" on <html> to override the system.
+ */
+:root, [data-theme="light"] {
+  --surface: #f7f4ee;
+  --surface-raised: #fffdf9;
+  --surface-sunken: #eee9df;
+  --night: #101b24;
+  --ink: #16181b;
+  --ink-muted: #5f5b54;
+  --ink-subtle: #6f6a62;
+  --on-ink: #f7f4ee;
+  --on-night: #f2ede4;
+  --on-night-muted: #c8c2b8;
+  --hairline: #ddd6ca;
+  --border-control: #857e72;
+  --brass: #b08d55;
+  --brass-ink: #7a5b28;
+  --on-brass: #16181b;
+  --focus: #7a5b28;
+  --confirmed: #1d5f73;
+  --confirmed-tint: #e2edef;
+  --warning: #855a0e;
+  --warning-tint: #f5ead3;
+  --danger: #a3402b;
+  --danger-tint: #f6e3dd;
+  --ds-shadow-raised: 0 1px 2px rgba(22,24,27,0.04), 0 8px 24px rgba(22,24,27,0.06);
+  --ds-shadow-float: 0 12px 40px rgba(22,24,27,0.14);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --surface: #0e1114;
+    --surface-raised: #171b20;
+    --surface-sunken: #090b0d;
+    --night: #16222c;
+    --ink: #f2ede4;
+    --ink-muted: #a8a299;
+    --ink-subtle: #8e887f;
+    --on-ink: #0e1114;
+    --on-night: #f2ede4;
+    --on-night-muted: #c8c2b8;
+    --hairline: #2a2f36;
+    --border-control: #6e6960;
+    --brass: #c9a66b;
+    --brass-ink: #d4b47a;
+  --on-brass: #0e1114;
+    --focus: #d4b47a;
+    --confirmed: #7fbccc;
+    --confirmed-tint: #122a31;
+    --warning: #deb05a;
+    --warning-tint: #2c2412;
+    --danger: #ec9580;
+    --danger-tint: #2f1b16;
+    --ds-shadow-raised: 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.35);
+    --ds-shadow-float: 0 12px 40px rgba(0,0,0,0.55);
+  }
+}
+[data-theme="dark"] {
+  --surface: #0e1114;
+  --surface-raised: #171b20;
+  --surface-sunken: #090b0d;
+  --night: #16222c;
+  --ink: #f2ede4;
+  --ink-muted: #a8a299;
+  --ink-subtle: #8e887f;
+  --on-ink: #0e1114;
+  --on-night: #f2ede4;
+  --on-night-muted: #c8c2b8;
+  --hairline: #2a2f36;
+  --border-control: #6e6960;
+  --brass: #c9a66b;
+  --brass-ink: #d4b47a;
+  --on-brass: #0e1114;
+  --focus: #d4b47a;
+  --confirmed: #7fbccc;
+  --confirmed-tint: #122a31;
+  --warning: #deb05a;
+  --warning-tint: #2c2412;
+  --danger: #ec9580;
+  --danger-tint: #2f1b16;
+  --ds-shadow-raised: 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.35);
+  --ds-shadow-float: 0 12px 40px rgba(0,0,0,0.55);
+}
+
 @theme inline {
-  --color-brand-gold: #C9A84C;
-  --color-brand-cream: #F5F0E8;
-  --color-brand-navy: #0A1628;
-  --color-brand-dark: #060D18;
-  --color-brand-slate: #1A2332;
-  --color-brand-accent: #D4AF37;
-  --color-brand-muted: #8A9BB5;
-  --color-brand-border: #1E2D3D;
-  --color-brand-card: #0E1A2B;
-  --color-brand-success: #34D399;
-  --color-brand-error: #F87171;
-  --color-brand-warning: #FBBF24;
-  --font-sans: var(--font-inter);
-  --font-display: var(--font-playfair);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-night: var(--night);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-subtle: var(--ink-subtle);
+  --color-on-ink: var(--on-ink);
+  --color-on-night: var(--on-night);
+  --color-on-night-muted: var(--on-night-muted);
+  --color-hairline: var(--hairline);
+  --color-border-control: var(--border-control);
+  --color-brass: var(--brass);
+  --color-brass-ink: var(--brass-ink);
+  --color-on-brass: var(--on-brass);
+  --color-focus: var(--focus);
+  --color-confirmed: var(--confirmed);
+  --color-confirmed-tint: var(--confirmed-tint);
+  --color-warning: var(--warning);
+  --color-warning-tint: var(--warning-tint);
+  --color-danger: var(--danger);
+  --color-danger-tint: var(--danger-tint);
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+  --radius-pill: 999px;
+  --shadow-raised: var(--ds-shadow-raised);
+  --shadow-float: var(--ds-shadow-float);
+  --font-display: var(--font-instrument-serif), "Iowan Old Style", Georgia, serif;
+  --font-sans: var(--font-hanken-grotesk), -apple-system, "Helvetica Neue", sans-serif;
+}
+
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { color-scheme: dark; }
+}
+[data-theme="dark"] { color-scheme: dark; }
+
+/* Type scale */
+@utility text-display-xl {
+  font-family: var(--font-display);
+  font-size: 56px;
+  line-height: 60px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+@utility text-display {
+  font-family: var(--font-display);
+  font-size: 36px;
+  line-height: 40px;
+  font-weight: 400;
+}
+@utility text-title {
+  font-family: var(--font-display);
+  font-size: 24px;
+  line-height: 30px;
+  font-weight: 400;
+}
+@utility text-heading {
+  font-family: var(--font-sans);
+  font-size: 17px;
+  line-height: 24px;
+  font-weight: 600;
+}
+@utility text-body {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 400;
+}
+@utility text-label {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+@utility text-overline {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+@utility text-figure {
+  font-family: var(--font-sans);
+  font-size: 28px;
+  line-height: 32px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
 }
 
 body {
-  background: var(--color-brand-dark);
-  color: var(--color-brand-cream);
-  font-family: var(--font-sans), system-ui, sans-serif;
+  background: var(--surface);
+  color: var(--ink);
   -webkit-font-smoothing: antialiased;
 }
 
-input[type="date"]::-webkit-calendar-picker-indicator {
-  filter: invert(0.8);
+/* Focus ring on every interactive element. */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Native date/time pickers follow the theme through color-scheme. */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Printed pages (trip sheets): white paper, black ink. */
 @media print {
-  body {
-    background: #fff;
-    color: #000;
+  :root, [data-theme="dark"] {
+    --surface: #fff;
+    --surface-raised: #fff;
+    --surface-sunken: #fff;
+    --ink: #000;
+    --ink-muted: #333;
+    --ink-subtle: #333;
+    --hairline: #999;
+    --brass-ink: #000;
+    --danger: #000;
+    --danger-tint: #fff;
   }
 }

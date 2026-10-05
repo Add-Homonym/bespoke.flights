@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Plus } from 'lucide-react';
+import { Notice } from '@/components/ui/notice';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { AirportInput } from '@/components/ui/airport-input';
+import { RouteField } from '@/components/ui/route-field';
 import { AccountStep } from '@/components/booking/account-step';
 import { TripDetails } from '@/components/booking/trip-details';
 import { fromDraftLegs } from '@/lib/trip-format';
@@ -68,6 +70,19 @@ export function MultiLegForm({
     });
   };
 
+  // Swap a leg's endpoints. The next leg keeps departing from where this one lands.
+  const swapLeg = (index: number) => {
+    setLegs(prev => {
+      const updated = [...prev];
+      const { originCode, destCode } = updated[index];
+      updated[index] = { ...updated[index], originCode: destCode, destCode: originCode };
+      if (index < updated.length - 1) {
+        updated[index + 1] = { ...updated[index + 1], originCode: originCode };
+      }
+      return updated;
+    });
+  };
+
   const addLeg = () => {
     const lastLeg = legs[legs.length - 1];
     setLegs(prev => [...prev, { ...emptyLeg(), originCode: lastLeg.destCode }]);
@@ -91,7 +106,7 @@ export function MultiLegForm({
 
     const payload = draftToRequest({ legs, passengerCount, notes });
     if (!bookingRequestSchema.safeParse(payload).success) {
-      setError('Please choose an origin, destination and date for every leg.');
+      setError('Choose an origin, destination and date for every leg.');
       return;
     }
 
@@ -117,7 +132,7 @@ export function MultiLegForm({
 
       if (!res.ok) {
         const data = await res.json();
-        setError(typeof data.error === 'string' ? data.error : 'Please fill in all required fields');
+        setError(typeof data.error === 'string' ? data.error : 'Fill in all required fields.');
         return;
       }
 
@@ -125,7 +140,7 @@ export function MultiLegForm({
       router.push(`/requests/${id}?submitted=1`);
       router.refresh();
     } catch {
-      setError('Something went wrong');
+      setError('Something went wrong. Try again.');
     } finally {
       setLoading(false);
     }
@@ -143,89 +158,44 @@ export function MultiLegForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8">
+    <form onSubmit={handleSubmit} className="space-y-8 pb-4">
       {restored && (
-        <div className="flex items-center justify-between rounded-lg border border-brand-border bg-brand-navy/40 px-4 py-3 text-sm">
-          <span className="text-brand-cream">We saved the trip you started.</span>
-          <button type="button" onClick={startOver} className="text-brand-muted hover:text-brand-cream cursor-pointer">
-            Start over
-          </button>
+        <div role="status" className="flex items-center justify-between gap-3 rounded-md border border-hairline bg-surface-sunken px-4 py-3 text-body">
+          <span className="text-ink">Your unfinished trip is restored.</span>
+          <Button type="button" variant="quiet" size="sm" onClick={startOver}>Start over</Button>
         </div>
       )}
 
-      {error && (
-        <div className="rounded-lg bg-brand-error/10 border border-brand-error/30 px-4 py-3 text-sm text-brand-error">
-          {error}
-        </div>
-      )}
-
-      {/* Passenger count */}
-      <div className="flex items-end gap-6">
-        <div className="w-32">
-          <Input
-            label="Passengers"
-            type="number"
-            min={1}
-            max={19}
-            value={passengerCount}
-            onChange={e => setPassengerCount(Number(e.target.value))}
-          />
-        </div>
-        <div className="flex-1">
-          <Input
-            label="Special Requests"
-            placeholder="Pets, luggage, catering preferences..."
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-          />
-        </div>
-      </div>
+      {error && <Notice tone="danger">{error}</Notice>}
 
       {/* Flight legs */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-brand-cream uppercase tracking-wider">Flight Legs</h3>
-          <span className="text-xs text-brand-muted">{legs.length} leg{legs.length !== 1 ? 's' : ''}</span>
+      <section aria-labelledby="legs-heading" className="space-y-4">
+        <div className="flex items-baseline justify-between">
+          <h2 id="legs-heading" className="text-title text-ink">Your route</h2>
+          <span className="text-label text-ink-muted">{legs.length} {legs.length === 1 ? 'leg' : 'legs'}</span>
         </div>
 
         {legs.map((leg, i) => (
-          <div key={i} className="rounded-xl border border-brand-border bg-brand-navy/30 p-5">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <span className="w-7 h-7 rounded-full bg-brand-gold/20 flex items-center justify-center text-brand-gold text-xs font-bold">
-                  {i + 1}
-                </span>
-                <span className="text-sm font-medium text-brand-cream">
-                  Leg {i + 1}
-                </span>
-              </div>
+          <div key={i} className="space-y-4 rounded-lg border border-hairline bg-surface-sunken p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-heading text-ink">Leg {i + 1}</h3>
               {legs.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => removeLeg(i)}
-                  className="text-xs text-brand-muted hover:text-brand-error transition-colors cursor-pointer"
-                >
-                  Remove
-                </button>
+                <Button type="button" variant="quiet" size="sm" onClick={() => removeLeg(i)} aria-label={`Remove leg ${i + 1}`}>
+                  Remove leg
+                </Button>
               )}
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <AirportInput
-                label="From"
-                placeholder="Search airport..."
-                value={leg.originCode}
-                onChange={val => updateLeg(i, 'originCode', val)}
-                required
-                readOnly={i > 0}
-              />
-              <AirportInput
-                label="To"
-                placeholder="Search airport..."
-                value={leg.destCode}
-                onChange={val => updateLeg(i, 'destCode', val)}
-                required
-              />
+            <RouteField
+              origin={leg.originCode}
+              destination={leg.destCode}
+              onOriginChange={val => updateLeg(i, 'originCode', val)}
+              onDestinationChange={val => updateLeg(i, 'destCode', val)}
+              onSwap={() => swapLeg(i)}
+              originLocked={i > 0}
+            />
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Input
                 label="Date"
                 type="date"
@@ -234,47 +204,59 @@ export function MultiLegForm({
                 required
               />
               <Input
-                label="Preferred Time"
+                label="Departure time (local)"
                 type="time"
                 value={leg.departureTime}
                 onChange={e => updateLeg(i, 'departureTime', e.target.value)}
               />
             </div>
-
-            {/* Route chain indicator */}
-            {i < legs.length - 1 && (
-              <div className="flex justify-center mt-4 -mb-8 relative z-10">
-                <div className="w-px h-6 bg-brand-gold/30" />
-              </div>
-            )}
           </div>
         ))}
 
-        <button
-          type="button"
-          onClick={addLeg}
-          className="w-full rounded-lg border border-dashed border-brand-border py-3 text-sm text-brand-muted hover:text-brand-gold hover:border-brand-gold/50 transition-colors cursor-pointer"
-        >
-          + Add Another Leg
-        </button>
-      </div>
+        <Button type="button" variant="secondary" block onClick={addLeg}>
+          <Plus size={24} strokeWidth={1.5} aria-hidden="true" />
+          Add a leg
+        </Button>
+      </section>
+
+      {/* Passengers and notes */}
+      <section aria-labelledby="guests-heading" className="space-y-4">
+        <h2 id="guests-heading" className="text-title text-ink">Guests</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[8rem_1fr]">
+          <Input
+            label="Guests"
+            type="number"
+            min={1}
+            max={19}
+            value={passengerCount}
+            onChange={e => setPassengerCount(Number(e.target.value))}
+          />
+          <Input
+            label="Special requests"
+            placeholder="Pets, luggage, catering"
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+          />
+        </div>
+      </section>
 
       {/* Trip summary: every detail entered so far */}
       {draftHasContent({ legs, passengerCount, notes }) && (
-        <div className="rounded-lg bg-brand-navy/50 border border-brand-border px-5 py-4">
+        <div className="rounded-lg border border-hairline bg-surface-raised px-6 py-4 shadow-raised">
           <TripDetails title="Trip summary" legs={fromDraftLegs(legs)} passengerCount={passengerCount} notes={notes} />
         </div>
       )}
 
-      <Button type="submit" disabled={loading} size="lg" className="w-full">
-        {loading ? 'Submitting Request...' : viewerRole === null ? 'Continue' : 'Submit Flight Request'}
-      </Button>
-      {viewerRole === null && (
-        <p className="text-center text-xs text-brand-muted">
-          Next: create an account or sign in so operators can send you quotes.
-        </p>
-      )}
+      <div className="space-y-3">
+        <Button type="submit" disabled={loading} block>
+          {loading ? 'Requesting quotes…' : viewerRole === null ? 'Continue to account' : 'Request quotes'}
+        </Button>
+        {viewerRole === null && (
+          <p className="text-center text-label text-ink-muted">
+            Next: create an account or sign in so operators can send you quotes.
+          </p>
+        )}
+      </div>
     </form>
   );
 }
-

@@ -22,8 +22,8 @@ export default async function AdminDashboardPage() {
 
   return (
     <div>
-      <h1 className="font-display text-3xl text-brand-cream mb-2">Admin Dashboard</h1>
-      <p className="text-brand-muted mb-10">System overview and management.</p>
+      <h1 className="font-display text-3xl text-ink mb-2">Admin Dashboard</h1>
+      <p className="text-ink-muted mb-10">System overview and management.</p>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
         {[
@@ -38,16 +38,16 @@ export default async function AdminDashboardPage() {
         ].map(stat => (
           <Link key={stat.label} href={stat.href}>
             <Card hover>
-              <p className="text-brand-muted text-xs uppercase tracking-wider mb-1">{stat.label}</p>
-              <p className="text-brand-cream font-display text-3xl">{stat.value}</p>
-              {stat.sub && <p className="text-brand-warning text-xs mt-1">{stat.sub}</p>}
+              <p className="text-ink-muted text-xs uppercase tracking-wider mb-1">{stat.label}</p>
+              <p className="text-ink font-display text-3xl">{stat.value}</p>
+              {stat.sub && <p className="text-warning text-xs mt-1">{stat.sub}</p>}
             </Card>
           </Link>
         ))}
       </div>
 
       {/* Discovery Pipeline */}
-      <h2 className="font-display text-xl text-brand-cream mb-4">Operator Discovery Pipeline</h2>
+      <h2 className="font-display text-xl text-ink mb-4">Operator Discovery Pipeline</h2>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
         {[
           { label: 'Discovered (FAA)', value: discoveredTotal, href: '/admin/discoveries' },
@@ -57,9 +57,9 @@ export default async function AdminDashboardPage() {
         ].map(stat => (
           <Link key={stat.label} href={stat.href}>
             <Card hover>
-              <p className="text-brand-muted text-xs uppercase tracking-wider mb-1">{stat.label}</p>
-              <p className="text-brand-cream font-display text-3xl">{stat.value}</p>
-              {stat.sub && <p className="text-brand-gold text-xs mt-1">{stat.sub}</p>}
+              <p className="text-ink-muted text-xs uppercase tracking-wider mb-1">{stat.label}</p>
+              <p className="text-ink font-display text-3xl">{stat.value}</p>
+              {stat.sub && <p className="text-brass-ink text-xs mt-1">{stat.sub}</p>}
             </Card>
           </Link>
         ))}

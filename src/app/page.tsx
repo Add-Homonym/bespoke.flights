@@ -1,121 +1,87 @@
-import Link from 'next/link';
+import { cookies } from 'next/headers';
+import { CalendarCheck, FileText, Plane } from 'lucide-react';
 import { Header } from '@/components/layout/header';
+import { MultiLegForm } from '@/components/booking/multi-leg-form';
+import { ButtonLink } from '@/components/ui/button';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
+import { DRAFT_COOKIE, parseDraft } from '@/lib/bookings/draft';
 
-async function getUser() {
-  const session = await getSession();
-  if (!session) return null;
-  const db = getDb();
-  const user = await db.one<{ name: string; role: string }>('SELECT name, role FROM users WHERE id = ?', [session.userId]);
-  return user || null;
-}
+const steps = [
+  { icon: Plane, title: 'Build your itinerary', desc: 'Add every leg of the trip in one request: A to B, B to C, and beyond.' },
+  { icon: FileText, title: 'Compare quotes', desc: 'Certified charter operators quote your trip. Each price is all-in, with the operator named.' },
+  { icon: CalendarCheck, title: 'Book and pay on screen', desc: 'Book the jet you choose, pay in the app, and keep your receipt with the trip.' },
+];
+
+const operatorPoints = [
+  'See booking demand as it arrives',
+  'Quote with your fleet details',
+  'Track which quotes are accepted',
+  'Share booked trips with your team',
+];
 
 export default async function HomePage() {
-  const user = await getUser();
+  const session = await getSession();
+  const user = session
+    ? (await getDb().one<{ name: string; role: string }>('SELECT name, role FROM users WHERE id = ?', [session.userId])) ?? null
+    : null;
+  const draft = parseDraft((await cookies()).get(DRAFT_COOKIE)?.value);
 
   return (
     <>
       <Header user={user} />
       <main className="flex-1">
-        {/* Hero */}
-        <section className="relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-b from-brand-navy/50 via-brand-dark to-brand-dark" />
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[800px] rounded-full bg-brand-gold/5 blur-3xl" />
-          <div className="relative mx-auto max-w-7xl px-6 pt-24 pb-32 text-center">
-            <p className="text-brand-gold text-sm font-semibold tracking-widest uppercase mb-6">Private Aviation, Redefined</p>
-            <h1 className="font-display text-5xl md:text-7xl text-brand-cream leading-tight mb-8">
-              Fly on <span className="text-brand-gold italic">Your</span> Terms
+        {/* Hero: the booking form is the first thing on the page. */}
+        <section className="border-b border-hairline bg-night text-on-night">
+          <div className="mx-auto max-w-2xl px-4 pb-8 pt-12 sm:px-6">
+            <p className="text-overline text-on-night-muted mb-4">Private charter</p>
+            <h1 className="text-display text-on-night sm:text-display-xl">
+              Fly on <em className="italic">your</em> terms.
             </h1>
-            <p className="text-brand-muted text-lg md:text-xl max-w-2xl mx-auto mb-12 leading-relaxed">
-              Build multi-leg itineraries, receive competitive quotes from certified charter operators, and book your perfect flight — all in one place.
+            <p className="mt-4 text-body text-on-night-muted">
+              Add your route, compare all-in quotes from certified operators, and book it on this screen.
             </p>
-            <div className="flex items-center justify-center gap-4">
-              <Link
-                href="/book"
-                className="rounded-lg bg-brand-gold px-8 py-3.5 text-base font-semibold text-brand-dark hover:bg-brand-accent transition-colors"
-              >
-                Start Booking
-              </Link>
-              <Link
-                href="/register?role=operator"
-                className="rounded-lg border border-brand-border px-8 py-3.5 text-base font-medium text-brand-cream hover:border-brand-gold/50 hover:bg-brand-slate transition-colors"
-              >
-                Join as Operator
-              </Link>
-            </div>
           </div>
+        </section>
+
+        <section aria-label="Plan your trip" className="mx-auto max-w-2xl px-4 pt-8 pb-[var(--space-7)] sm:px-6">
+          <MultiLegForm initialDraft={draft} viewerRole={session?.role ?? null} />
         </section>
 
         {/* How it works */}
-        <section className="mx-auto max-w-7xl px-6 py-24">
-          <h2 className="font-display text-3xl text-center text-brand-cream mb-16">How It Works</h2>
-          <div className="grid md:grid-cols-3 gap-8">
-            {[
-              { step: '01', title: 'Build Your Itinerary', desc: 'Create multi-leg flight plans. Fly from A to B, B to C, and beyond — all in a single request.' },
-              { step: '02', title: 'Receive Quotes', desc: 'Certified charter operators compete to offer you the best aircraft and pricing for your trip.' },
-              { step: '03', title: 'Book & Fly', desc: 'Compare quotes side-by-side, accept the best offer, and prepare for departure.' },
-            ].map(item => (
-              <div key={item.step} className="rounded-xl border border-brand-border bg-brand-card p-8 hover:border-brand-gold/30 transition-colors">
-                <span className="text-brand-gold font-display text-4xl">{item.step}</span>
-                <h3 className="text-brand-cream text-lg font-semibold mt-4 mb-3">{item.title}</h3>
-                <p className="text-brand-muted text-sm leading-relaxed">{item.desc}</p>
-              </div>
+        <section className="mx-auto max-w-3xl px-4 py-[var(--space-7)] sm:px-6">
+          <h2 className="text-display mb-8 text-ink">How it works</h2>
+          <ol className="grid gap-4 md:grid-cols-3">
+            {steps.map(({ icon: Icon, title, desc }) => (
+              <li key={title} className="rounded-lg border border-hairline bg-surface-raised p-6 shadow-raised">
+                <Icon size={24} strokeWidth={1.5} aria-hidden="true" className="text-ink" />
+                <h3 className="mt-4 text-heading text-ink">{title}</h3>
+                <p className="mt-2 text-body text-ink-muted">{desc}</p>
+              </li>
             ))}
-          </div>
+          </ol>
         </section>
 
-        {/* For Operators */}
-        <section className="border-t border-brand-border">
-          <div className="mx-auto max-w-7xl px-6 py-24">
-            <div className="grid md:grid-cols-2 gap-16 items-center">
-              <div>
-                <p className="text-brand-gold text-sm font-semibold tracking-widest uppercase mb-4">For Operators</p>
-                <h2 className="font-display text-3xl text-brand-cream mb-6">Fill Empty Legs & Grow Your Business</h2>
-                <p className="text-brand-muted leading-relaxed mb-8">
-                  Access a stream of qualified charter requests. See passenger counts, routes, and dates — then submit competitive quotes to win new clients. No listing fees, just results.
-                </p>
-                <Link
-                  href="/register?role=operator"
-                  className="inline-block rounded-lg border border-brand-gold text-brand-gold px-6 py-3 text-sm font-semibold hover:bg-brand-gold hover:text-brand-dark transition-colors"
-                >
-                  Register as an Operator
-                </Link>
-              </div>
-              <div className="rounded-xl border border-brand-border bg-brand-card p-8 space-y-4">
-                {['View real-time booking demand', 'Submit quotes with your fleet details', 'Track quote acceptance rates', 'Build your reputation with clients'].map(item => (
-                  <div key={item} className="flex items-start gap-3">
-                    <div className="w-5 h-5 rounded-full bg-brand-gold/20 flex items-center justify-center mt-0.5 shrink-0">
-                      <div className="w-2 h-2 rounded-full bg-brand-gold" />
-                    </div>
-                    <span className="text-brand-cream text-sm">{item}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* CTA */}
-        <section className="border-t border-brand-border bg-brand-navy/30">
-          <div className="mx-auto max-w-3xl px-6 py-24 text-center">
-            <h2 className="font-display text-3xl text-brand-cream mb-6">Ready to Elevate Your Travel?</h2>
-            <p className="text-brand-muted text-lg mb-10">Build your first itinerary in minutes. No account needed until you request quotes.</p>
-            <Link
-              href="/book"
-              className="rounded-lg bg-brand-gold px-10 py-4 text-base font-semibold text-brand-dark hover:bg-brand-accent transition-colors"
-            >
-              Start Your Itinerary
-            </Link>
+        {/* For operators */}
+        <section className="border-t border-hairline bg-surface-sunken">
+          <div className="mx-auto max-w-3xl px-4 py-[var(--space-7)] sm:px-6">
+            <p className="text-overline text-ink-muted mb-2">For operators</p>
+            <h2 className="text-display text-ink">Fill empty legs. Grow your business.</h2>
+            <p className="mt-4 max-w-xl text-body text-ink-muted">
+              Access a stream of qualified charter requests with passenger counts, routes and dates, then quote to win new clients. There are no listing fees.
+            </p>
+            <ul className="mt-6 grid gap-2 text-body text-ink">
+              {operatorPoints.map(point => <li key={point}>{point}</li>)}
+            </ul>
+            <ButtonLink href="/register?role=operator" variant="secondary" className="mt-8">Register as an operator</ButtonLink>
           </div>
         </section>
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-brand-border py-8">
-        <div className="mx-auto max-w-7xl px-6 flex items-center justify-between">
-          <span className="font-display text-sm text-brand-muted">bespoke<span className="text-brand-gold">.flights</span></span>
-          <span className="text-xs text-brand-muted/50">&copy; {new Date().getFullYear()} All rights reserved.</span>
+      <footer className="border-t border-hairline py-8">
+        <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 sm:px-6">
+          <span className="text-title text-ink-muted">bespoke.flights</span>
+          <span className="text-label text-ink-muted">&copy; {new Date().getFullYear()} All rights reserved.</span>
         </div>
       </footer>
     </>

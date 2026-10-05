@@ -5,16 +5,9 @@ import { legsByRequest } from '@/lib/db/queries';
 import { Card } from '@/components/ui/card';
 import { TripDetails } from '@/components/booking/trip-details';
 import { fromDbLegs } from '@/lib/trip-format';
-import { Badge } from '@/components/ui/badge';
+import { Plane, ClipboardList, Settings } from 'lucide-react';
+import { RequestStatusBadge } from '@/components/booking/request-status';
 import type { BookingRequest, User } from '@/lib/types';
-
-const statusBadge: Record<string, 'default' | 'success' | 'warning' | 'error' | 'gold'> = {
-  open: 'gold',
-  quoted: 'warning',
-  booked: 'success',
-  cancelled: 'error',
-  completed: 'default',
-};
 
 export default async function DashboardPage() {
   const session = await getSession();
@@ -25,61 +18,57 @@ export default async function DashboardPage() {
 
   const legsByReq = await legsByRequest(db, requests.map(r => r.id));
 
+  const actions = [
+    { href: '/book', icon: Plane, title: 'Request quotes', desc: 'Start a new multi-leg trip' },
+    { href: '/requests', icon: ClipboardList, title: 'My requests', desc: 'See every trip and its quotes' },
+    { href: '/account', icon: Settings, title: 'Account settings', desc: 'Update your profile' },
+  ];
+
   return (
     <div>
-      <div className="mb-10">
-        <h1 className="font-display text-3xl text-brand-cream mb-2">Welcome back, {user.name.split(' ')[0]}</h1>
-        <p className="text-brand-muted">Manage your flight requests and bookings.</p>
+      <div className="mb-8">
+        <h1 className="text-display text-ink">Welcome back, {user.name.split(' ')[0]}</h1>
+        <p className="mt-2 text-body text-ink-muted">Your trips, quotes and receipts.</p>
       </div>
 
       {/* Quick actions */}
-      <div className="grid md:grid-cols-3 gap-4 mb-12">
-        <Link href="/book">
-          <Card hover className="text-center">
-            <div className="text-3xl mb-3">&#9992;</div>
-            <h3 className="text-brand-cream font-semibold mb-1">Book a Flight</h3>
-            <p className="text-brand-muted text-xs">Create a new multi-leg request</p>
-          </Card>
-        </Link>
-        <Link href="/requests">
-          <Card hover className="text-center">
-            <div className="text-3xl mb-3">&#128203;</div>
-            <h3 className="text-brand-cream font-semibold mb-1">My Requests</h3>
-            <p className="text-brand-muted text-xs">View all booking requests</p>
-          </Card>
-        </Link>
-        <Link href="/account">
-          <Card hover className="text-center">
-            <div className="text-3xl mb-3">&#9881;</div>
-            <h3 className="text-brand-cream font-semibold mb-1">Account Settings</h3>
-            <p className="text-brand-muted text-xs">Update your profile info</p>
-          </Card>
-        </Link>
+      <div className="mb-8 grid gap-4 md:grid-cols-3">
+        {actions.map(({ href, icon: Icon, title, desc }) => (
+          <Link key={href} href={href} className="block rounded-lg">
+            <Card hover className="h-full">
+              <Icon size={24} strokeWidth={1.5} aria-hidden="true" className="text-ink" />
+              <h2 className="mt-3 text-heading text-ink">{title}</h2>
+              <p className="text-label text-ink-muted">{desc}</p>
+            </Card>
+          </Link>
+        ))}
       </div>
 
       {/* Recent requests */}
-      <h2 className="font-display text-xl text-brand-cream mb-4">Recent Requests</h2>
+      <h2 className="mb-4 text-title text-ink">Recent requests</h2>
       {requests.length === 0 ? (
         <Card>
-          <p className="text-brand-muted text-center py-8">No flight requests yet. <Link href="/book" className="text-brand-gold hover:underline">Book your first flight</Link></p>
+          <p className="text-body text-ink-muted text-center py-8">No trips yet. <Link href="/book" className="text-brass-ink underline underline-offset-4">Request your first quotes</Link></p>
         </Card>
       ) : (
-        <div className="space-y-3">
+        <ul className="space-y-3">
           {requests.map(req => {
             const legs = legsByReq.get(req.id) ?? [];
             return (
-              <Link key={req.id} href={`/requests/${req.id}`}>
-                <Card hover className="flex items-start justify-between gap-4">
-                  <div>
-                    <TripDetails compact legs={fromDbLegs(legs)} passengerCount={req.passenger_count} notes={req.notes} />
-                    <p className="text-brand-muted/60 text-xs mt-2">Requested {new Date(req.created_at).toLocaleDateString()}</p>
-                  </div>
-                  <Badge variant={statusBadge[req.status]}>{req.status}</Badge>
-                </Card>
-              </Link>
+              <li key={req.id}>
+                <Link href={`/requests/${req.id}`} className="block rounded-lg">
+                  <Card hover className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <TripDetails compact legs={fromDbLegs(legs)} passengerCount={req.passenger_count} notes={req.notes} />
+                      <p className="mt-2 text-label text-ink-muted">Requested {new Date(req.created_at).toLocaleDateString()}</p>
+                    </div>
+                    <RequestStatusBadge status={req.status} />
+                  </Card>
+                </Link>
+              </li>
             );
           })}
-        </div>
+        </ul>
       )}
     </div>
   );

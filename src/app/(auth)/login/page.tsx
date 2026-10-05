@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Notice } from '@/components/ui/notice';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -31,7 +32,7 @@ export default function LoginPage() {
 
       if (!res.ok) {
         const data = await res.json();
-        setError(data.error || 'Login failed');
+        setError(data.error || 'Sign in failed.');
         return;
       }
 
@@ -42,34 +43,30 @@ export default function LoginPage() {
       else router.push('/dashboard');
       router.refresh();
     } catch {
-      setError('Something went wrong');
+      setError('Something went wrong. Try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="rounded-xl border border-brand-border bg-brand-card p-8">
-      <h1 className="font-display text-2xl text-brand-cream mb-2">Welcome Back</h1>
-      <p className="text-brand-muted text-sm mb-8">Sign in to your account</p>
+    <div className="rounded-lg border border-hairline bg-surface-raised p-6 shadow-raised">
+      <h1 className="text-title text-ink mb-2">Sign in</h1>
+      <p className="text-body text-ink-muted mb-6">Welcome back. Your trips and receipts are waiting.</p>
 
-      {error && (
-        <div className="rounded-lg bg-brand-error/10 border border-brand-error/30 px-4 py-3 text-sm text-brand-error mb-6">
-          {error}
-        </div>
-      )}
+      {error && <Notice tone="danger" className="mb-6">{error}</Notice>}
 
       <form onSubmit={handleSubmit} className="space-y-5">
-        <Input name="email" label="Email" type="email" placeholder="you@example.com" required />
-        <Input name="password" label="Password" type="password" placeholder="Min. 8 characters" required />
-        <Button type="submit" disabled={loading} className="w-full" size="lg">
-          {loading ? 'Signing in...' : 'Sign In'}
+        <Input name="email" label="Email" type="email" placeholder="you@example.com" required autoComplete="email" />
+        <Input name="password" label="Password" type="password" placeholder="Your password" required autoComplete="current-password" />
+        <Button type="submit" disabled={loading} block>
+          {loading ? 'Signing in…' : 'Sign in'}
         </Button>
       </form>
 
-      <p className="mt-6 text-center text-sm text-brand-muted">
+      <p className="mt-6 text-center text-body text-ink-muted">
         Don&apos;t have an account?{' '}
-        <Link href="/register" className="text-brand-gold hover:underline">Create one</Link>
+        <Link href="/register" className="inline-flex min-h-11 items-center text-brass-ink underline underline-offset-4">Create one</Link>
       </p>
     </div>
   );

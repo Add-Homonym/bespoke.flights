@@ -2,21 +2,18 @@ import { notFound, redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { Card } from '@/components/ui/card';
-import { formatTripDate, formatTripTime } from '@/lib/trip-format';
-import { Badge } from '@/components/ui/badge';
+import { Notice } from '@/components/ui/notice';
+import { QuoteCard } from '@/components/ui/quote-card';
+import { StatusBadge } from '@/components/ui/status-badge';
+import { TripSummary } from '@/components/ui/trip-summary';
+import { formatDeparture, formatTripDate, formatTripTime } from '@/lib/trip-format';
+import { airportLabel, findAirport } from '@/lib/airports';
 import { QuoteActions } from '@/components/booking/quote-actions';
+import { RequestStatusBadge } from '@/components/booking/request-status';
 import { OutreachStatus } from '@/components/operator/outreach-status';
 import { PaymentStatus } from '@/components/booking/payment-status';
 import { formatMoney, getPaymentsMode } from '@/lib/payments/config';
 import type { BookingRequest, BookingLeg, Quote, Payment } from '@/lib/types';
-
-const statusBadge: Record<string, 'default' | 'success' | 'warning' | 'error' | 'gold'> = {
-  open: 'gold',
-  quoted: 'warning',
-  booked: 'success',
-  cancelled: 'error',
-  completed: 'default',
-};
 
 function isExpired(validUntil: string | null, today: string): boolean {
   return !!validUntil && validUntil < today;
@@ -69,61 +66,51 @@ export default async function RequestDetailPage({
   // Count operators contacted via outreach
   const outreachCount = (await db.one<{ count: number }>('SELECT COUNT(*) as count FROM outreach_log WHERE request_id = ?', [request.id]))!.count;
 
-  const route = legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).join(' → ');
+  const first = legs[0];
+  const last = legs[legs.length - 1];
+  const place = (code: string | undefined) => {
+    const airport = code ? findAirport(code) : undefined;
+    return { code: airport?.iata ?? code ?? '', city: airport?.city ?? '' };
+  };
+  const acceptedQuote = quotes.find(q => q.status === 'accepted');
+  const confirmed = request.status === 'booked' || request.status === 'completed';
+
+  // One "Best value" per list: the lowest price still open to book, when there is a choice.
+  const bookable = quotes.filter(q => q.status === 'pending' && !isExpired(q.valid_until, today));
+  const bestValueId = !acceptedQuote && bookable.length > 1 ? bookable[0].id : null;
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="flex items-start justify-between mb-8">
-        <div>
-          <p className="text-brand-muted text-sm mb-1">Request #{request.id}</p>
-          <h1 className="font-display text-3xl text-brand-cream font-mono tracking-wide">{route}</h1>
-        </div>
-        <Badge variant={statusBadge[request.status]} className="text-base px-4 py-1">{request.status}</Badge>
+    <div className={`mx-auto max-w-3xl ${payment?.status === 'pending' ? 'pb-28' : ''}`}>
+      <div className="mb-6">
+        {confirmed ? (
+          <h1 className="text-display sm:text-display-xl text-ink">Booking confirmed</h1>
+        ) : (
+          <h1 className="text-display text-ink">Your trip</h1>
+        )}
       </div>
 
-      {/* Itinerary */}
-      <Card className="mb-8">
-        <h2 className="text-sm font-semibold text-brand-muted uppercase tracking-wider mb-4">Itinerary</h2>
-        <div className="space-y-4">
-          {legs.map((leg, i) => (
-            <div key={leg.id} className="flex items-center gap-4">
-              <span className="w-7 h-7 rounded-full bg-brand-gold/20 flex items-center justify-center text-brand-gold text-xs font-bold shrink-0">
-                {i + 1}
-              </span>
-              <div className="flex-1 flex items-center justify-between rounded-lg bg-brand-navy/50 px-4 py-3">
-                <div>
-                  <span className="text-brand-cream font-mono">{leg.origin_code}</span>
-                  <span className="text-brand-muted mx-3">&rarr;</span>
-                  <span className="text-brand-cream font-mono">{leg.dest_code}</span>
-                </div>
-                <div className="text-right">
-                  <p className="text-brand-cream text-sm">{formatTripDate(leg.departure_date) || leg.departure_date}</p>
-                  <p className="text-brand-muted text-xs">{formatTripTime(leg.departure_time ?? '') || 'Any time'}</p>
-                </div>
-              </div>
-            </div>
-          ))}
+      {first && last && (
+        <div className="mb-8">
+          <TripSummary
+            status={<RequestStatusBadge status={request.status} />}
+            reference={`Request #${request.id}`}
+            origin={place(first.origin_code)}
+            destination={place(last.dest_code)}
+            depart={formatDeparture(first.departure_date, first.departure_time ?? '') || first.departure_date}
+            guests={request.passenger_count}
+            aircraft={acceptedQuote?.aircraft_type ?? 'To be assigned'}
+          />
         </div>
-        <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-          <dt className="text-brand-muted">Passengers</dt>
-          <dd className="text-brand-cream">{request.passenger_count}</dd>
-          <dt className="text-brand-muted">Special requests</dt>
-          <dd className="text-brand-cream break-words">{request.notes?.trim() || <span className="text-brand-muted/60">None</span>}</dd>
-        </dl>
-      </Card>
+      )}
 
       {submitted === '1' && (
-        <Card className="mb-8 border-brand-success/30">
-          <p className="text-brand-cream text-sm">
-            Your request is submitted. Matching operators have been notified; quotes will appear below as they respond.
-          </p>
-        </Card>
+        <Notice tone="confirmed" className="mb-8">
+          Your request is submitted. Matching operators have been notified, and quotes appear below as they respond.
+        </Notice>
       )}
 
       {checkout === 'canceled' && (!payment || payment.status === 'pending') && (
-        <Card className="mb-8 border-brand-warning/30">
-          <p className="text-brand-cream text-sm">Checkout was canceled. No payment was taken.</p>
-        </Card>
+        <Notice tone="warning" className="mb-8">Checkout was canceled. No payment was taken.</Notice>
       )}
 
       {payment && (
@@ -143,67 +130,91 @@ export default async function RequestDetailPage({
         />
       )}
 
+      {/* Itinerary */}
+      <Card className="mb-8">
+        <h2 className="text-title text-ink mb-4">Itinerary</h2>
+        <ol className="space-y-3">
+          {legs.map((leg, i) => (
+            <li key={leg.id} className="rounded-md bg-surface-sunken px-4 py-3">
+              <p className="text-label text-ink-muted">Leg {i + 1}</p>
+              <p className="text-heading text-ink">
+                {airportLabel(leg.origin_code)} <span aria-label="to">&rarr;</span> {airportLabel(leg.dest_code)}
+              </p>
+              <p className="text-body text-ink-muted">
+                {formatTripDate(leg.departure_date) || leg.departure_date} · {formatTripTime(leg.departure_time ?? '') || 'Any time'}
+              </p>
+            </li>
+          ))}
+        </ol>
+        <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-body">
+          <dt className="text-ink-muted">Guests</dt>
+          <dd className="text-ink">{request.passenger_count}</dd>
+          <dt className="text-ink-muted">Special requests</dt>
+          <dd className="text-ink break-words">{request.notes?.trim() || <span className="text-ink-subtle">None</span>}</dd>
+        </dl>
+      </Card>
+
       {/* Outreach Status — shows which operators were auto-contacted */}
       {outreachCount > 0 && <OutreachStatus requestId={request.id} />}
 
       {/* Quotes */}
-      <h2 className="font-display text-xl text-brand-cream mb-4">
-        Quotes {quotes.length > 0 && <span className="text-brand-muted text-sm font-normal">({quotes.length})</span>}
-      </h2>
+      <section aria-labelledby="quotes-heading">
+        <h2 id="quotes-heading" className="text-title text-ink">
+          Quotes {quotes.length > 0 && <span className="text-ink-muted tabular-nums">({quotes.length})</span>}
+        </h2>
+        <p className="mt-1 mb-4 text-label text-ink-muted">Part 135 — certified for charter. Every price is all-in.</p>
 
-      {quotes.length === 0 ? (
-        <Card>
-          <p className="text-brand-muted text-center py-8">
-            {outreachCount > 0
-              ? `${outreachCount} operators have been contacted. Quotes will appear here as they respond.`
-              : 'No quotes yet. Operators are reviewing your request.'
-            }
-          </p>
-        </Card>
-      ) : (
-        <div className="grid gap-4">
-          {quotes.map(quote => (
-            <Card key={quote.id} className={quote.status === 'accepted' ? 'border-brand-success/50' : ''}>
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="text-brand-cream font-semibold text-lg">{quote.company_name}</h3>
-                  {quote.aircraft_type && (
-                    <p className="text-brand-muted text-sm mt-1">
-                      {quote.aircraft_type}
-                      {quote.tail_number && ` (${quote.tail_number})`}
-                      {quote.aircraft_capacity && ` · ${quote.aircraft_capacity} seats`}
-                      {quote.aircraft_year && ` · ${quote.aircraft_year}`}
-                    </p>
+        {quotes.length === 0 ? (
+          <Card>
+            <p className="text-body text-ink-muted text-center py-8">
+              {outreachCount > 0
+                ? `${outreachCount} operators have been contacted. Quotes appear here as they respond.`
+                : 'No quotes yet. Operators are reviewing your request.'
+              }
+            </p>
+          </Card>
+        ) : (
+          <div className="grid gap-4">
+            {quotes.map(quote => {
+              const expired = quote.status === 'pending' && isExpired(quote.valid_until, today);
+              const canBook = quote.status === 'pending' && ['open', 'quoted'].includes(request.status) && !paymentInFlight && session.role === 'customer';
+              return (
+                <QuoteCard
+                  key={quote.id}
+                  selected={quote.status === 'accepted'}
+                  aircraft={[quote.aircraft_type ?? 'Aircraft to be confirmed', quote.tail_number].filter(Boolean).join(' · ')}
+                  operatorName={quote.company_name}
+                  badge={
+                    quote.status === 'accepted' ? <StatusBadge variant="confirmed">Accepted</StatusBadge>
+                    : quote.status === 'rejected' ? <StatusBadge variant="neutral">Declined</StatusBadge>
+                    : quote.status === 'withdrawn' ? <StatusBadge variant="neutral">Withdrawn</StatusBadge>
+                    : expired ? <StatusBadge variant="warning">Expired</StatusBadge>
+                    : quote.id === bestValueId ? <StatusBadge variant="brass">Best value</StatusBadge>
+                    : undefined
+                  }
+                  seats={quote.aircraft_capacity ?? null}
+                  flightTime={null}
+                  yearBuilt={quote.aircraft_year ?? null}
+                  price={formatMoney(quote.price_cents, quote.currency)}
+                  note={(quote.message || quote.valid_until) && (
+                    <>
+                      {quote.message && <span className="block italic">&ldquo;{quote.message}&rdquo;</span>}
+                      {quote.valid_until && <span className="block text-label">Valid until {quote.valid_until}</span>}
+                    </>
                   )}
-                  {quote.message && <p className="text-brand-cream/80 text-sm mt-3 italic">&quot;{quote.message}&quot;</p>}
-                  {quote.valid_until && (
-                    <p className="text-brand-muted text-xs mt-2">Valid until {quote.valid_until}</p>
+                  action={canBook && (
+                    <QuoteActions
+                      quoteId={quote.id}
+                      payable={!expired && (!stripeMode || !!quote.stripe_charges_enabled)}
+                      unavailableReason={expired ? 'This quote has expired.' : 'Operator is completing payment setup.'}
+                    />
                   )}
-                </div>
-                <div className="text-right">
-                  <p className="text-brand-gold font-display text-2xl">
-                    {formatMoney(quote.price_cents, quote.currency)}
-                  </p>
-                  <p className="text-brand-muted text-xs">{quote.currency}</p>
-                  {quote.status !== 'pending' && (
-                    <Badge variant={quote.status === 'accepted' ? 'success' : 'error'} className="mt-2">
-                      {quote.status}
-                    </Badge>
-                  )}
-                </div>
-              </div>
-              {quote.status === 'pending' && ['open', 'quoted'].includes(request.status) && !paymentInFlight && session.role === 'customer' && (
-                <QuoteActions
-                  quoteId={quote.id}
-                  amountLabel={formatMoney(quote.price_cents, quote.currency)}
-                  payable={!isExpired(quote.valid_until, today) && (!stripeMode || !!quote.stripe_charges_enabled)}
-                  unavailableReason={isExpired(quote.valid_until, today) ? 'This quote has expired.' : 'Operator is completing payment setup.'}
                 />
-              )}
-            </Card>
-          ))}
-        </div>
-      )}
+              );
+            })}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

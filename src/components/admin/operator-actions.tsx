@@ -19,7 +19,7 @@ export function OperatorActions({ operatorId, currentStatus }: { operatorId: num
   };
 
   return (
-    <div className="flex gap-3 mt-4 pt-4 border-t border-brand-border">
+    <div className="flex gap-3 mt-4 pt-4 border-t border-hairline">
       {currentStatus !== 'approved' && (
         <Button onClick={() => handleAction('approved')} disabled={loading} size="sm">
           Approve

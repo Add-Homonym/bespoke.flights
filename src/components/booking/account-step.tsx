@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Notice } from '@/components/ui/notice';
+import { Segmented } from '@/components/ui/segmented';
 import { TripDetails } from '@/components/booking/trip-details';
 import type { TripLeg } from '@/lib/trip-format';
 
@@ -54,7 +56,7 @@ export function AccountStep({
 
       if (!res.ok) {
         const err = data.error;
-        setError(typeof err === 'object' && err ? String(Object.values(err).flat()[0]) : err || 'Something went wrong');
+        setError(typeof err === 'object' && err ? String(Object.values(err).flat()[0]) : err || 'Something went wrong. Try again.');
         return;
       }
 
@@ -70,7 +72,7 @@ export function AccountStep({
       }
       router.refresh();
     } catch {
-      setError('Something went wrong');
+      setError('Something went wrong. Try again.');
     } finally {
       setLoading(false);
     }
@@ -78,57 +80,49 @@ export function AccountStep({
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg bg-brand-navy/50 border border-brand-border px-5 py-4 flex items-start justify-between gap-4">
+      <div className="flex items-start justify-between gap-4 rounded-lg border border-hairline bg-surface-raised px-6 py-4 shadow-raised">
         <TripDetails title="Your trip" legs={legs} passengerCount={passengerCount} notes={notes} />
-        <button type="button" onClick={onBack} className="text-sm text-brand-muted hover:text-brand-cream cursor-pointer shrink-0">
+        <Button type="button" variant="quiet" size="sm" onClick={onBack} className="shrink-0">
           Edit trip
-        </button>
+        </Button>
       </div>
 
-      <div className="rounded-xl border border-brand-border bg-brand-card p-8">
-        <h2 className="font-display text-2xl text-brand-cream mb-2">
+      <div className="rounded-lg border border-hairline bg-surface-raised p-6 shadow-raised">
+        <h2 className="text-title text-ink mb-2">
           {mode === 'register' ? 'Create an account to get quotes' : 'Sign in to get quotes'}
         </h2>
-        <p className="text-brand-muted text-sm mb-6">
+        <p className="text-body text-ink-muted mb-6">
           Operators send quotes to your account. Your trip is saved and is submitted as soon as you continue.
         </p>
 
-        <div className="flex rounded-lg border border-brand-border overflow-hidden mb-6">
-          {(['register', 'login'] as const).map(m => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => { setMode(m); setError(''); }}
-              className={`flex-1 py-2.5 text-sm font-medium transition-colors cursor-pointer ${
-                mode === m ? 'bg-brand-gold text-brand-dark' : 'text-brand-muted hover:text-brand-cream'
-              }`}
-            >
-              {m === 'register' ? 'New here' : 'I have an account'}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          label="Account"
+          className="mb-6"
+          value={mode}
+          onChange={m => { setMode(m as 'register' | 'login'); setError(''); }}
+          options={[
+            { value: 'register', label: 'New here' },
+            { value: 'login', label: 'I have an account' },
+          ]}
+        />
 
-        {error && (
-          <div className="rounded-lg bg-brand-error/10 border border-brand-error/30 px-4 py-3 text-sm text-brand-error mb-6">
-            {error}
-          </div>
-        )}
+        {error && <Notice tone="danger" className="mb-6">{error}</Notice>}
 
         <form key={mode} onSubmit={handleSubmit} className="space-y-5">
-          {mode === 'register' && <Input name="name" label="Full Name" placeholder="John Doe" required autoComplete="name" />}
+          {mode === 'register' && <Input name="name" label="Full name" placeholder="John Doe" required autoComplete="name" />}
           <Input name="email" label="Email" type="email" placeholder="you@example.com" required autoComplete="email" />
-          {mode === 'register' && <Input name="phone" label="Phone Number" type="tel" placeholder="+1 (555) 123-4567" autoComplete="tel" />}
+          {mode === 'register' && <Input name="phone" label="Phone number" type="tel" placeholder="+1 (555) 123-4567" autoComplete="tel" />}
           <Input
             name="password"
             label="Password"
             type="password"
-            placeholder="Min. 8 characters"
+            placeholder="At least 8 characters"
             required
             minLength={mode === 'register' ? 8 : undefined}
             autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
           />
-          <Button type="submit" disabled={loading} className="w-full" size="lg">
-            {loading ? 'Submitting…' : mode === 'register' ? 'Create Account & Request Quotes' : 'Sign In & Request Quotes'}
+          <Button type="submit" disabled={loading} block>
+            {loading ? 'Requesting quotes…' : mode === 'register' ? 'Create account and request quotes' : 'Sign in and request quotes'}
           </Button>
         </form>
       </div>

@@ -6,18 +6,17 @@ import { Button } from '@/components/ui/button';
 
 export function QuoteActions({
   quoteId,
-  amountLabel,
   payable = true,
   unavailableReason,
 }: {
   quoteId: number;
-  amountLabel: string;
   payable?: boolean;
   unavailableReason?: string;
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [declined, setDeclined] = useState(false);
 
   const acceptAndPay = async () => {
     setLoading(true);
@@ -29,7 +28,7 @@ export function QuoteActions({
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.url) {
-      setError(data.error || 'Could not start checkout');
+      setError(data.error || 'Could not start checkout.');
       setLoading(false);
       return;
     }
@@ -46,26 +45,27 @@ export function QuoteActions({
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      setError(data.error || 'Could not decline quote');
+      setError(data.error || 'Could not decline quote.');
+    } else {
+      setDeclined(true);
     }
     setLoading(false);
     router.refresh();
   };
 
   return (
-    <div className="mt-4 pt-4 border-t border-brand-border">
-      <div className="flex gap-3 items-center">
+    <div className="flex flex-col items-start gap-2 sm:items-end">
+      <div className="flex items-center gap-2">
         <Button onClick={acceptAndPay} disabled={loading || !payable} size="sm">
-          Accept &amp; Pay {amountLabel}
+          Book this jet
         </Button>
-        <Button onClick={decline} disabled={loading} variant="ghost" size="sm">
-          Decline
+        <Button onClick={decline} disabled={loading} variant="quiet" size="sm">
+          Decline quote
         </Button>
-        {!payable && unavailableReason && (
-          <span className="text-brand-muted text-xs">{unavailableReason}</span>
-        )}
       </div>
-      {error && <p className="text-brand-error text-sm mt-2">{error}</p>}
+      {!payable && unavailableReason && <p className="text-label text-ink-muted">{unavailableReason}</p>}
+      {error && <p role="alert" className="text-label text-danger">Error: {error}</p>}
+      {declined && <p role="status" className="text-label text-ink-muted">Quote declined.</p>}
     </div>
   );
 }

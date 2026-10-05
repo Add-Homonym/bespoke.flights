@@ -8,12 +8,12 @@ export default async function BookPage() {
   const draft = parseDraft((await cookies()).get(DRAFT_COOKIE)?.value);
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <div className="mb-10">
-        <h1 className="font-display text-3xl text-brand-cream mb-2">Book a Flight</h1>
-        <p className="text-brand-muted">
-          Build your multi-leg itinerary. Operators will compete to quote your trip.
-          {!session && ' No account needed until you submit.'}
+    <div className="mx-auto max-w-2xl">
+      <div className="mb-8">
+        <h1 className="text-display text-ink">Plan your trip</h1>
+        <p className="mt-2 text-body text-ink-muted">
+          Add each leg and operators will quote the whole trip.
+          {!session && ' You need an account only when you request quotes.'}
         </p>
       </div>
       <MultiLegForm initialDraft={draft} viewerRole={session?.role ?? null} />

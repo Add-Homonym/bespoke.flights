@@ -32,11 +32,11 @@ export default async function OperatorDashboardPage() {
   return (
     <div>
       <div className="mb-10">
-        <h1 className="font-display text-3xl text-brand-cream mb-2">Operator Dashboard</h1>
-        <p className="text-brand-muted">Welcome back, {user.name}</p>
+        <h1 className="font-display text-3xl text-ink mb-2">Operator Dashboard</h1>
+        <p className="text-ink-muted">Welcome back, {user.name}</p>
         {operator && (
           <div className="mt-2 flex items-center gap-2">
-            <span className="text-brand-cream text-sm">{operator.company_name}</span>
+            <span className="text-ink text-sm">{operator.company_name}</span>
             <Badge variant={operator.status === 'approved' ? 'success' : operator.status === 'pending' ? 'warning' : 'error'}>
               {operator.status}
             </Badge>
@@ -46,15 +46,15 @@ export default async function OperatorDashboardPage() {
 
       {/* Profile incomplete warning */}
       {operator && !profileComplete && (
-        <Card className="mb-8 border-brand-warning/30 bg-brand-warning/5">
+        <Card className="mb-8 border-warning bg-warning-tint">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-brand-warning text-sm font-semibold">Complete your operator profile</p>
-              <p className="text-brand-warning/70 text-xs mt-1">
+              <p className="text-warning text-sm font-semibold">Complete your operator profile</p>
+              <p className="text-warning text-xs mt-1">
                 Configure your markets, fleet types, safety rating, and contact method so the matching engine can route charter requests to you automatically.
               </p>
             </div>
-            <Link href="/operator/settings" className="rounded-lg bg-brand-warning px-4 py-2 text-sm font-semibold text-brand-dark hover:bg-brand-warning/80 transition-colors shrink-0">
+            <Link href="/operator/settings" className="rounded-md bg-ink px-4 py-2 text-sm font-semibold text-on-ink hover:opacity-90 transition-colors shrink-0">
               Configure →
             </Link>
           </div>
@@ -62,21 +62,21 @@ export default async function OperatorDashboardPage() {
       )}
 
       {operator?.status === 'pending' && (
-        <Card className="mb-8 border-brand-warning/30 bg-brand-warning/5">
-          <p className="text-brand-warning text-sm">Your operator account is pending approval. Configure your profile now — RFQs will begin flowing once approved.</p>
+        <Card className="mb-8 border-warning bg-warning-tint">
+          <p className="text-warning text-sm">Your operator account is pending approval. Configure your profile now — RFQs will begin flowing once approved.</p>
         </Card>
       )}
 
       {/* Inbound highlight */}
       {inboundPending > 0 && (
         <Link href="/operator/inbound">
-          <Card hover className="mb-8 border-brand-gold/30 bg-brand-gold/5">
+          <Card hover className="mb-8 border-hairline bg-surface-sunken">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-brand-gold font-semibold text-lg">{inboundPending} inbound request{inboundPending !== 1 ? 's' : ''} awaiting your quote</p>
-                <p className="text-brand-cream/60 text-sm mt-1">These were automatically matched to your operator profile.</p>
+                <p className="text-brass-ink font-semibold text-lg">{inboundPending} inbound request{inboundPending !== 1 ? 's' : ''} awaiting your quote</p>
+                <p className="text-ink-muted text-sm mt-1">These were automatically matched to your operator profile.</p>
               </div>
-              <span className="text-brand-gold text-2xl">→</span>
+              <span className="text-brass-ink text-2xl">→</span>
             </div>
           </Card>
         </Link>
@@ -92,9 +92,9 @@ export default async function OperatorDashboardPage() {
         ].map(stat => (
           <Link key={stat.label} href={stat.href}>
             <Card hover>
-              <p className="text-brand-muted text-xs uppercase tracking-wider mb-1">{stat.label}</p>
-              <p className="text-brand-cream font-display text-3xl">{stat.value}</p>
-              {stat.sub && <p className="text-brand-gold text-xs mt-1">{stat.sub}</p>}
+              <p className="text-ink-muted text-xs uppercase tracking-wider mb-1">{stat.label}</p>
+              <p className="text-ink font-display text-3xl">{stat.value}</p>
+              {stat.sub && <p className="text-brass-ink text-xs mt-1">{stat.sub}</p>}
             </Card>
           </Link>
         ))}
@@ -104,26 +104,26 @@ export default async function OperatorDashboardPage() {
       <div className="grid md:grid-cols-4 gap-4">
         <Link href="/operator/inbound">
           <Card hover className="text-center py-8">
-            <h3 className="text-brand-cream font-semibold mb-1">Inbound RFQs</h3>
-            <p className="text-brand-muted text-xs">Requests matched to you</p>
+            <h3 className="text-ink font-semibold mb-1">Inbound RFQs</h3>
+            <p className="text-ink-muted text-xs">Requests matched to you</p>
           </Card>
         </Link>
         <Link href="/operator/requests">
           <Card hover className="text-center py-8">
-            <h3 className="text-brand-cream font-semibold mb-1">Browse All Demand</h3>
-            <p className="text-brand-muted text-xs">See all open requests</p>
+            <h3 className="text-ink font-semibold mb-1">Browse All Demand</h3>
+            <p className="text-ink-muted text-xs">See all open requests</p>
           </Card>
         </Link>
         <Link href="/operator/fleet">
           <Card hover className="text-center py-8">
-            <h3 className="text-brand-cream font-semibold mb-1">Manage Fleet</h3>
-            <p className="text-brand-muted text-xs">Add and manage aircraft</p>
+            <h3 className="text-ink font-semibold mb-1">Manage Fleet</h3>
+            <p className="text-ink-muted text-xs">Add and manage aircraft</p>
           </Card>
         </Link>
         <Link href="/operator/settings">
           <Card hover className="text-center py-8">
-            <h3 className="text-brand-cream font-semibold mb-1">Settings</h3>
-            <p className="text-brand-muted text-xs">Contact method & profile</p>
+            <h3 className="text-ink font-semibold mb-1">Settings</h3>
+            <p className="text-ink-muted text-xs">Contact method & profile</p>
           </Card>
         </Link>
       </div>
