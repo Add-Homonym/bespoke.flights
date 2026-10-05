@@ -18,13 +18,13 @@ export default async function OperatorRequestsPage() {
   return (
     <div>
       <div className="mb-10">
-        <h1 className="font-display text-3xl text-brand-cream mb-2">Flight Demand</h1>
-        <p className="text-brand-muted">Browse open booking requests and submit competitive quotes.</p>
+        <h1 className="font-display text-3xl text-ink mb-2">Flight Demand</h1>
+        <p className="text-ink-muted">Browse open booking requests and submit competitive quotes.</p>
       </div>
 
       {requests.length === 0 ? (
         <Card>
-          <p className="text-brand-muted text-center py-12">No open requests at the moment. Check back soon.</p>
+          <p className="text-ink-muted text-center py-12">No open requests at the moment. Check back soon.</p>
         </Card>
       ) : (
         <div className="space-y-3">
@@ -38,7 +38,7 @@ export default async function OperatorRequestsPage() {
                 <Card hover className="flex items-start justify-between gap-4">
                   <div>
                     <TripDetails compact legs={fromDbLegs(legs)} passengerCount={req.passenger_count} notes={req.notes} />
-                    <p className="text-brand-muted/50 text-xs mt-2">Posted {timeAgo}</p>
+                    <p className="text-ink-subtle text-xs mt-2">Posted {timeAgo}</p>
                   </div>
                   <div className="text-right">
                     <Badge variant={quoteCount > 0 ? 'warning' : 'gold'}>

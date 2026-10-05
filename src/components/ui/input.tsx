@@ -1,29 +1,37 @@
 'use client';
 
-import { InputHTMLAttributes, forwardRef } from 'react';
+import { InputHTMLAttributes, forwardRef, useId } from 'react';
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
 }
 
+export const fieldClasses =
+  'block h-12 w-full rounded-md border border-border-control bg-surface-raised px-4 text-body text-ink ' +
+  'placeholder:text-ink-subtle transition-colors duration-200 ease-out';
+
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ label, error, className = '', id, ...props }, ref) => {
-    const inputId = id || label?.toLowerCase().replace(/\s+/g, '-');
+    const generated = useId();
+    const inputId = id || generated;
+    const errorId = `${inputId}-error`;
     return (
-      <div className="space-y-1.5">
+      <div className="space-y-2">
         {label && (
-          <label htmlFor={inputId} className="block text-sm font-medium text-brand-muted">
+          <label htmlFor={inputId} className="block text-label text-ink-muted">
             {label}
           </label>
         )}
         <input
           ref={ref}
           id={inputId}
-          className={`w-full rounded-lg border border-brand-border bg-brand-navy px-4 py-2.5 text-brand-cream placeholder:text-brand-muted/50 focus:border-brand-gold focus:outline-none focus:ring-1 focus:ring-brand-gold transition-colors ${error ? 'border-brand-error' : ''} ${className}`}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? errorId : undefined}
+          className={`${fieldClasses} ${error ? 'border-danger' : ''} ${className}`}
           {...props}
         />
-        {error && <p className="text-sm text-brand-error">{error}</p>}
+        {error && <p id={errorId} className="text-label text-danger">{error}</p>}
       </div>
     );
   }

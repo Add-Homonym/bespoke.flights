@@ -14,7 +14,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <>
       <Header user={user} />
-      <main className="flex-1 mx-auto max-w-7xl w-full px-6 py-10">
+      <main className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 pt-12 pb-16">
         {children}
       </main>
     </>

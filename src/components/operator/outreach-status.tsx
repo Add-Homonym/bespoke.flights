@@ -44,28 +44,28 @@ export function OutreachStatus({ requestId }: { requestId: number }) {
   const pending = entries.filter(e => !e.quote_id && e.status !== 'failed');
 
   return (
-    <div className="rounded-xl border border-brand-border bg-brand-card p-6 mb-8">
-      <h2 className="text-sm font-semibold text-brand-muted uppercase tracking-wider mb-4">
+    <div className="rounded-lg border border-hairline bg-surface-raised p-6 mb-8">
+      <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wider mb-4">
         Operator Outreach
-        <span className="text-brand-cream/50 font-normal ml-2">
+        <span className="text-ink-muted font-normal ml-2">
           {entries.length} operators contacted
         </span>
       </h2>
 
       <div className="space-y-2">
         {entries.map(entry => (
-          <div key={entry.id} className="flex items-center justify-between py-2 border-b border-brand-border/30 last:border-0">
+          <div key={entry.id} className="flex items-center justify-between py-2 border-b border-hairline last:border-0">
             <div className="flex items-center gap-3">
-              <div className={`w-2 h-2 rounded-full ${entry.quote_id ? 'bg-brand-success' : entry.status === 'sent' ? 'bg-brand-warning' : 'bg-brand-muted/30'}`} />
+              <div className={`w-2 h-2 rounded-full ${entry.quote_id ? 'bg-confirmed' : entry.status === 'sent' ? 'bg-warning' : 'bg-ink-subtle'}`} />
               <div>
-                <span className="text-brand-cream text-sm">{entry.company_name}</span>
-                <span className="text-brand-muted/50 text-xs ml-2">
+                <span className="text-ink text-sm">{entry.company_name}</span>
+                <span className="text-ink-subtle text-xs ml-2">
                   via {entry.contact_method}
                 </span>
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-brand-muted/50 text-xs">Score: {entry.match_score}</span>
+              <span className="text-ink-subtle text-xs">Score: {entry.match_score}</span>
               {entry.quote_id ? (
                 <Badge variant="success">Quoted ${((entry.quote_price || 0) / 100).toLocaleString()}</Badge>
               ) : (
@@ -76,7 +76,7 @@ export function OutreachStatus({ requestId }: { requestId: number }) {
         ))}
       </div>
 
-      <div className="mt-4 flex gap-4 text-xs text-brand-muted">
+      <div className="mt-4 flex gap-4 text-xs text-ink-muted">
         <span>{responded.length} responded</span>
         <span>{pending.length} awaiting response</span>
       </div>

@@ -57,14 +57,14 @@ export default function OperatorSettingsPage() {
   const toggleArrayItem = (arr: string[], item: string): string[] =>
     arr.includes(item) ? arr.filter(x => x !== item) : [...arr, item];
 
-  if (!settings) return <div className="text-brand-muted p-10">Loading...</div>;
+  if (!settings) return <div className="text-ink-muted p-10">Loading...</div>;
 
   return (
     <div className="max-w-3xl mx-auto">
       <div className="flex items-center justify-between mb-10">
         <div>
-          <h1 className="font-display text-3xl text-brand-cream mb-2">Operator Settings</h1>
-          <p className="text-brand-muted">Configure how Bespoke Flights reaches you with charter requests.</p>
+          <h1 className="font-display text-3xl text-ink mb-2">Operator Settings</h1>
+          <p className="text-ink-muted">Configure how Bespoke Flights reaches you with charter requests.</p>
         </div>
         {message && <Badge variant="success">{message}</Badge>}
       </div>
@@ -73,15 +73,15 @@ export default function OperatorSettingsPage() {
 
       {/* Contact Method */}
       <Card className="mb-6">
-        <h2 className="text-sm font-semibold text-brand-muted uppercase tracking-wider mb-6">Contact Preferences</h2>
-        <p className="text-brand-cream/70 text-sm mb-6">
+        <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wider mb-6">Contact Preferences</h2>
+        <p className="text-ink-muted text-sm mb-6">
           When a traveler submits a charter request that matches your profile, we automatically send you the RFQ via your preferred method.
         </p>
 
         <div className="space-y-5">
           <div>
-            <label className="block text-sm font-medium text-brand-muted mb-3">Preferred Contact Method</label>
-            <div className="flex rounded-lg border border-brand-border overflow-hidden">
+            <label className="block text-sm font-medium text-ink-muted mb-3">Preferred Contact Method</label>
+            <div className="flex rounded-md border border-hairline overflow-hidden">
               {(['email', 'text', 'both'] as const).map(method => (
                 <button
                   key={method}
@@ -89,8 +89,8 @@ export default function OperatorSettingsPage() {
                   onClick={() => save({ contact_method: method })}
                   className={`flex-1 py-3 text-sm font-medium transition-colors cursor-pointer capitalize ${
                     settings.contact_method === method
-                      ? 'bg-brand-gold text-brand-dark'
-                      : 'text-brand-muted hover:text-brand-cream'
+                      ? 'bg-ink text-on-ink'
+                      : 'text-ink-muted hover:text-ink'
                   }`}
                 >
                   {method === 'both' ? 'Email + Text' : method}
@@ -108,7 +108,7 @@ export default function OperatorSettingsPage() {
                 placeholder="charter@yourcompany.com"
                 onBlur={e => save({ contact_email: e.target.value })}
               />
-              <p className="text-brand-muted/50 text-xs mt-1">
+              <p className="text-ink-subtle text-xs mt-1">
                 RFQs are sent here. Defaults to your account email.
               </p>
             </div>
@@ -120,7 +120,7 @@ export default function OperatorSettingsPage() {
                 placeholder="+1-555-123-4567"
                 onBlur={e => save({ contact_phone: e.target.value })}
               />
-              <p className="text-brand-muted/50 text-xs mt-1">
+              <p className="text-ink-subtle text-xs mt-1">
                 For text message RFQs. US numbers only for now.
               </p>
             </div>
@@ -130,7 +130,7 @@ export default function OperatorSettingsPage() {
 
       {/* Safety & Certification */}
       <Card className="mb-6">
-        <h2 className="text-sm font-semibold text-brand-muted uppercase tracking-wider mb-6">Safety & Certification</h2>
+        <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wider mb-6">Safety & Certification</h2>
         <div className="grid grid-cols-2 gap-4 mb-4">
           <Input
             label="FAA Certificate Number"
@@ -139,11 +139,11 @@ export default function OperatorSettingsPage() {
             onBlur={e => save({ certificate: e.target.value })}
           />
           <div>
-            <label className="block text-sm font-medium text-brand-muted mb-1.5">Highest Safety Rating</label>
+            <label className="block text-sm font-medium text-ink-muted mb-1.5">Highest Safety Rating</label>
             <select
               value={settings.safety_rating || ''}
               onChange={e => save({ safety_rating: e.target.value })}
-              className="w-full rounded-lg border border-brand-border bg-brand-navy px-4 py-2.5 text-brand-cream focus:border-brand-gold focus:outline-none focus:ring-1 focus:ring-brand-gold transition-colors"
+              className="w-full rounded-md border border-hairline bg-surface-raised px-4 py-2.5 text-ink transition-colors"
             >
               <option value="">Select...</option>
               {SAFETY_RATINGS.map(r => <option key={r} value={r}>{r}</option>)}
@@ -154,8 +154,8 @@ export default function OperatorSettingsPage() {
 
       {/* Market Coverage */}
       <Card className="mb-6">
-        <h2 className="text-sm font-semibold text-brand-muted uppercase tracking-wider mb-4">Market Coverage</h2>
-        <p className="text-brand-cream/70 text-sm mb-6">
+        <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wider mb-4">Market Coverage</h2>
+        <p className="text-ink-muted text-sm mb-6">
           Select the markets you serve. The matching engine uses this to route relevant requests to you.
         </p>
         <div className="grid grid-cols-2 gap-2">
@@ -166,13 +166,13 @@ export default function OperatorSettingsPage() {
                 key={key}
                 type="button"
                 onClick={() => save({ markets: toggleArrayItem(settings.markets, key) })}
-                className={`rounded-lg border px-4 py-3 text-sm text-left transition-colors cursor-pointer ${
+                className={`rounded-md border px-4 py-3 text-sm text-left transition-colors cursor-pointer ${
                   active
-                    ? 'border-brand-gold bg-brand-gold/10 text-brand-cream'
-                    : 'border-brand-border text-brand-muted hover:border-brand-gold/30'
+                    ? 'border-brass bg-surface-raised text-ink'
+                    : 'border-hairline text-ink-muted hover:border-border-control'
                 }`}
               >
-                <span className={active ? 'text-brand-gold' : ''}>●</span>{' '}{label}
+                <span className={active ? 'text-brass-ink' : ''}>●</span>{' '}{label}
               </button>
             );
           })}
@@ -184,26 +184,26 @@ export default function OperatorSettingsPage() {
               type="checkbox"
               checked={!!settings.hi_capable}
               onChange={e => save({ hi_capable: e.target.checked ? 1 : 0 })}
-              className="rounded border-brand-border bg-brand-navy text-brand-gold focus:ring-brand-gold"
+              className="rounded border-hairline bg-surface-raised text-brass-ink "
             />
-            <span className="text-sm text-brand-cream">Hawaii capable</span>
+            <span className="text-sm text-ink">Hawaii capable</span>
           </label>
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
               checked={!!settings.transoceanic}
               onChange={e => save({ transoceanic: e.target.checked ? 1 : 0 })}
-              className="rounded border-brand-border bg-brand-navy text-brand-gold focus:ring-brand-gold"
+              className="rounded border-hairline bg-surface-raised text-brass-ink "
             />
-            <span className="text-sm text-brand-cream">Transoceanic capable</span>
+            <span className="text-sm text-ink">Transoceanic capable</span>
           </label>
         </div>
       </Card>
 
       {/* Fleet Types */}
       <Card className="mb-6">
-        <h2 className="text-sm font-semibold text-brand-muted uppercase tracking-wider mb-4">Fleet Categories</h2>
-        <p className="text-brand-cream/70 text-sm mb-6">
+        <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wider mb-4">Fleet Categories</h2>
+        <p className="text-ink-muted text-sm mb-6">
           Which aircraft categories do you operate? This is used in addition to your actual fleet inventory.
         </p>
         <div className="grid grid-cols-2 gap-2">
@@ -214,10 +214,10 @@ export default function OperatorSettingsPage() {
                 key={key}
                 type="button"
                 onClick={() => save({ fleet_types: toggleArrayItem(settings.fleet_types, key) })}
-                className={`rounded-lg border px-4 py-3 text-sm text-left transition-colors cursor-pointer ${
+                className={`rounded-md border px-4 py-3 text-sm text-left transition-colors cursor-pointer ${
                   active
-                    ? 'border-brand-gold bg-brand-gold/10 text-brand-cream'
-                    : 'border-brand-border text-brand-muted hover:border-brand-gold/30'
+                    ? 'border-brass bg-surface-raised text-ink'
+                    : 'border-hairline text-ink-muted hover:border-border-control'
                 }`}
               >
                 {label}
@@ -241,8 +241,8 @@ export default function OperatorSettingsPage() {
       <Card>
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-brand-muted text-xs uppercase tracking-wider">Matching Engine Status</p>
-            <p className="text-brand-cream mt-1">
+            <p className="text-ink-muted text-xs uppercase tracking-wider">Matching Engine Status</p>
+            <p className="text-ink mt-1">
               {settings.status === 'approved'
                 ? 'Active — you will receive RFQs for matching requests automatically.'
                 : settings.status === 'pending'

@@ -49,20 +49,20 @@ export function RefundButton({ paymentId, remainingCents }: { paymentId: number;
         min="0.01"
         value={amount}
         onChange={e => setAmount(e.target.value)}
-        className="rounded border border-brand-border bg-brand-navy px-2 py-1 text-brand-cream text-sm"
+        className="rounded border border-hairline bg-surface-raised px-2 py-1 text-ink text-sm"
         aria-label="Refund amount"
       />
       <input
         value={reason}
         onChange={e => setReason(e.target.value)}
         placeholder="Reason (optional)"
-        className="rounded border border-brand-border bg-brand-navy px-2 py-1 text-brand-cream text-sm"
+        className="rounded border border-hairline bg-surface-raised px-2 py-1 text-ink text-sm"
       />
       <div className="flex gap-2">
         <Button size="sm" variant="danger" onClick={submit} disabled={loading}>Confirm</Button>
-        <Button size="sm" variant="ghost" onClick={() => setOpen(false)} disabled={loading}>Cancel</Button>
+        <Button size="sm" variant="quiet" onClick={() => setOpen(false)} disabled={loading}>Cancel</Button>
       </div>
-      {error && <p className="text-brand-error text-xs">{error}</p>}
+      {error && <p className="text-danger text-xs">{error}</p>}
     </div>
   );
 }

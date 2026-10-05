@@ -78,37 +78,37 @@ export function TripShare({ requestId }: { requestId: number }) {
 
   return (
     <Card className="mb-8">
-      <h2 className="text-sm font-semibold text-brand-muted uppercase tracking-wider mb-2">Share with your team</h2>
-      <p className="text-brand-cream/70 text-sm mb-5">
+      <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wider mb-2">Share with your team</h2>
+      <p className="text-ink-muted text-sm mb-5">
         Send dispatch, crew and catering a read-only trip sheet: legs and times, aircraft, passengers, special requests and the
         lead passenger&apos;s contact details. No account needed to view it.
       </p>
 
       {share === null ? (
-        <p className="text-brand-muted text-sm">Loading&hellip;</p>
+        <p className="text-ink-muted text-sm">Loading&hellip;</p>
       ) : (
         <div className="space-y-5">
           {share.url ? (
             <div>
-              <label htmlFor="trip-share-link" className="block text-sm font-medium text-brand-muted mb-1.5">Private link</label>
+              <label htmlFor="trip-share-link" className="block text-sm font-medium text-ink-muted mb-1.5">Private link</label>
               <div className="flex gap-2">
                 <input
                   id="trip-share-link"
                   readOnly
                   value={share.url}
                   onFocus={e => e.currentTarget.select()}
-                  className="flex-1 min-w-0 rounded-lg border border-brand-border bg-brand-navy px-3 py-2 text-sm text-brand-cream font-mono"
+                  className="flex-1 min-w-0 rounded-md border border-hairline bg-surface-raised px-3 py-2 text-sm text-ink font-mono"
                 />
                 <Button type="button" size="sm" onClick={() => copy(share.url!)} disabled={busy}>Copy</Button>
               </div>
               <div className="flex flex-wrap gap-x-5 gap-y-1 mt-2 text-xs">
-                <a href={share.url} target="_blank" rel="noreferrer" className="text-brand-gold hover:underline">Open trip sheet</a>
-                <a href={`${new URL(share.url).pathname}/calendar`} className="text-brand-gold hover:underline">Download calendar file</a>
-                <button type="button" onClick={revoke} disabled={busy} className="text-brand-muted hover:text-brand-error cursor-pointer">
+                <a href={share.url} target="_blank" rel="noreferrer" className="text-brass-ink hover:underline">Open trip sheet</a>
+                <a href={`${new URL(share.url).pathname}/calendar`} className="text-brass-ink hover:underline">Download calendar file</a>
+                <button type="button" onClick={revoke} disabled={busy} className="text-ink-muted hover:text-danger cursor-pointer">
                   Turn off link
                 </button>
                 {share.expiresAt && (
-                  <span className="text-brand-muted">Expires {new Date(share.expiresAt).toLocaleDateString()}</span>
+                  <span className="text-ink-muted">Expires {new Date(share.expiresAt).toLocaleDateString()}</span>
                 )}
               </div>
             </div>
@@ -117,7 +117,7 @@ export function TripShare({ requestId }: { requestId: number }) {
           )}
 
           <form onSubmit={sendEmail} className="space-y-2">
-            <label htmlFor="trip-share-emails" className="block text-sm font-medium text-brand-muted">Email the trip sheet</label>
+            <label htmlFor="trip-share-emails" className="block text-sm font-medium text-ink-muted">Email the trip sheet</label>
             <div className="flex gap-2">
               <input
                 id="trip-share-emails"
@@ -126,15 +126,15 @@ export function TripShare({ requestId }: { requestId: number }) {
                 value={recipients}
                 onChange={e => setRecipients(e.target.value)}
                 placeholder="dispatch@yourcompany.com, captain@yourcompany.com"
-                className="flex-1 min-w-0 rounded-lg border border-brand-border bg-brand-navy px-3 py-2 text-sm text-brand-cream placeholder:text-brand-muted/50"
+                className="flex-1 min-w-0 rounded-md border border-hairline bg-surface-raised px-3 py-2 text-sm text-ink placeholder:text-ink-subtle"
               />
               <Button type="submit" size="sm" variant="secondary" disabled={busy || !recipients.trim()}>Send</Button>
             </div>
-            <p className="text-brand-muted text-xs">Up to 20 addresses, separated by commas or spaces.</p>
+            <p className="text-ink-muted text-xs">Up to 20 addresses, separated by commas or spaces.</p>
           </form>
 
-          {message && <p role="status" className="text-brand-success text-sm">{message}</p>}
-          {error && <p role="alert" className="text-brand-error text-sm">{error}</p>}
+          {message && <p role="status" className="text-confirmed text-sm">{message}</p>}
+          {error && <p role="alert" className="text-danger text-sm">{error}</p>}
         </div>
       )}
     </Card>

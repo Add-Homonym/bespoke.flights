@@ -41,8 +41,8 @@ const EVENTS: { key: 'on_booking' | 'on_cancellation' | 'on_new_request'; label:
 
 function Check({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
-    <label className="flex items-center gap-2 text-sm text-brand-cream cursor-pointer">
-      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} className="accent-[#C9A84C]" />
+    <label className="flex items-center gap-2 text-sm text-ink cursor-pointer">
+      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} className="accent-ink" />
       {label}
     </label>
   );
@@ -78,19 +78,19 @@ function StaffForm({ initial, submitLabel, onSubmit, onCancel }: {
         <Input label="Mobile (for texts)" type="tel" placeholder="+1 808 555 0100" value={f.phone} onChange={e => set('phone', e.target.value)} />
       </div>
       <fieldset className="flex flex-wrap gap-x-6 gap-y-2">
-        <legend className="text-sm font-medium text-brand-muted mb-2">Send alerts by</legend>
+        <legend className="text-sm font-medium text-ink-muted mb-2">Send alerts by</legend>
         <Check label="Email" checked={f.notify_email} onChange={v => set('notify_email', v)} />
         <Check label="Text message" checked={f.notify_sms} onChange={v => set('notify_sms', v)} />
       </fieldset>
       <fieldset className="flex flex-wrap gap-x-6 gap-y-2">
-        <legend className="text-sm font-medium text-brand-muted mb-2">Alert when</legend>
+        <legend className="text-sm font-medium text-ink-muted mb-2">Alert when</legend>
         {EVENTS.map(ev => <Check key={ev.key} label={ev.label} checked={f[ev.key]} onChange={v => set(ev.key, v)} />)}
       </fieldset>
       {onCancel && <Check label="Alerts on for this person" checked={f.active} onChange={v => set('active', v)} />}
-      {error && <p role="alert" className="text-brand-error text-sm">{error}</p>}
+      {error && <p role="alert" className="text-danger text-sm">{error}</p>}
       <div className="flex gap-3">
         <Button type="submit" size="sm" disabled={busy}>{submitLabel}</Button>
-        {onCancel && <Button type="button" size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>}
+        {onCancel && <Button type="button" size="sm" variant="quiet" onClick={onCancel}>Cancel</Button>}
       </div>
     </form>
   );
@@ -132,9 +132,9 @@ export function TeamManager() {
   return (
     <>
       <Card className="mb-8">
-        <h2 className="text-sm font-semibold text-brand-muted uppercase tracking-wider mb-4">Add a staff member</h2>
+        <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wider mb-4">Add a staff member</h2>
         {sms !== 'live' && (
-          <p className="text-brand-muted text-xs mb-4">
+          <p className="text-ink-muted text-xs mb-4">
             {sms === 'test'
               ? 'Test mode: text messages are logged, not sent.'
               : 'Text messages are logged, not sent, until Twilio is configured.'}
@@ -143,14 +143,14 @@ export function TeamManager() {
         <StaffForm initial={blank} submitLabel="Add to team" onSubmit={f => save('/api/operator/staff', 'POST', f)} />
       </Card>
 
-      <h2 className="font-display text-xl text-brand-cream mb-4">
-        Team {staff && <span className="text-brand-muted text-sm font-normal">({staff.length})</span>}
+      <h2 className="font-display text-xl text-ink mb-4">
+        Team {staff && <span className="text-ink-muted text-sm font-normal">({staff.length})</span>}
       </h2>
-      {notice && <p role="status" className="text-brand-success text-sm mb-3">{notice}</p>}
+      {notice && <p role="status" className="text-confirmed text-sm mb-3">{notice}</p>}
       {staff === null ? (
-        <p className="text-brand-muted">Loading&hellip;</p>
+        <p className="text-ink-muted">Loading&hellip;</p>
       ) : staff.length === 0 ? (
-        <Card><p className="text-brand-muted text-center py-6">No staff yet. Add the people who should hear about new charters.</p></Card>
+        <Card><p className="text-ink-muted text-center py-6">No staff yet. Add the people who should hear about new charters.</p></Card>
       ) : (
         <div className="space-y-3">
           {staff.map(m => (
@@ -165,21 +165,21 @@ export function TeamManager() {
               ) : (
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
-                    <p className="text-brand-cream font-medium">
-                      {m.name} {m.role && <span className="text-brand-muted font-normal">· {m.role}</span>}
+                    <p className="text-ink font-medium">
+                      {m.name} {m.role && <span className="text-ink-muted font-normal">· {m.role}</span>}
                       {!m.active && <Badge className="ml-2">alerts off</Badge>}
                     </p>
-                    <p className="text-brand-muted text-sm mt-1">
+                    <p className="text-ink-muted text-sm mt-1">
                       {[m.notify_email && m.email && `Email ${m.email}`, m.notify_sms && m.phone && `Text ${m.phone}`].filter(Boolean).join(' · ') || 'No alert channel on'}
                     </p>
-                    <p className="text-brand-muted text-xs mt-1">
+                    <p className="text-ink-muted text-xs mt-1">
                       Alerts: {EVENTS.filter(ev => m[ev.key]).map(ev => ev.label.toLowerCase()).join(', ') || 'none'}
                     </p>
                   </div>
                   <div className="flex gap-4 text-sm">
-                    <button type="button" onClick={() => test(m)} className="text-brand-gold hover:underline cursor-pointer">Send test</button>
-                    <button type="button" onClick={() => setEditing(m.id)} className="text-brand-muted hover:text-brand-cream cursor-pointer">Edit</button>
-                    <button type="button" onClick={() => remove(m)} className="text-brand-muted hover:text-brand-error cursor-pointer">Remove</button>
+                    <button type="button" onClick={() => test(m)} className="text-brass-ink hover:underline cursor-pointer">Send test</button>
+                    <button type="button" onClick={() => setEditing(m.id)} className="text-ink-muted hover:text-ink cursor-pointer">Edit</button>
+                    <button type="button" onClick={() => remove(m)} className="text-ink-muted hover:text-danger cursor-pointer">Remove</button>
                   </div>
                 </div>
               )}

@@ -30,12 +30,12 @@ export default async function AdminRequestsPage() {
 
   return (
     <div>
-      <h1 className="font-display text-3xl text-brand-cream mb-2">All Booking Requests</h1>
-      <p className="text-brand-muted mb-10">System-wide booking activity.</p>
+      <h1 className="font-display text-3xl text-ink mb-2">All Booking Requests</h1>
+      <p className="text-ink-muted mb-10">System-wide booking activity.</p>
 
       {requests.length === 0 ? (
         <Card>
-          <p className="text-brand-muted text-center py-12">No booking requests yet.</p>
+          <p className="text-ink-muted text-center py-12">No booking requests yet.</p>
         </Card>
       ) : (
         <Table>
@@ -63,12 +63,12 @@ export default async function AdminRequestsPage() {
                     </Link>
                   </Td>
                   <Td>
-                    <div className="text-brand-cream text-sm">{req.customer_name}</div>
-                    <div className="text-brand-muted text-xs">{req.customer_email}</div>
+                    <div className="text-ink text-sm">{req.customer_name}</div>
+                    <div className="text-ink-muted text-xs">{req.customer_email}</div>
                   </Td>
                   <Td>{quoteCount}</Td>
                   <Td><Badge variant={statusBadge[req.status]}>{req.status}</Badge></Td>
-                  <Td className="text-brand-muted text-xs">{new Date(req.created_at).toLocaleDateString()}</Td>
+                  <Td className="text-ink-muted text-xs">{new Date(req.created_at).toLocaleDateString()}</Td>
                 </Tr>
               );
             })}

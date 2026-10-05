@@ -24,24 +24,24 @@ export default async function AdminOperatorsPage() {
 
   return (
     <div>
-      <h1 className="font-display text-3xl text-brand-cream mb-2">Operator Management</h1>
-      <p className="text-brand-muted mb-10">Approve or manage charter operators.</p>
+      <h1 className="font-display text-3xl text-ink mb-2">Operator Management</h1>
+      <p className="text-ink-muted mb-10">Approve or manage charter operators.</p>
 
       {operators.length === 0 ? (
         <Card>
-          <p className="text-brand-muted text-center py-12">No operators registered yet.</p>
+          <p className="text-ink-muted text-center py-12">No operators registered yet.</p>
         </Card>
       ) : (
         <div className="space-y-3">
           {operators.map(op => (
-            <Card key={op.id} className={op.status === 'pending' ? 'border-brand-warning/30' : ''}>
+            <Card key={op.id} className={op.status === 'pending' ? 'border-warning' : ''}>
               <div className="flex items-start justify-between">
                 <div>
-                  <h3 className="text-brand-cream font-semibold text-lg">{op.company_name}</h3>
-                  <p className="text-brand-muted text-sm mt-1">{op.name} &middot; {op.email}</p>
-                  {op.phone && <p className="text-brand-muted text-xs mt-1">{op.phone}</p>}
-                  {op.certificate && <p className="text-brand-muted text-xs mt-1">Cert: {op.certificate}</p>}
-                  <p className="text-brand-muted/50 text-xs mt-2">Registered {new Date(op.created_at).toLocaleDateString()}</p>
+                  <h3 className="text-ink font-semibold text-lg">{op.company_name}</h3>
+                  <p className="text-ink-muted text-sm mt-1">{op.name} &middot; {op.email}</p>
+                  {op.phone && <p className="text-ink-muted text-xs mt-1">{op.phone}</p>}
+                  {op.certificate && <p className="text-ink-muted text-xs mt-1">Cert: {op.certificate}</p>}
+                  <p className="text-ink-subtle text-xs mt-2">Registered {new Date(op.created_at).toLocaleDateString()}</p>
                 </div>
                 <div className="flex items-center gap-3">
                   <Badge variant={statusBadge[op.status]}>{op.status}</Badge>

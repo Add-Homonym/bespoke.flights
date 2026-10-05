@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatTripDate, formatTripTime, tripRoute, legLine } from './trip-format';
+import { formatTripDate, formatTripTime, formatDeparture, tripRoute, legLine } from './trip-format';
 
 describe('trip formatting', () => {
   it('formats dates in UTC without shifting the day', () => {
@@ -31,5 +31,11 @@ describe('trip formatting', () => {
   it('describes a leg on one line', () => {
     expect(legLine({ from: 'KLAX', to: 'PHNL', date: '2026-12-01', time: '09:30' }, 0)).toBe('Leg 1: KLAX → PHNL · Tue, Dec 1, 2026, 9:30 AM');
     expect(legLine({ from: 'PHNL', to: 'KLAX', date: '2026-12-08', time: '' }, 1)).toBe('Leg 2: PHNL → KLAX · Tue, Dec 8, 2026, any time');
+  });
+
+  it('formats a departure as day and 24h local time', () => {
+    expect(formatDeparture('2026-10-10', '09:30')).toBe('Sat 10 Oct · 09:30');
+    expect(formatDeparture('2026-10-10', '')).toBe('Sat 10 Oct · Any time');
+    expect(formatDeparture('', '09:30')).toBe('');
   });
 });

@@ -59,8 +59,8 @@ export default function FleetPage() {
     <div>
       <div className="flex items-center justify-between mb-10">
         <div>
-          <h1 className="font-display text-3xl text-brand-cream mb-2">Fleet Management</h1>
-          <p className="text-brand-muted">Manage your aircraft available for charter.</p>
+          <h1 className="font-display text-3xl text-ink mb-2">Fleet Management</h1>
+          <p className="text-ink-muted">Manage your aircraft available for charter.</p>
         </div>
         <Button onClick={() => setShowForm(!showForm)} variant={showForm ? 'secondary' : 'primary'}>
           {showForm ? 'Cancel' : 'Add Aircraft'}
@@ -69,9 +69,9 @@ export default function FleetPage() {
 
       {showForm && (
         <Card className="mb-8">
-          <h2 className="text-sm font-semibold text-brand-muted uppercase tracking-wider mb-6">New Aircraft</h2>
+          <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wider mb-6">New Aircraft</h2>
           {error && (
-            <div className="rounded-lg bg-brand-error/10 border border-brand-error/30 px-4 py-3 text-sm text-brand-error mb-4">
+            <div className="rounded-md bg-danger-tint border border-danger px-4 py-3 text-sm text-danger mb-4">
               {error}
             </div>
           )}
@@ -82,7 +82,7 @@ export default function FleetPage() {
             <Input name="rangeNm" label="Range (NM)" type="number" placeholder="7000" />
             <Input name="year" label="Year" type="number" placeholder="2020" />
             <div className="flex items-end">
-              <Button type="submit" disabled={loading} className="w-full">
+              <Button type="submit" disabled={loading} block>
                 {loading ? 'Adding...' : 'Add Aircraft'}
               </Button>
             </div>
@@ -92,7 +92,7 @@ export default function FleetPage() {
 
       {aircraft.length === 0 ? (
         <Card>
-          <p className="text-brand-muted text-center py-12">No aircraft in your fleet. Add your first aircraft to start quoting.</p>
+          <p className="text-ink-muted text-center py-12">No aircraft in your fleet. Add your first aircraft to start quoting.</p>
         </Card>
       ) : (
         <div className="grid md:grid-cols-2 gap-4">
@@ -100,12 +100,12 @@ export default function FleetPage() {
             <Card key={a.id}>
               <div className="flex items-start justify-between">
                 <div>
-                  <h3 className="text-brand-cream font-semibold text-lg">{a.type}</h3>
-                  <p className="text-brand-gold font-mono text-sm mt-1">{a.tail_number}</p>
+                  <h3 className="text-ink font-semibold text-lg">{a.type}</h3>
+                  <p className="text-brass-ink font-mono text-sm mt-1">{a.tail_number}</p>
                 </div>
-                <span className="text-brand-muted text-sm">{a.year || '—'}</span>
+                <span className="text-ink-muted text-sm">{a.year || '—'}</span>
               </div>
-              <div className="mt-4 flex gap-4 text-sm text-brand-muted">
+              <div className="mt-4 flex gap-4 text-sm text-ink-muted">
                 <span>{a.capacity} seats</span>
                 {a.range_nm && <span>&middot; {a.range_nm.toLocaleString()} NM range</span>}
               </div>

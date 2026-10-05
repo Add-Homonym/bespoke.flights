@@ -37,8 +37,8 @@ export default async function OperatorQuotesPage() {
   if (!operator) {
     return (
       <div>
-        <h1 className="font-display text-3xl text-brand-cream mb-4">My Quotes</h1>
-        <Card><p className="text-brand-muted text-center py-8">Operator profile not found.</p></Card>
+        <h1 className="font-display text-3xl text-ink mb-4">My Quotes</h1>
+        <Card><p className="text-ink-muted text-center py-8">Operator profile not found.</p></Card>
       </div>
     );
   }
@@ -59,12 +59,12 @@ export default async function OperatorQuotesPage() {
 
   return (
     <div>
-      <h1 className="font-display text-3xl text-brand-cream mb-2">My Quotes</h1>
-      <p className="text-brand-muted mb-10">Track all quotes you&apos;ve submitted.</p>
+      <h1 className="font-display text-3xl text-ink mb-2">My Quotes</h1>
+      <p className="text-ink-muted mb-10">Track all quotes you&apos;ve submitted.</p>
 
       {quotes.length === 0 ? (
         <Card>
-          <p className="text-brand-muted text-center py-12">No quotes submitted yet. <Link href="/operator/requests" className="text-brand-gold hover:underline">Browse demand</Link></p>
+          <p className="text-ink-muted text-center py-12">No quotes submitted yet. <Link href="/operator/requests" className="text-brass-ink hover:underline">Browse demand</Link></p>
         </Card>
       ) : (
         <div className="space-y-3">
@@ -76,14 +76,14 @@ export default async function OperatorQuotesPage() {
               <Link key={quote.id} href={`/operator/requests/${quote.request_id}`}>
                 <Card hover className="flex items-center justify-between">
                   <div>
-                    <p className="text-brand-cream font-mono tracking-wide">{route}</p>
-                    <p className="text-brand-muted text-xs mt-1">
+                    <p className="text-ink font-mono tracking-wide">{route}</p>
+                    <p className="text-ink-muted text-xs mt-1">
                       {quote.aircraft_type && `${quote.aircraft_type} · `}
                       ${(quote.price_cents / 100).toLocaleString()}
                     </p>
-                    <p className="text-brand-muted/50 text-xs mt-1">{new Date(quote.created_at).toLocaleDateString()}</p>
+                    <p className="text-ink-subtle text-xs mt-1">{new Date(quote.created_at).toLocaleDateString()}</p>
                     {quote.status === 'accepted' && quote.payment_status && ['succeeded', 'partially_refunded'].includes(quote.payment_status) && (
-                      <p className="text-brand-gold text-xs mt-1">Booked. Open to share the trip sheet with your team &rarr;</p>
+                      <p className="text-brass-ink text-xs mt-1">Booked. Open to share the trip sheet with your team &rarr;</p>
                     )}
                   </div>
                   <div className="flex items-center gap-2">

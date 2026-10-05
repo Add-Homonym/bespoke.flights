@@ -69,7 +69,7 @@ export async function POST(req: Request) {
   }
 
   const db = getDb();
-  let options: { forceStates?: string[]; emailsPerRun?: number } = {};
+  const options: { forceStates?: string[]; emailsPerRun?: number } = {};
 
   try {
     const body = await req.json().catch(() => ({}));

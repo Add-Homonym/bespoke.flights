@@ -82,6 +82,7 @@ function DiscoveriesContent() {
     setLoading(false);
   }, [statusFilter, stateFilter, search]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- initial fetch on mount and when filters change
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const updateOperator = async (id: number, patch: Record<string, unknown>) => {
@@ -122,8 +123,8 @@ function DiscoveriesContent() {
     <div>
       <div className="flex items-start justify-between mb-10">
         <div>
-          <h1 className="font-display text-3xl text-brand-cream mb-2">Operator Discovery</h1>
-          <p className="text-brand-muted">FAA Part 135 operators found via registry scrape. Add emails to trigger invite outreach.</p>
+          <h1 className="font-display text-3xl text-ink mb-2">Operator Discovery</h1>
+          <p className="text-ink-muted">FAA Part 135 operators found via registry scrape. Add emails to trigger invite outreach.</p>
         </div>
         <Button onClick={triggerCron} disabled={cronRunning} size="sm">
           {cronRunning ? 'Running...' : 'Run Discovery Now'}
@@ -131,8 +132,8 @@ function DiscoveriesContent() {
       </div>
 
       {cronResult && (
-        <Card className="mb-6 border-brand-gold/30 bg-brand-gold/5">
-          <p className="text-brand-cream text-sm">{cronResult}</p>
+        <Card className="mb-6 border-hairline bg-surface-sunken">
+          <p className="text-ink text-sm">{cronResult}</p>
         </Card>
       )}
 
@@ -151,14 +152,14 @@ function DiscoveriesContent() {
             <button
               key={s.label}
               onClick={() => setStatusFilter(s.filter)}
-              className={`rounded-lg border px-3 py-2 text-center transition-colors cursor-pointer ${
+              className={`rounded-md border px-3 py-2 text-center transition-colors cursor-pointer ${
                 statusFilter === s.filter
-                  ? 'border-brand-gold bg-brand-gold/10'
-                  : 'border-brand-border hover:border-brand-gold/30'
+                  ? 'border-brass bg-surface-sunken'
+                  : 'border-hairline hover:border-border-control'
               }`}
             >
-              <p className="text-brand-cream font-display text-xl">{s.value}</p>
-              <p className="text-brand-muted text-xs">{s.label}</p>
+              <p className="text-ink font-display text-xl">{s.value}</p>
+              <p className="text-ink-muted text-xs">{s.label}</p>
             </button>
           ))}
         </div>
@@ -171,7 +172,7 @@ function DiscoveriesContent() {
           placeholder="Search company name or cert number..."
           value={search}
           onChange={e => setSearch(e.target.value)}
-          className="flex-1 rounded-lg border border-brand-border bg-brand-navy px-4 py-2.5 text-sm text-brand-cream placeholder:text-brand-muted/50 focus:border-brand-gold focus:outline-none transition-colors"
+          className="flex-1 rounded-md border border-hairline bg-surface-raised px-4 py-2.5 text-sm text-ink placeholder:text-ink-subtle focus:outline-none transition-colors"
         />
         <input
           type="text"
@@ -179,16 +180,16 @@ function DiscoveriesContent() {
           value={stateFilter}
           onChange={e => setStateFilter(e.target.value.toUpperCase())}
           maxLength={2}
-          className="w-20 rounded-lg border border-brand-border bg-brand-navy px-3 py-2.5 text-sm text-brand-cream text-center placeholder:text-brand-muted/50 focus:border-brand-gold focus:outline-none transition-colors"
+          className="w-20 rounded-md border border-hairline bg-surface-raised px-3 py-2.5 text-sm text-ink text-center placeholder:text-ink-subtle focus:outline-none transition-colors"
         />
       </div>
 
       {/* Results */}
       {loading ? (
-        <div className="text-brand-muted p-10">Loading...</div>
+        <div className="text-ink-muted p-10">Loading...</div>
       ) : data.length === 0 ? (
         <Card>
-          <p className="text-brand-muted text-center py-12">
+          <p className="text-ink-muted text-center py-12">
             No discovered operators{statusFilter ? ` with status "${statusFilter}"` : ''}.
             {!stats?.total && ' Run the discovery pipeline to scrape the FAA registry.'}
           </p>
@@ -197,29 +198,29 @@ function DiscoveriesContent() {
         <>
           <div className="space-y-2">
             {data.map(op => (
-              <Card key={op.id} className={op.status === 'no_email' ? 'border-brand-warning/20' : ''}>
+              <Card key={op.id} className={op.status === 'no_email' ? 'border-warning' : ''}>
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 mb-1">
-                      <h3 className="text-brand-cream font-semibold truncate">{op.company_name}</h3>
-                      {op.dba_name && <span className="text-brand-muted text-xs">DBA: {op.dba_name}</span>}
+                      <h3 className="text-ink font-semibold truncate">{op.company_name}</h3>
+                      {op.dba_name && <span className="text-ink-muted text-xs">DBA: {op.dba_name}</span>}
                       <Badge variant={statusBadge[op.status] || 'default'}>{op.status}</Badge>
                     </div>
-                    <p className="text-brand-muted text-xs">
+                    <p className="text-ink-muted text-xs">
                       {[op.city, op.state, op.zip].filter(Boolean).join(', ')}
                       {op.certificate_number && <> &middot; Cert: {op.certificate_number}</>}
                     </p>
                     {op.contact_email && (
-                      <p className="text-brand-cream/70 text-xs mt-1">{op.contact_email}</p>
+                      <p className="text-ink-muted text-xs mt-1">{op.contact_email}</p>
                     )}
                     {op.phone && (
-                      <p className="text-brand-muted/60 text-xs">{op.phone}</p>
+                      <p className="text-ink-subtle text-xs">{op.phone}</p>
                     )}
                     {op.emailed_at && (
-                      <p className="text-brand-muted/40 text-xs mt-1">Invited {new Date(op.emailed_at).toLocaleDateString()}</p>
+                      <p className="text-ink-subtle text-xs mt-1">Invited {new Date(op.emailed_at).toLocaleDateString()}</p>
                     )}
                     {op.notes && (
-                      <p className="text-brand-muted/40 text-xs mt-1 italic">{op.notes}</p>
+                      <p className="text-ink-subtle text-xs mt-1 italic">{op.notes}</p>
                     )}
                   </div>
 
@@ -232,7 +233,7 @@ function DiscoveriesContent() {
                     {op.status !== 'opted_out' && op.status !== 'registered' && (
                       <button
                         onClick={() => updateOperator(op.id, { status: 'opted_out' })}
-                        className="text-xs text-brand-muted/50 hover:text-brand-error transition-colors cursor-pointer"
+                        className="text-xs text-ink-subtle hover:text-danger transition-colors cursor-pointer"
                       >
                         Opt out
                       </button>
@@ -241,14 +242,14 @@ function DiscoveriesContent() {
                 </div>
 
                 {editingId === op.id && (
-                  <div className="mt-3 pt-3 border-t border-brand-border flex gap-2">
+                  <div className="mt-3 pt-3 border-t border-hairline flex gap-2">
                     <input
                       type="email"
                       placeholder="charter@company.com"
                       value={editEmail}
                       onChange={e => setEditEmail(e.target.value)}
                       autoFocus
-                      className="flex-1 rounded-lg border border-brand-border bg-brand-navy px-3 py-2 text-sm text-brand-cream placeholder:text-brand-muted/50 focus:border-brand-gold focus:outline-none transition-colors"
+                      className="flex-1 rounded-md border border-hairline bg-surface-raised px-3 py-2 text-sm text-ink placeholder:text-ink-subtle focus:outline-none transition-colors"
                     />
                     <Button
                       size="sm"
@@ -261,7 +262,7 @@ function DiscoveriesContent() {
                     </Button>
                     <button
                       onClick={() => { setEditingId(null); setEditEmail(''); }}
-                      className="text-xs text-brand-muted hover:text-brand-cream transition-colors cursor-pointer px-2"
+                      className="text-xs text-ink-muted hover:text-ink transition-colors cursor-pointer px-2"
                     >
                       Cancel
                     </button>
@@ -273,7 +274,7 @@ function DiscoveriesContent() {
 
           {pagination.pages > 1 && (
             <div className="flex items-center justify-between mt-6">
-              <p className="text-brand-muted text-xs">
+              <p className="text-ink-muted text-xs">
                 Page {pagination.page} of {pagination.pages} ({pagination.total} total)
               </p>
               <div className="flex gap-2">
@@ -294,7 +295,7 @@ function DiscoveriesContent() {
 
 export default function AdminDiscoveriesPage() {
   return (
-    <Suspense fallback={<div className="text-brand-muted p-10">Loading...</div>}>
+    <Suspense fallback={<div className="text-ink-muted p-10">Loading...</div>}>
       <DiscoveriesContent />
     </Suspense>
   );

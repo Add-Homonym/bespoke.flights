@@ -31,13 +31,13 @@ export function BoardLink() {
 
   return (
     <Card className="mb-8">
-      <h2 className="text-sm font-semibold text-brand-muted uppercase tracking-wider mb-2">Staff board link</h2>
-      <p className="text-brand-cream/70 text-sm mb-4">
+      <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wider mb-2">Staff board link</h2>
+      <p className="text-ink-muted text-sm mb-4">
         A private, read-only link to your live company board, for dispatch screens or staff without an account.
         It shows upcoming charters with passenger contact details, so share it only inside your company.
       </p>
       {url === undefined ? (
-        <p className="text-brand-muted text-sm">Loading&hellip;</p>
+        <p className="text-ink-muted text-sm">Loading&hellip;</p>
       ) : url ? (
         <div className="space-y-2">
           <div className="flex gap-2">
@@ -46,20 +46,20 @@ export function BoardLink() {
               readOnly
               value={url}
               onFocus={e => e.currentTarget.select()}
-              className="flex-1 min-w-0 rounded-lg border border-brand-border bg-brand-navy px-3 py-2 text-sm text-brand-cream font-mono"
+              className="flex-1 min-w-0 rounded-md border border-hairline bg-surface-raised px-3 py-2 text-sm text-ink font-mono"
             />
             <Button size="sm" type="button" onClick={() => navigator.clipboard.writeText(url).then(() => setMessage('Link copied.'), () => {})}>Copy</Button>
           </div>
           <div className="flex gap-5 text-xs">
-            <a href={url} target="_blank" rel="noreferrer" className="text-brand-gold hover:underline">Open board</a>
-            <button type="button" onClick={() => act('create')} disabled={busy} className="text-brand-muted hover:text-brand-cream cursor-pointer">Replace link</button>
-            <button type="button" onClick={() => act('revoke')} disabled={busy} className="text-brand-muted hover:text-brand-error cursor-pointer">Turn off link</button>
+            <a href={url} target="_blank" rel="noreferrer" className="text-brass-ink hover:underline">Open board</a>
+            <button type="button" onClick={() => act('create')} disabled={busy} className="text-ink-muted hover:text-ink cursor-pointer">Replace link</button>
+            <button type="button" onClick={() => act('revoke')} disabled={busy} className="text-ink-muted hover:text-danger cursor-pointer">Turn off link</button>
           </div>
         </div>
       ) : (
         <Button type="button" onClick={() => act('create')} disabled={busy}>Create board link</Button>
       )}
-      {message && <p role="status" className="text-brand-success text-sm mt-2">{message}</p>}
+      {message && <p role="status" className="text-confirmed text-sm mt-2">{message}</p>}
     </Card>
   );
 }

@@ -72,16 +72,16 @@ export default function OperatorInboundPage() {
   const pending = rfqs.filter(r => !r.quote_id && r.request_status !== 'booked' && r.request_status !== 'cancelled');
   const quoted = rfqs.filter(r => r.quote_id);
 
-  if (loading) return <div className="text-brand-muted p-10">Loading inbound requests...</div>;
+  if (loading) return <div className="text-ink-muted p-10">Loading inbound requests...</div>;
 
   return (
     <div>
       <div className="flex items-center justify-between mb-10">
         <div>
-          <h1 className="font-display text-3xl text-brand-cream mb-2">Inbound Requests</h1>
-          <p className="text-brand-muted">
+          <h1 className="font-display text-3xl text-ink mb-2">Inbound Requests</h1>
+          <p className="text-ink-muted">
             Charter requests matched to your operator profile. {pending.length > 0 && (
-              <span className="text-brand-gold">{pending.length} awaiting your quote.</span>
+              <span className="text-brass-ink">{pending.length} awaiting your quote.</span>
             )}
           </p>
         </div>
@@ -94,9 +94,9 @@ export default function OperatorInboundPage() {
       {rfqs.length === 0 ? (
         <Card>
           <div className="text-center py-12">
-            <p className="text-brand-muted mb-4">No inbound requests yet.</p>
-            <p className="text-brand-cream/60 text-sm">
-              Make sure your <a href="/operator/settings" className="text-brand-gold hover:underline">operator profile</a> is configured with your markets and fleet types so the matching engine can route requests to you.
+            <p className="text-ink-muted mb-4">No inbound requests yet.</p>
+            <p className="text-ink-muted text-sm">
+              Make sure your <a href="/operator/settings" className="text-brass-ink hover:underline">operator profile</a> is configured with your markets and fleet types so the matching engine can route requests to you.
             </p>
           </div>
         </Card>
@@ -105,7 +105,7 @@ export default function OperatorInboundPage() {
           {/* Pending quotes first */}
           {pending.length > 0 && (
             <>
-              <h2 className="text-xs font-semibold text-brand-gold uppercase tracking-wider mt-6 mb-3">Awaiting Your Quote</h2>
+              <h2 className="text-xs font-semibold text-brass-ink uppercase tracking-wider mt-6 mb-3">Awaiting Your Quote</h2>
               {pending.map(rfq => (
                 <RFQCard
                   key={rfq.outreach_id}
@@ -123,7 +123,7 @@ export default function OperatorInboundPage() {
           {/* Already quoted */}
           {quoted.length > 0 && (
             <>
-              <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider mt-8 mb-3">Quoted</h2>
+              <h2 className="text-xs font-semibold text-ink-muted uppercase tracking-wider mt-8 mb-3">Quoted</h2>
               {quoted.map(rfq => (
                 <RFQCard
                   key={rfq.outreach_id}
@@ -173,28 +173,28 @@ function RFQCard({
   };
 
   return (
-    <Card className={`${!hasQuote ? 'border-brand-gold/20' : ''}`}>
+    <Card className={`${!hasQuote ? 'border-brass' : ''}`}>
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <div className="flex items-center gap-3 mb-1">
-            <span className="text-brand-cream font-mono tracking-wide text-lg">{route}</span>
-            <span className="text-brand-muted/50 text-xs bg-brand-navy rounded px-2 py-0.5">
+            <span className="text-ink font-mono tracking-wide text-lg">{route}</span>
+            <span className="text-ink-subtle text-xs bg-surface-raised rounded px-2 py-0.5">
               Score: {rfq.match_score}
             </span>
           </div>
-          <p className="text-brand-muted text-xs">
+          <p className="text-ink-muted text-xs">
             {legs.length} leg{legs.length !== 1 ? 's' : ''} · {rfq.passenger_count} pax · {dateRange}
           </p>
           {rfq.request_notes && (
-            <p className="text-brand-cream/60 text-xs mt-1 italic">{rfq.request_notes}</p>
+            <p className="text-ink-muted text-xs mt-1 italic">{rfq.request_notes}</p>
           )}
-          <p className="text-brand-muted/40 text-xs mt-1">Received {timeAgo}</p>
+          <p className="text-ink-subtle text-xs mt-1">Received {timeAgo}</p>
         </div>
 
         <div className="flex items-center gap-3">
           {hasQuote ? (
             <div className="text-right">
-              <p className="text-brand-gold font-display text-lg">${((rfq.quote_price || 0) / 100).toLocaleString()}</p>
+              <p className="text-brass-ink font-display text-lg">${((rfq.quote_price || 0) / 100).toLocaleString()}</p>
               <Badge variant={quoteBadge[rfq.quote_status || 'pending']}>
                 {rfq.quote_status}
               </Badge>
@@ -206,7 +206,7 @@ function RFQCard({
           )}
           <button
             onClick={onViewDetails}
-            className="text-xs text-brand-muted hover:text-brand-cream transition-colors cursor-pointer"
+            className="text-xs text-ink-muted hover:text-ink transition-colors cursor-pointer"
           >
             Details →
           </button>
@@ -216,7 +216,7 @@ function RFQCard({
       {/* Leg details */}
       <div className="mt-3 flex flex-wrap gap-2">
         {legs.map((leg, i) => (
-          <span key={i} className="text-xs rounded bg-brand-navy/70 px-2 py-1 text-brand-cream/70 font-mono">
+          <span key={i} className="text-xs rounded bg-surface-sunken px-2 py-1 text-ink-muted font-mono">
             {leg.origin_code}→{leg.dest_code} {leg.departure_date}{leg.departure_time ? ` @${leg.departure_time}` : ''}
           </span>
         ))}
@@ -225,16 +225,16 @@ function RFQCard({
       {/* Inline quote form */}
       {expanded && !hasQuote && (
         <form
-          className="mt-5 pt-5 border-t border-brand-border"
+          className="mt-5 pt-5 border-t border-hairline"
           onSubmit={e => { e.preventDefault(); onSubmit(e.currentTarget); }}
         >
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <Input name="price" label="Total Price (USD)" type="number" step="0.01" min="0" placeholder="25000" required />
             <div>
-              <label className="block text-sm font-medium text-brand-muted mb-1.5">Aircraft</label>
+              <label className="block text-sm font-medium text-ink-muted mb-1.5">Aircraft</label>
               <select
                 name="aircraftId"
-                className="w-full rounded-lg border border-brand-border bg-brand-navy px-3 py-2.5 text-brand-cream text-sm focus:border-brand-gold focus:outline-none transition-colors"
+                className="w-full rounded-md border border-hairline bg-surface-raised px-3 py-2.5 text-ink text-sm focus:outline-none transition-colors"
               >
                 <option value="">Optional</option>
                 {aircraft.map(a => (
@@ -244,7 +244,7 @@ function RFQCard({
             </div>
             <Input name="validUntil" label="Valid Until" type="date" />
             <div className="flex items-end">
-              <Button type="submit" className="w-full">Submit Quote</Button>
+              <Button type="submit" block>Submit Quote</Button>
             </div>
           </div>
           <div className="mt-3">
@@ -252,7 +252,7 @@ function RFQCard({
               name="message"
               rows={2}
               placeholder="Optional message: describe your offer, amenities, etc."
-              className="w-full rounded-lg border border-brand-border bg-brand-navy px-3 py-2 text-sm text-brand-cream placeholder:text-brand-muted/50 focus:border-brand-gold focus:outline-none transition-colors resize-none"
+              className="w-full rounded-md border border-hairline bg-surface-raised px-3 py-2 text-sm text-ink placeholder:text-ink-subtle focus:outline-none transition-colors resize-none"
             />
           </div>
         </form>

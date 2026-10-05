@@ -45,3 +45,18 @@ export function fromDbLegs(legs: { origin_code: string; dest_code: string; depar
 export function fromDraftLegs(legs: { originCode: string; destCode: string; departureDate: string; departureTime: string }[]): TripLeg[] {
   return legs.map(l => ({ from: l.originCode.toUpperCase(), to: l.destCode.toUpperCase(), date: l.departureDate, time: l.departureTime }));
 }
+
+/**
+ * 'Sat 12 Oct · 09:30': the departure day and 24-hour local time of the
+ * departure airport. Without a time: 'Sat 12 Oct · Any time'. '' for a
+ * malformed date.
+ */
+export function formatDeparture(date: string, time: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return '';
+  const d = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return '';
+  const day = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).replace(',', '');
+  const m = /^(\d{2}):(\d{2})$/.exec(time);
+  const clock = m && Number(m[1]) <= 23 && Number(m[2]) <= 59 ? time : 'Any time';
+  return `${day} · ${clock}`;
+}

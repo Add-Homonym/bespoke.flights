@@ -6,10 +6,10 @@ export default function OperatorBoardPage() {
     <div>
       <div className="flex flex-wrap items-start justify-between gap-4 mb-8">
         <div>
-          <h1 className="font-display text-3xl text-brand-cream mb-2">Company Board</h1>
-          <p className="text-brand-muted">Every incoming charter in one place. Updates automatically.</p>
+          <h1 className="font-display text-3xl text-ink mb-2">Company Board</h1>
+          <p className="text-ink-muted">Every incoming charter in one place. Updates automatically.</p>
         </div>
-        <Link href="/operator/team" className="text-sm text-brand-gold hover:underline">
+        <Link href="/operator/team" className="text-sm text-brass-ink hover:underline">
           Staff alerts &amp; board link &rarr;
         </Link>
       </div>
