@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
+import { neonAuthEnabled } from '@/lib/neon-auth';
 import { getDb } from '@/lib/db';
 import { profileSchema } from '@/lib/validations';
 import type { User } from '@/lib/types';
@@ -23,6 +24,11 @@ export async function PATCH(req: Request) {
   const parsed = profileSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
+  }
+
+  if (parsed.data.email && neonAuthEnabled()) {
+    // The sign-in email lives in Neon Auth; changing only our copy would lock the user out.
+    return NextResponse.json({ error: { email: ['Email cannot be changed here'] } }, { status: 400 });
   }
 
   const db = getDb();

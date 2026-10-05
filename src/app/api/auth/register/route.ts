@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
-import bcrypt from 'bcryptjs';
 import { getDb } from '@/lib/db';
 import { registerSchema } from '@/lib/validations';
-import { setSessionCookie } from '@/lib/auth';
+import { registerUser } from '@/lib/auth';
 import { claimBookingDraft } from '@/lib/bookings/create';
 import { appBaseUrl } from '@/lib/payments/config';
 
@@ -17,25 +16,10 @@ export async function POST(req: Request) {
     const { email, phone, password, name, role, companyName } = parsed.data;
     const db = getDb();
 
-    const existing = await db.one('SELECT id FROM users WHERE email = ?', [email]);
-    if (existing) {
+    const userId = await registerUser(db, { email, phone, password, name, role, companyName });
+    if (userId === null) {
       return NextResponse.json({ error: { email: ['Email already registered'] } }, { status: 409 });
     }
-
-    const passwordHash = await bcrypt.hash(password, 12);
-
-    const userId = await db.transaction(async tx => {
-      const { id } = (await tx.one<{ id: number }>(
-        'INSERT INTO users (email, phone, password_hash, name, role) VALUES (?, ?, ?, ?, ?) RETURNING id',
-        [email, phone || null, passwordHash, name, role]
-      ))!;
-      if (role === 'operator' && companyName) {
-        await tx.run('INSERT INTO operators (user_id, company_name) VALUES (?, ?)', [id, companyName]);
-      }
-      return id;
-    });
-
-    await setSessionCookie({ userId, role });
 
     // A traveler who built a trip before signing up: submit it now.
     const requestId = role === 'customer' ? await claimBookingDraft(db, userId, appBaseUrl(req)) : null;

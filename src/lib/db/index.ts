@@ -185,7 +185,7 @@ async function connect(): Promise<Db> {
   await migrate(db);
   if (process.env.APP_TEST_MODE === 'true') {
     const { seedDemoData } = await import('./demo-data');
-    if (await seedDemoData(db)) console.log('[test mode] Loaded demo accounts into empty database');
+    if (await seedDemoData(db)) console.log('[test mode] Loaded demo accounts');
   }
   return db;
 }
