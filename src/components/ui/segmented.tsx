@@ -29,7 +29,7 @@ export function Segmented({
             aria-pressed={selected}
             onClick={() => onChange(opt.value)}
             className={`min-h-11 flex-1 rounded-sm px-3 text-label transition-colors duration-200 ease-out cursor-pointer ${
-              selected ? 'bg-ink text-on-ink' : 'text-ink-muted hover:text-ink'
+              selected ? 'bg-royal text-on-royal' : 'text-ink-muted hover:text-ink'
             }`}
           >
             {opt.label}
