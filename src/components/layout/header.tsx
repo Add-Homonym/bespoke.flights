@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ButtonLink } from '@/components/ui/button';
+import { Logo } from '@/components/ui/logo';
 
 const navLink =
   'inline-flex min-h-11 items-center text-label text-ink-muted transition-colors duration-200 ease-out hover:text-ink';
@@ -49,8 +50,8 @@ export function Header({ user }: { user?: { name: string; role: string } | null 
   return (
     <header className="border-b border-hairline bg-surface print:hidden">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-6 px-4 py-2 sm:px-6">
-        <Link href="/" className="inline-flex min-h-11 items-center text-title text-ink">
-          bespoke<span className="text-brass-ink">.flights</span>
+        <Link href="/" className="inline-flex min-h-11 items-center">
+          <Logo />
         </Link>
         <nav aria-label="Main" className="flex flex-wrap items-center gap-x-5">
           {roleLinks.map(link => (
