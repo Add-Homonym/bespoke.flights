@@ -54,7 +54,7 @@ export default async function OperatorDashboardPage() {
                 Configure your markets, fleet types, safety rating, and contact method so the matching engine can route charter requests to you automatically.
               </p>
             </div>
-            <Link href="/operator/settings" className="rounded-md bg-ink px-4 py-2 text-sm font-semibold text-on-ink hover:opacity-90 transition-colors shrink-0">
+            <Link href="/operator/settings" className="rounded-md bg-royal px-4 py-2 text-sm font-semibold text-on-royal hover:opacity-90 transition-colors shrink-0">
               Configure →
             </Link>
           </div>

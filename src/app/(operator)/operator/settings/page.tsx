@@ -89,7 +89,7 @@ export default function OperatorSettingsPage() {
                   onClick={() => save({ contact_method: method })}
                   className={`flex-1 py-3 text-sm font-medium transition-colors cursor-pointer capitalize ${
                     settings.contact_method === method
-                      ? 'bg-ink text-on-ink'
+                      ? 'bg-royal text-on-royal'
                       : 'text-ink-muted hover:text-ink'
                   }`}
                 >

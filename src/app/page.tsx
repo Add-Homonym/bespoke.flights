@@ -6,6 +6,7 @@ import { ButtonLink } from '@/components/ui/button';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { DRAFT_COOKIE, parseDraft } from '@/lib/bookings/draft';
+import { Logo } from '@/components/ui/logo';
 
 const steps = [
   { icon: Plane, title: 'Build your itinerary', desc: 'Add every leg of the trip in one request: A to B, B to C, and beyond.' },
@@ -80,7 +81,7 @@ export default async function HomePage() {
 
       <footer className="border-t border-hairline py-8">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 sm:px-6">
-          <span className="text-title text-ink-muted">bespoke.flights</span>
+          <Logo />
           <span className="text-label text-ink-muted">&copy; {new Date().getFullYear()} All rights reserved.</span>
         </div>
       </footer>

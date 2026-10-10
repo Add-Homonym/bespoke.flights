@@ -7,7 +7,7 @@ const base =
   'aria-disabled:opacity-40 aria-disabled:cursor-not-allowed';
 
 const variants: Record<ButtonVariant, string> = {
-  primary: 'bg-ink text-on-ink hover:opacity-90',
+  primary: 'bg-royal text-on-royal hover:opacity-90',
   secondary: 'bg-transparent border border-border-control text-ink hover:bg-surface-sunken',
   quiet: 'bg-transparent text-brass-ink hover:underline underline-offset-4',
   // Destructive confirmation (admin refunds). Not part of the traveler flows.

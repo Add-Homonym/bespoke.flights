@@ -2,6 +2,7 @@
 
 /*
  * "Charter" design system tokens.
+ * Royal purple is the main color; gold (the --brass tokens) is the accent.
  * Light is the default; dark follows prefers-color-scheme. Set
  * data-theme="light" or data-theme="dark" on <html> to override the system.
  */
@@ -9,19 +10,21 @@
   --surface: #f7f4ee;
   --surface-raised: #fffdf9;
   --surface-sunken: #eee9df;
-  --night: #101b24;
+  --night: #2e1550;
   --ink: #16181b;
   --ink-muted: #5f5b54;
   --ink-subtle: #6f6a62;
   --on-ink: #f7f4ee;
-  --on-night: #f2ede4;
-  --on-night-muted: #c8c2b8;
-  --hairline: #ddd6ca;
+  --royal: #5b2a86;
+  --on-royal: #fbf8ff;
+  --on-night: #f4eefa;
+  --on-night-muted: #cdbfe0;
+  --hairline: #ddd5e2;
   --border-control: #857e72;
-  --brass: #b08d55;
-  --brass-ink: #7a5b28;
-  --on-brass: #16181b;
-  --focus: #7a5b28;
+  --brass: #d4af37;
+  --brass-ink: #7a5a00;
+  --on-brass: #1b0f2b;
+  --focus: #5b2a86;
   --confirmed: #1d5f73;
   --confirmed-tint: #e2edef;
   --warning: #855a0e;
@@ -33,22 +36,24 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --surface: #0e1114;
-    --surface-raised: #171b20;
-    --surface-sunken: #090b0d;
-    --night: #16222c;
+    --surface: #100c16;
+    --surface-raised: #1a1522;
+    --surface-sunken: #09070d;
+    --night: #26113f;
     --ink: #f2ede4;
     --ink-muted: #a8a299;
     --ink-subtle: #8e887f;
-    --on-ink: #0e1114;
+    --on-ink: #100c16;
+    --royal: #a77ddb;
+    --on-royal: #120a1c;
     --on-night: #f2ede4;
-    --on-night-muted: #c8c2b8;
-    --hairline: #2a2f36;
-    --border-control: #6e6960;
-    --brass: #c9a66b;
-    --brass-ink: #d4b47a;
-  --on-brass: #0e1114;
-    --focus: #d4b47a;
+    --on-night-muted: #c9bcd9;
+    --hairline: #2e2638;
+    --border-control: #6f6580;
+    --brass: #e0bd52;
+    --brass-ink: #e6c766;
+    --on-brass: #120a1c;
+    --focus: #b994e6;
     --confirmed: #7fbccc;
     --confirmed-tint: #122a31;
     --warning: #deb05a;
@@ -60,22 +65,24 @@
   }
 }
 [data-theme="dark"] {
-  --surface: #0e1114;
-  --surface-raised: #171b20;
-  --surface-sunken: #090b0d;
-  --night: #16222c;
+  --surface: #100c16;
+  --surface-raised: #1a1522;
+  --surface-sunken: #09070d;
+  --night: #26113f;
   --ink: #f2ede4;
   --ink-muted: #a8a299;
   --ink-subtle: #8e887f;
-  --on-ink: #0e1114;
+  --on-ink: #100c16;
+  --royal: #a77ddb;
+  --on-royal: #120a1c;
   --on-night: #f2ede4;
-  --on-night-muted: #c8c2b8;
-  --hairline: #2a2f36;
-  --border-control: #6e6960;
-  --brass: #c9a66b;
-  --brass-ink: #d4b47a;
-  --on-brass: #0e1114;
-  --focus: #d4b47a;
+  --on-night-muted: #c9bcd9;
+  --hairline: #2e2638;
+  --border-control: #6f6580;
+  --brass: #e0bd52;
+  --brass-ink: #e6c766;
+  --on-brass: #120a1c;
+  --focus: #b994e6;
   --confirmed: #7fbccc;
   --confirmed-tint: #122a31;
   --warning: #deb05a;
@@ -95,6 +102,8 @@
   --color-ink-muted: var(--ink-muted);
   --color-ink-subtle: var(--ink-subtle);
   --color-on-ink: var(--on-ink);
+  --color-royal: var(--royal);
+  --color-on-royal: var(--on-royal);
   --color-on-night: var(--on-night);
   --color-on-night-muted: var(--on-night-muted);
   --color-hairline: var(--hairline);
@@ -115,7 +124,7 @@
   --radius-pill: 999px;
   --shadow-raised: var(--ds-shadow-raised);
   --shadow-float: var(--ds-shadow-float);
-  --font-display: var(--font-instrument-serif), "Iowan Old Style", Georgia, serif;
+  --font-display: "Helvetica Neue", Helvetica, Arial, sans-serif;
   --font-sans: var(--font-hanken-grotesk), -apple-system, "Helvetica Neue", sans-serif;
 }
 
@@ -140,20 +149,20 @@
   font-family: var(--font-display);
   font-size: 56px;
   line-height: 60px;
-  font-weight: 400;
+  font-weight: 700;
   letter-spacing: -0.01em;
 }
 @utility text-display {
   font-family: var(--font-display);
   font-size: 36px;
   line-height: 40px;
-  font-weight: 400;
+  font-weight: 700;
 }
 @utility text-title {
   font-family: var(--font-display);
   font-size: 24px;
   line-height: 30px;
-  font-weight: 400;
+  font-weight: 700;
 }
 @utility text-heading {
   font-family: var(--font-sans);
@@ -197,6 +206,12 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Headings: Helvetica bold, whatever type-scale utility they carry. */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+
 /* Focus ring on every interactive element. */
 :focus-visible {
   outline: 2px solid var(--focus);
@@ -225,6 +240,8 @@ body {
     --ink-subtle: #333;
     --hairline: #999;
     --brass-ink: #000;
+    --royal: #000;
+    --on-royal: #fff;
     --danger: #000;
     --danger-tint: #fff;
   }
