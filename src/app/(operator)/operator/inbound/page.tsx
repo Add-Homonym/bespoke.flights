@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import type { BookingLeg, Aircraft } from '@/lib/types';
@@ -81,13 +81,13 @@ export default function OperatorInboundPage() {
           <h1 className="font-display text-3xl text-ink mb-2">Inbound Requests</h1>
           <p className="text-ink-muted">
             Charter requests matched to your operator profile. {pending.length > 0 && (
-              <span className="text-brass-ink">{pending.length} awaiting your quote.</span>
+              <span className="text-royal">{pending.length} awaiting your quote.</span>
             )}
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Badge variant="gold">{pending.length} new</Badge>
-          <Badge variant="default">{quoted.length} quoted</Badge>
+          <StatusBadge variant="brass">{pending.length} new</StatusBadge>
+          <StatusBadge variant="neutral">{quoted.length} quoted</StatusBadge>
         </div>
       </div>
 
@@ -96,7 +96,7 @@ export default function OperatorInboundPage() {
           <div className="text-center py-12">
             <p className="text-ink-muted mb-4">No inbound requests yet.</p>
             <p className="text-ink-muted text-sm">
-              Make sure your <a href="/operator/settings" className="text-brass-ink hover:underline">operator profile</a> is configured with your markets and fleet types so the matching engine can route requests to you.
+              Make sure your <a href="/operator/settings" className="text-royal hover:underline">operator profile</a> is configured with your markets and fleet types so the matching engine can route requests to you.
             </p>
           </div>
         </Card>
@@ -105,7 +105,7 @@ export default function OperatorInboundPage() {
           {/* Pending quotes first */}
           {pending.length > 0 && (
             <>
-              <h2 className="text-xs font-semibold text-brass-ink uppercase tracking-wider mt-6 mb-3">Awaiting Your Quote</h2>
+              <h2 className="text-xs font-semibold text-royal uppercase tracking-wider mt-6 mb-3">Awaiting Your Quote</h2>
               {pending.map(rfq => (
                 <RFQCard
                   key={rfq.outreach_id}
@@ -166,10 +166,10 @@ function RFQCard({
   const timeAgo = getTimeAgo(rfq.sent_at);
   const hasQuote = !!rfq.quote_id;
 
-  const quoteBadge: Record<string, 'success' | 'warning' | 'error' | 'default'> = {
+  const quoteBadge: Record<string, 'confirmed' | 'warning' | 'danger' | 'neutral'> = {
     pending: 'warning',
-    accepted: 'success',
-    rejected: 'error',
+    accepted: 'confirmed',
+    rejected: 'danger',
   };
 
   return (
@@ -194,10 +194,10 @@ function RFQCard({
         <div className="flex items-center gap-3">
           {hasQuote ? (
             <div className="text-right">
-              <p className="text-brass-ink font-display text-lg">${((rfq.quote_price || 0) / 100).toLocaleString()}</p>
-              <Badge variant={quoteBadge[rfq.quote_status || 'pending']}>
+              <p className="text-royal font-display text-lg">${((rfq.quote_price || 0) / 100).toLocaleString()}</p>
+              <StatusBadge variant={quoteBadge[rfq.quote_status || 'pending']}>
                 {rfq.quote_status}
-              </Badge>
+              </StatusBadge>
             </div>
           ) : (
             <Button onClick={onToggle} size="sm">

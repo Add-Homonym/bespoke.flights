@@ -2,23 +2,23 @@ import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { legsByRequest } from '@/lib/db/queries';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/ui/status-badge';
 import type { Operator, Quote } from '@/lib/types';
 import Link from 'next/link';
 import { formatMoney } from '@/lib/payments/config';
 
-const statusBadge: Record<string, 'default' | 'success' | 'warning' | 'error' | 'gold'> = {
+const statusBadge: Record<string, 'neutral' | 'confirmed' | 'warning' | 'danger' | 'neutral'> = {
   pending: 'warning',
-  accepted: 'success',
-  rejected: 'error',
-  withdrawn: 'default',
+  accepted: 'confirmed',
+  rejected: 'danger',
+  withdrawn: 'neutral',
 };
 
-const paymentBadge: Record<string, 'default' | 'success' | 'warning' | 'error' | 'gold'> = {
+const paymentBadge: Record<string, 'neutral' | 'confirmed' | 'warning' | 'danger' | 'neutral'> = {
   processing: 'warning',
-  succeeded: 'success',
+  succeeded: 'confirmed',
   partially_refunded: 'warning',
-  refunded: 'default',
+  refunded: 'neutral',
 };
 
 const paymentLabel: Record<string, string> = {
@@ -64,7 +64,7 @@ export default async function OperatorQuotesPage() {
 
       {quotes.length === 0 ? (
         <Card>
-          <p className="text-ink-muted text-center py-12">No quotes submitted yet. <Link href="/operator/requests" className="text-brass-ink hover:underline">Browse demand</Link></p>
+          <p className="text-ink-muted text-center py-12">No quotes submitted yet. <Link href="/operator/requests" className="text-royal hover:underline">Browse demand</Link></p>
         </Card>
       ) : (
         <div className="space-y-3">
@@ -83,17 +83,17 @@ export default async function OperatorQuotesPage() {
                     </p>
                     <p className="text-ink-subtle text-xs mt-1">{new Date(quote.created_at).toLocaleDateString()}</p>
                     {quote.status === 'accepted' && quote.payment_status && ['succeeded', 'partially_refunded'].includes(quote.payment_status) && (
-                      <p className="text-brass-ink text-xs mt-1">Booked. Open to share the trip sheet with your team &rarr;</p>
+                      <p className="text-royal text-xs mt-1">Booked. Open to share the trip sheet with your team &rarr;</p>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
                     {quote.payment_status && (
-                      <Badge variant={paymentBadge[quote.payment_status] ?? 'default'}>
+                      <StatusBadge variant={paymentBadge[quote.payment_status] ?? 'neutral'}>
                         {paymentLabel[quote.payment_status] ?? quote.payment_status}
                         {quote.payout_cents != null && ` · ${formatMoney(quote.payout_cents, quote.currency)} payout`}
-                      </Badge>
+                      </StatusBadge>
                     )}
-                    <Badge variant={statusBadge[quote.status]}>{quote.status}</Badge>
+                    <StatusBadge variant={statusBadge[quote.status]}>{quote.status}</StatusBadge>
                   </div>
                 </Card>
               </Link>

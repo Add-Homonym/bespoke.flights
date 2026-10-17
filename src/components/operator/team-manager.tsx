@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/ui/status-badge';
 import type { StaffMember } from '@/lib/staff/roster';
 
 interface Form {
@@ -167,7 +167,7 @@ export function TeamManager() {
                   <div>
                     <p className="text-ink font-medium">
                       {m.name} {m.role && <span className="text-ink-muted font-normal">· {m.role}</span>}
-                      {!m.active && <Badge className="ml-2">alerts off</Badge>}
+                      {!m.active && <StatusBadge className="ml-2">alerts off</StatusBadge>}
                     </p>
                     <p className="text-ink-muted text-sm mt-1">
                       {[m.notify_email && m.email && `Email ${m.email}`, m.notify_sms && m.phone && `Text ${m.phone}`].filter(Boolean).join(' · ') || 'No alert channel on'}
@@ -177,7 +177,7 @@ export function TeamManager() {
                     </p>
                   </div>
                   <div className="flex gap-4 text-sm">
-                    <button type="button" onClick={() => test(m)} className="text-brass-ink hover:underline cursor-pointer">Send test</button>
+                    <button type="button" onClick={() => test(m)} className="text-royal hover:underline cursor-pointer">Send test</button>
                     <button type="button" onClick={() => setEditing(m.id)} className="text-ink-muted hover:text-ink cursor-pointer">Edit</button>
                     <button type="button" onClick={() => remove(m)} className="text-ink-muted hover:text-danger cursor-pointer">Remove</button>
                   </div>

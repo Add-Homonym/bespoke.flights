@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { TripDetails } from '@/components/booking/trip-details';
 import { formatTripDate } from '@/lib/trip-format';
 import type { Board, BoardTrip } from '@/lib/board/data';
@@ -85,14 +85,14 @@ export function CompanyBoard({ source, linkTrips }: { source: string; linkTrips:
         <div className="flex flex-wrap gap-2">
           {SECTIONS.map(s => (
             <a key={s.key} href={`#${s.key}`} className="rounded-full border border-hairline px-3 py-1 text-xs text-ink hover:border-border-control">
-              {s.title} <span className="text-brass-ink">{board[s.key].length}</span>
+              {s.title} <span className="text-royal">{board[s.key].length}</span>
             </a>
           ))}
         </div>
         <p className="text-xs text-ink-muted" aria-live="polite">
           {error ? <span className="text-danger">{error}</span> : <>Live · updated {ago < 5 ? 'just now' : `${ago}s ago`}</>}
           {fresh.size > 0 && (
-            <button type="button" onClick={() => setFresh(new Set())} className="ml-3 text-brass-ink hover:underline cursor-pointer">
+            <button type="button" onClick={() => setFresh(new Set())} className="ml-3 text-royal hover:underline cursor-pointer">
               Mark {fresh.size} as seen
             </button>
           )}
@@ -117,9 +117,9 @@ export function CompanyBoard({ source, linkTrips }: { source: string; linkTrips:
                       <div className="flex items-center justify-between gap-2 mb-3">
                         <span className="text-xs text-ink-muted">#{trip.requestId}</span>
                         <div className="flex gap-1.5">
-                          {isNew && <Badge variant="gold">{s.key === 'upcoming' || s.key === 'cancelled' ? 'Updated' : 'New'}</Badge>}
-                          {departsToday && s.key === 'upcoming' && <Badge variant="warning">Departs today</Badge>}
-                          {s.key === 'cancelled' && <Badge variant="error">Cancelled</Badge>}
+                          {isNew && <StatusBadge variant="brass">{s.key === 'upcoming' || s.key === 'cancelled' ? 'Updated' : 'New'}</StatusBadge>}
+                          {departsToday && s.key === 'upcoming' && <StatusBadge variant="warning">Departs today</StatusBadge>}
+                          {s.key === 'cancelled' && <StatusBadge variant="danger">Cancelled</StatusBadge>}
                         </div>
                       </div>
                       <TripDetails compact legs={trip.legs} passengerCount={trip.passengerCount} notes={trip.specialRequests} />
@@ -131,7 +131,7 @@ export function CompanyBoard({ source, linkTrips }: { source: string; linkTrips:
                             <dt className="text-ink-muted">Lead passenger</dt>
                             <dd className="text-ink">
                               {trip.leadPassenger.name}
-                              {trip.leadPassenger.phone && <> · <a href={`tel:${trip.leadPassenger.phone}`} className="hover:text-brass-ink">{trip.leadPassenger.phone}</a></>}
+                              {trip.leadPassenger.phone && <> · <a href={`tel:${trip.leadPassenger.phone}`} className="hover:text-royal">{trip.leadPassenger.phone}</a></>}
                             </dd>
                           </>
                         )}

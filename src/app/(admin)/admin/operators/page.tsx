@@ -1,6 +1,6 @@
 import { getDb } from '@/lib/db';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { OperatorActions } from '@/components/admin/operator-actions';
 import type { Operator } from '@/lib/types';
 
@@ -16,10 +16,10 @@ export default async function AdminOperatorsPage() {
       o.created_at DESC
   `);
 
-  const statusBadge: Record<string, 'warning' | 'success' | 'error'> = {
+  const statusBadge: Record<string, 'warning' | 'confirmed' | 'danger'> = {
     pending: 'warning',
-    approved: 'success',
-    suspended: 'error',
+    approved: 'confirmed',
+    suspended: 'danger',
   };
 
   return (
@@ -44,7 +44,7 @@ export default async function AdminOperatorsPage() {
                   <p className="text-ink-subtle text-xs mt-2">Registered {new Date(op.created_at).toLocaleDateString()}</p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <Badge variant={statusBadge[op.status]}>{op.status}</Badge>
+                  <StatusBadge variant={statusBadge[op.status]}>{op.status}</StatusBadge>
                 </div>
               </div>
               <OperatorActions operatorId={op.id} currentStatus={op.status} />

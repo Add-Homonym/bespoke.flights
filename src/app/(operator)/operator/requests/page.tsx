@@ -4,7 +4,7 @@ import { legsByRequest, quoteCountsByRequest } from '@/lib/db/queries';
 import { Card } from '@/components/ui/card';
 import { TripDetails } from '@/components/booking/trip-details';
 import { fromDbLegs } from '@/lib/trip-format';
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/ui/status-badge';
 import type { BookingRequest } from '@/lib/types';
 
 export default async function OperatorRequestsPage() {
@@ -41,9 +41,9 @@ export default async function OperatorRequestsPage() {
                     <p className="text-ink-subtle text-xs mt-2">Posted {timeAgo}</p>
                   </div>
                   <div className="text-right">
-                    <Badge variant={quoteCount > 0 ? 'warning' : 'gold'}>
+                    <StatusBadge variant={quoteCount > 0 ? 'warning' : 'neutral'}>
                       {quoteCount} quote{quoteCount !== 1 ? 's' : ''}
-                    </Badge>
+                    </StatusBadge>
                   </div>
                 </Card>
               </Link>

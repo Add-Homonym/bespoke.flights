@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { PayoutSettings } from '@/components/operator/payout-settings';
 import { MARKET_LABELS, FLEET_TYPE_LABELS, SAFETY_RATINGS } from '@/lib/types';
 import type { MarketKey } from '@/lib/types';
@@ -66,7 +66,7 @@ export default function OperatorSettingsPage() {
           <h1 className="font-display text-3xl text-ink mb-2">Operator Settings</h1>
           <p className="text-ink-muted">Configure how Bespoke Flights reaches you with charter requests.</p>
         </div>
-        {message && <Badge variant="success">{message}</Badge>}
+        {message && <StatusBadge variant="confirmed">{message}</StatusBadge>}
       </div>
 
       <PayoutSettings />
@@ -172,7 +172,7 @@ export default function OperatorSettingsPage() {
                     : 'border-hairline text-ink-muted hover:border-border-control'
                 }`}
               >
-                <span className={active ? 'text-brass-ink' : ''}>●</span>{' '}{label}
+                <span className={active ? 'text-royal' : ''}>●</span>{' '}{label}
               </button>
             );
           })}
@@ -184,7 +184,7 @@ export default function OperatorSettingsPage() {
               type="checkbox"
               checked={!!settings.hi_capable}
               onChange={e => save({ hi_capable: e.target.checked ? 1 : 0 })}
-              className="rounded border-hairline bg-surface-raised text-brass-ink "
+              className="rounded border-hairline bg-surface-raised text-royal "
             />
             <span className="text-sm text-ink">Hawaii capable</span>
           </label>
@@ -193,7 +193,7 @@ export default function OperatorSettingsPage() {
               type="checkbox"
               checked={!!settings.transoceanic}
               onChange={e => save({ transoceanic: e.target.checked ? 1 : 0 })}
-              className="rounded border-hairline bg-surface-raised text-brass-ink "
+              className="rounded border-hairline bg-surface-raised text-royal "
             />
             <span className="text-sm text-ink">Transoceanic capable</span>
           </label>
@@ -251,9 +251,9 @@ export default function OperatorSettingsPage() {
               }
             </p>
           </div>
-          <Badge variant={settings.status === 'approved' ? 'success' : settings.status === 'pending' ? 'warning' : 'error'}>
+          <StatusBadge variant={settings.status === 'approved' ? 'confirmed' : settings.status === 'pending' ? 'warning' : 'danger'}>
             {settings.status}
-          </Badge>
+          </StatusBadge>
         </div>
       </Card>
     </div>

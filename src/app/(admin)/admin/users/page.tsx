@@ -1,15 +1,15 @@
 import { getDb } from '@/lib/db';
 import { Table, Thead, Th, Td, Tr } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/ui/status-badge';
 import type { User } from '@/lib/types';
 
 export default async function AdminUsersPage() {
   const db = getDb();
   const users = await db.query<Omit<User, 'password_hash' | 'updated_at'>>('SELECT id, email, phone, name, role, created_at FROM users ORDER BY created_at DESC');
 
-  const roleBadge: Record<string, 'gold' | 'success' | 'warning'> = {
-    customer: 'gold',
-    operator: 'success',
+  const roleBadge: Record<string, 'neutral' | 'confirmed' | 'warning'> = {
+    customer: 'neutral',
+    operator: 'confirmed',
     admin: 'warning',
   };
 
@@ -34,7 +34,7 @@ export default async function AdminUsersPage() {
               <Td>{user.name}</Td>
               <Td className="font-mono text-xs">{user.email}</Td>
               <Td className="text-ink-muted">{user.phone || '—'}</Td>
-              <Td><Badge variant={roleBadge[user.role]}>{user.role}</Badge></Td>
+              <Td><StatusBadge variant={roleBadge[user.role]}>{user.role}</StatusBadge></Td>
               <Td className="text-ink-muted text-xs">{new Date(user.created_at).toLocaleDateString()}</Td>
             </Tr>
           ))}

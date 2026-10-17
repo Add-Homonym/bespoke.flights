@@ -101,7 +101,7 @@ export default function FleetPage() {
               <div className="flex items-start justify-between">
                 <div>
                   <h3 className="text-ink font-semibold text-lg">{a.type}</h3>
-                  <p className="text-brass-ink font-mono text-sm mt-1">{a.tail_number}</p>
+                  <p className="text-royal font-mono text-sm mt-1">{a.tail_number}</p>
                 </div>
                 <span className="text-ink-muted text-sm">{a.year || '—'}</span>
               </div>

@@ -96,7 +96,7 @@ function RegisterForm() {
 
       <p className="mt-6 text-center text-body text-ink-muted">
         Already have an account?{' '}
-        <Link href="/login" className="inline-flex min-h-11 items-center text-brass-ink underline underline-offset-4">Sign in</Link>
+        <Link href="/login" className="inline-flex min-h-11 items-center text-royal underline underline-offset-4">Sign in</Link>
       </p>
     </div>
   );

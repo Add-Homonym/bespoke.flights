@@ -3,7 +3,7 @@ import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { Card } from '@/components/ui/card';
 import type { Operator } from '@/lib/types';
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/ui/status-badge';
 
 export default async function OperatorDashboardPage() {
   const session = await getSession();
@@ -37,9 +37,9 @@ export default async function OperatorDashboardPage() {
         {operator && (
           <div className="mt-2 flex items-center gap-2">
             <span className="text-ink text-sm">{operator.company_name}</span>
-            <Badge variant={operator.status === 'approved' ? 'success' : operator.status === 'pending' ? 'warning' : 'error'}>
+            <StatusBadge variant={operator.status === 'approved' ? 'confirmed' : operator.status === 'pending' ? 'warning' : 'danger'}>
               {operator.status}
-            </Badge>
+            </StatusBadge>
           </div>
         )}
       </div>
@@ -73,10 +73,10 @@ export default async function OperatorDashboardPage() {
           <Card hover className="mb-8 border-hairline bg-surface-sunken">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-brass-ink font-semibold text-lg">{inboundPending} inbound request{inboundPending !== 1 ? 's' : ''} awaiting your quote</p>
+                <p className="text-royal font-semibold text-lg">{inboundPending} inbound request{inboundPending !== 1 ? 's' : ''} awaiting your quote</p>
                 <p className="text-ink-muted text-sm mt-1">These were automatically matched to your operator profile.</p>
               </div>
-              <span className="text-brass-ink text-2xl">→</span>
+              <span className="text-royal text-2xl">→</span>
             </div>
           </Card>
         </Link>
@@ -94,7 +94,7 @@ export default async function OperatorDashboardPage() {
             <Card hover>
               <p className="text-ink-muted text-xs uppercase tracking-wider mb-1">{stat.label}</p>
               <p className="text-ink font-display text-3xl">{stat.value}</p>
-              {stat.sub && <p className="text-brass-ink text-xs mt-1">{stat.sub}</p>}
+              {stat.sub && <p className="text-royal text-xs mt-1">{stat.sub}</p>}
             </Card>
           </Link>
         ))}

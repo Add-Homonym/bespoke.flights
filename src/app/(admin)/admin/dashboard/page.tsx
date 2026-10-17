@@ -59,7 +59,7 @@ export default async function AdminDashboardPage() {
             <Card hover>
               <p className="text-ink-muted text-xs uppercase tracking-wider mb-1">{stat.label}</p>
               <p className="text-ink font-display text-3xl">{stat.value}</p>
-              {stat.sub && <p className="text-brass-ink text-xs mt-1">{stat.sub}</p>}
+              {stat.sub && <p className="text-royal text-xs mt-1">{stat.sub}</p>}
             </Card>
           </Link>
         ))}

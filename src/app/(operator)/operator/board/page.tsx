@@ -9,7 +9,7 @@ export default function OperatorBoardPage() {
           <h1 className="font-display text-3xl text-ink mb-2">Company Board</h1>
           <p className="text-ink-muted">Every incoming charter in one place. Updates automatically.</p>
         </div>
-        <Link href="/operator/team" className="text-sm text-brass-ink hover:underline">
+        <Link href="/operator/team" className="text-sm text-royal hover:underline">
           Staff alerts &amp; board link &rarr;
         </Link>
       </div>
