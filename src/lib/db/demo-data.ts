@@ -38,7 +38,7 @@ export async function seedDemoData(db: Db): Promise<boolean> {
       (await tx.one<{ id: number }>(`${sql} RETURNING id`, params))!.id;
 
     const user = (email: string, phone: string, name: string, role: string) =>
-      id('INSERT INTO users (email, phone, password_hash, name, role) VALUES (?, ?, ?, ?, ?)', [email, phone, hash, name, role]);
+      id('INSERT INTO users (email, phone, password_hash, name, role, is_demo) VALUES (?, ?, ?, ?, ?, true)', [email, phone, hash, name, role]);
 
     const operator = (userId: number, values: unknown[]) =>
       id(`INSERT INTO operators (user_id, company_name, certificate, status, contact_method, contact_email, contact_phone,

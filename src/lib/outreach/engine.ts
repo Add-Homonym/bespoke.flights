@@ -198,7 +198,7 @@ QUOTE REQUIREMENTS:
 • Catering inclusions
 • Cancellation terms
 
-Submit your quote at: https://bespoke.flights/operator/inbound
+Submit your quote at: ${appBaseUrl()}/operator/inbound
 
 No markup on your quoted price. Commission on confirmed booking only.
 

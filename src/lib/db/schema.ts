@@ -249,4 +249,11 @@ CREATE INDEX IF NOT EXISTS idx_operator_staff_operator ON operator_staff(operato
 ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_id TEXT;
 ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_auth_id ON users(auth_id);
+
+-- One live quote per operator per request. Withdrawn/rejected quotes do not block a new one.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_quotes_one_live_per_operator
+  ON quotes(request_id, operator_id) WHERE status IN ('pending','accepted');
+
+-- Demo accounts are usable only in test mode (APP_TEST_MODE=true).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_demo BOOLEAN NOT NULL DEFAULT false;
 `;

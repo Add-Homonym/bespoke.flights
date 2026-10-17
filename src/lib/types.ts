@@ -6,6 +6,7 @@ export interface User {
   auth_id: string | null;
   name: string;
   role: 'customer' | 'operator' | 'admin';
+  is_demo: boolean;
   created_at: string;
   updated_at: string;
 }

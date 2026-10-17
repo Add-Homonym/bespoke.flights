@@ -9,94 +9,86 @@
  *   2. Store new discoveries in discovered_operators table
  *   3. Send invite emails via Resend to operators with email addresses
  *
- * Security: Vercel automatically sends CRON_SECRET in the Authorization header.
- * Manual trigger: POST with Authorization: Bearer <CRON_SECRET>
+ * Security: Vercel sends `Authorization: Bearer <CRON_SECRET>` for scheduled
+ * runs. The route refuses every call when CRON_SECRET is unset. Admins may
+ * also trigger a run from /admin/discoveries with their session.
  */
 
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
+import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { runDiscoveryPipeline } from '@/lib/discovery/pipeline';
 
 export const maxDuration = 60; // Vercel Pro: 60s timeout
 export const dynamic = 'force-dynamic';
 
-export async function GET(req: Request) {
-  // Verify cron secret (Vercel sends this automatically for cron jobs)
-  const authHeader = req.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
+const US_STATE = /^[A-Z]{2}$/;
+const manualRunSchema = z.object({
+  states: z.array(z.string().regex(US_STATE)).max(10).optional(),
+  emailsPerRun: z.number().int().min(0).max(100).optional(),
+});
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+function bearerOk(req: Request): boolean {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return false;
+  const header = req.headers.get('authorization') ?? '';
+  return timingSafeEqual(header, `Bearer ${secret}`);
+}
 
-  const db = getDb();
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
 
+async function adminOk(): Promise<boolean> {
   try {
-    const result = await runDiscoveryPipeline(db, {
-      statesPerRun: 10,  // ~10 states per weekly run, cycles through all in ~5 weeks
-      emailsPerRun: 20,  // Resend free tier: 100/day, keep headroom for RFQs
-    });
-
-    console.log('[Cron] Weekly discovery complete:', JSON.stringify(result));
-
-    return NextResponse.json({
-      ok: true,
-      ...result,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error('[Cron] Discovery pipeline error:', message);
-
-    return NextResponse.json({
-      ok: false,
-      error: message,
-      timestamp: new Date().toISOString(),
-    }, { status: 500 });
+    return (await getSession())?.role === 'admin';
+  } catch {
+    return false;
   }
 }
 
+async function run(options: Parameters<typeof runDiscoveryPipeline>[1], label: string) {
+  try {
+    const result = await runDiscoveryPipeline(getDb(), options);
+    console.log(`[Cron] ${label} discovery complete:`, JSON.stringify(result));
+    return NextResponse.json({ ok: true, ...result, timestamp: new Date().toISOString() });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[Cron] Discovery pipeline error:', message);
+    return NextResponse.json({ ok: false, error: message, timestamp: new Date().toISOString() }, { status: 500 });
+  }
+}
+
+/** Scheduled run. Vercel Cron calls this with the CRON_SECRET bearer token. */
+export async function GET(req: Request) {
+  if (!bearerOk(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  return run({
+    statesPerRun: 10,  // ~10 states per weekly run, cycles through all in ~5 weeks
+    emailsPerRun: 20,  // Resend free tier: 100/day, keep headroom for RFQs
+  }, 'Weekly');
+}
+
 /**
- * POST handler for manual trigger (admin use).
- * Accepts optional body: { states?: string[], emailsPerRun?: number }
+ * Manual trigger: CRON_SECRET bearer token or an admin session.
+ * Optional body: { states?: string[], emailsPerRun?: number }
  */
 export async function POST(req: Request) {
-  const authHeader = req.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (!bearerOk(req) && !(await adminOk())) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const db = getDb();
-  const options: { forceStates?: string[]; emailsPerRun?: number } = {};
-
-  try {
-    const body = await req.json().catch(() => ({}));
-    if (body.states && Array.isArray(body.states)) {
-      options.forceStates = body.states;
-    }
-    if (body.emailsPerRun && typeof body.emailsPerRun === 'number') {
-      options.emailsPerRun = body.emailsPerRun;
-    }
-  } catch {
-    // Use defaults
+  const raw = await req.json().catch(() => ({}));
+  const parsed = manualRunSchema.safeParse(raw ?? {});
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
   }
 
-  try {
-    const result = await runDiscoveryPipeline(db, options);
-
-    return NextResponse.json({
-      ok: true,
-      ...result,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({
-      ok: false,
-      error: message,
-      timestamp: new Date().toISOString(),
-    }, { status: 500 });
-  }
+  return run({
+    forceStates: parsed.data.states,
+    emailsPerRun: parsed.data.emailsPerRun,
+  }, 'Manual');
 }

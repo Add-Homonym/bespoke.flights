@@ -2,11 +2,12 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { hasSessionCookie } from '@/lib/session-cookie';
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Public routes that don't need auth. Stripe webhooks authenticate by signature.
-  const publicPaths = ['/', '/login', '/register', '/book', '/trip', '/board', '/api/board', '/api/auth', '/api/webhooks'];
+  // Public routes that don't need a session. Stripe webhooks authenticate by
+  // signature; cron routes by CRON_SECRET (or an admin session, checked in the handler).
+  const publicPaths = ['/', '/login', '/register', '/book', '/trip', '/board', '/api/board', '/api/auth', '/api/webhooks', '/api/cron'];
   if (publicPaths.some(p => pathname === p || pathname.startsWith(p + '/'))) {
     return NextResponse.next();
   }

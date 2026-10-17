@@ -4,15 +4,31 @@ import type { SessionPayload } from './types';
 
 /**
  * Edge-safe session helpers (no database, no Node-only imports), shared by
- * middleware and src/lib/auth.ts.
+ * the proxy (middleware) and src/lib/auth.ts.
  */
 
 export const COOKIE_NAME = 'session';
 const NEON_SESSION_COOKIE = 'neon-auth.session_token';
 
-const SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'bespoke-flights-dev-secret-change-in-production'
-);
+let secret: Uint8Array | undefined;
+
+/**
+ * Signing key for development sessions. Never a published default: without
+ * JWT_SECRET, production refuses to sign or verify, and development uses a
+ * random per-process key (sessions end when the server restarts).
+ */
+function signingKey(): Uint8Array {
+  if (secret) return secret;
+  const env = process.env.JWT_SECRET;
+  if (env && env.length >= 16 && env !== 'change-me') {
+    secret = new TextEncoder().encode(env);
+  } else if (process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET is not set (or too short). Set a random 32+ character value.');
+  } else {
+    secret = crypto.getRandomValues(new Uint8Array(32));
+  }
+  return secret;
+}
 
 /** Development-mode session token (used when Neon Auth is not configured). */
 export async function createToken(payload: SessionPayload): Promise<string> {
@@ -20,12 +36,12 @@ export async function createToken(payload: SessionPayload): Promise<string> {
     .setProtectedHeader({ alg: 'HS256' })
     .setExpirationTime('7d')
     .setIssuedAt()
-    .sign(SECRET);
+    .sign(signingKey());
 }
 
 export async function verifyToken(token: string): Promise<SessionPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, SECRET);
+    const { payload } = await jwtVerify(token, signingKey());
     return payload as unknown as SessionPayload;
   } catch {
     return null;

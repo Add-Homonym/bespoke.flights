@@ -32,12 +32,16 @@ export const bookingRequestSchema = z.object({
   legs: z.array(legSchema).min(1).max(10),
 });
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
 export const quoteSchema = z.object({
-  aircraftId: z.number().int().optional(),
-  priceCents: z.number().int().min(1),
-  currency: z.string().default('USD'),
-  message: z.string().optional(),
-  validUntil: z.string().optional(),
+  aircraftId: z.number().int().positive().optional(),
+  // Cents, up to $10,000,000.
+  priceCents: z.number().int().min(50).max(1_000_000_000),
+  currency: z.enum(['USD']).default('USD'),
+  message: z.string().max(2000).optional(),
+  validUntil: z.string().regex(ISO_DATE).optional()
+    .refine(d => !d || d >= new Date().toISOString().slice(0, 10), { message: 'Valid-until date is in the past' }),
 });
 
 export const profileSchema = z.object({
