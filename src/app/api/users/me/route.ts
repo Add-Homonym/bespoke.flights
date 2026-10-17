@@ -46,7 +46,14 @@ export async function PATCH(req: Request) {
   updates.push('updated_at = now()');
   values.push(session.userId);
 
-  await db.run(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, values);
+  try {
+    await db.run(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, values);
+  } catch (err) {
+    if ((err as { code?: string }).code === '23505') {
+      return NextResponse.json({ error: { email: ['Email already in use'] } }, { status: 409 });
+    }
+    throw err;
+  }
 
   const user = await db.one('SELECT id, email, phone, name, role, created_at FROM users WHERE id = ?', [session.userId]);
   return NextResponse.json(user);
