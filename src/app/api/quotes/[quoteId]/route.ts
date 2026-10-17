@@ -9,8 +9,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ quoteI
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { quoteId } = await params;
-  const body = await req.json();
-  const { status } = body as { status: 'rejected' };
+  const body = await req.json().catch(() => null);
+  const { status } = (body ?? {}) as { status?: string };
 
   // Acceptance happens only through payment: POST /api/payments/checkout.
   if (status !== 'rejected') {

@@ -60,16 +60,28 @@ export const aircraftSchema = z.object({
 
 export const operatorSettingsSchema = z.object({
   contact_method: z.enum(['email', 'text', 'both']).optional(),
-  contact_email: z.string().email().optional().nullable(),
-  contact_phone: z.string().min(7).optional().nullable(),
-  safety_rating: z.string().optional().nullable(),
-  fleet_types: z.array(z.string()).optional(),
-  markets: z.array(z.string()).optional(),
-  range_max_nm: z.number().int().optional().nullable(),
+  contact_email: z.union([z.string().email().max(254), z.literal('')]).optional().nullable(),
+  contact_phone: z.union([z.string().min(7).max(32), z.literal('')]).optional().nullable(),
+  safety_rating: z.string().max(80).optional().nullable(),
+  fleet_types: z.array(z.string().max(32)).max(20).optional(),
+  markets: z.array(z.string().max(32)).max(20).optional(),
+  range_max_nm: z.number().int().min(0).max(20_000).optional().nullable(),
   hi_capable: z.number().int().min(0).max(1).optional(),
   transoceanic: z.number().int().min(0).max(1).optional(),
-  certificate: z.string().optional().nullable(),
-  notes: z.string().optional().nullable(),
+  certificate: z.string().max(80).optional().nullable(),
+  notes: z.string().max(2000).optional().nullable(),
+}).strict();
+
+export const discoveryPatchSchema = z.object({
+  id: z.number().int().positive(),
+  contact_email: z.string().email().max(254).optional().nullable(),
+  phone: z.string().min(7).max(32).optional().nullable(),
+  status: z.enum(['new', 'no_email', 'emailed', 'registered', 'opted_out', 'bounced']).optional(),
+  notes: z.string().max(2000).optional().nullable(),
+});
+
+export const operatorStatusSchema = z.object({
+  status: z.enum(['approved', 'suspended']),
 });
 
 export const checkoutSchema = z.object({

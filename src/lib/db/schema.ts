@@ -256,4 +256,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_quotes_one_live_per_operator
 
 -- Demo accounts are usable only in test mode (APP_TEST_MODE=true).
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_demo BOOLEAN NOT NULL DEFAULT false;
+
+-- Fixed-window rate limits (src/lib/rate-limit.ts).
+CREATE TABLE IF NOT EXISTS rate_limits (
+  key          TEXT PRIMARY KEY,
+  window_start TIMESTAMPTZ NOT NULL,
+  count        INTEGER NOT NULL DEFAULT 0
+);
 `;

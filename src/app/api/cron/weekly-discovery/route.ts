@@ -19,6 +19,7 @@ import { z } from 'zod';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { runDiscoveryPipeline } from '@/lib/discovery/pipeline';
+import { rateLimited } from '@/lib/rate-limit';
 
 export const maxDuration = 60; // Vercel Pro: 60s timeout
 export const dynamic = 'force-dynamic';
@@ -41,14 +42,6 @@ function timingSafeEqual(a: string, b: string): boolean {
   let diff = 0;
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return diff === 0;
-}
-
-async function adminOk(): Promise<boolean> {
-  try {
-    return (await getSession())?.role === 'admin';
-  } catch {
-    return false;
-  }
 }
 
 async function run(options: Parameters<typeof runDiscoveryPipeline>[1], label: string) {
@@ -77,8 +70,11 @@ export async function GET(req: Request) {
  * Optional body: { states?: string[], emailsPerRun?: number }
  */
 export async function POST(req: Request) {
-  if (!bearerOk(req) && !(await adminOk())) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!bearerOk(req)) {
+    const admin = await getSession().catch(() => null);
+    if (admin?.role !== 'admin') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const limited = await rateLimited('discoveryRun', admin.userId);
+    if (limited) return limited;
   }
 
   const raw = await req.json().catch(() => ({}));

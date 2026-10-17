@@ -317,7 +317,12 @@ export async function refundPayment(
   paymentId: number,
   params: { amountCents?: number; reason?: string | null; initiatedBy?: number | null; baseUrl?: string }
 ): Promise<Payment> {
-  const payment = await getPayment(db, paymentId);
+  // One refund at a time per payment: the amount check, the Stripe call and the
+  // ledger update happen under a per-payment lock so two concurrent partial
+  // refunds cannot both pass the "remaining" check.
+  return db.transaction(async tx => {
+  await tx.query('SELECT pg_advisory_xact_lock(727276, ?)', [paymentId]);
+  const payment = await getPayment(tx, paymentId);
   if (!payment) throw new PaymentError('Payment not found', 404);
   if (!['succeeded', 'partially_refunded'].includes(payment.status)) {
     throw new PaymentError(`Cannot refund a payment that is ${payment.status}`, 409);
@@ -351,14 +356,15 @@ export async function refundPayment(
     }
   }
 
-  await db.run(`
+  await tx.run(`
     INSERT INTO refunds (payment_id, amount_cents, reason, stripe_refund_id, initiated_by)
     VALUES (?, ?, ?, ?, ?)
     ON CONFLICT (stripe_refund_id) DO NOTHING
   `, [payment.id, amount, params.reason ?? null, stripeRefundId, params.initiatedBy ?? null]);
-  await applyRefundTotal(db, payment.id, payment.refunded_cents + amount, params.baseUrl);
+  await applyRefundTotal(tx, payment.id, payment.refunded_cents + amount, params.baseUrl);
 
-  return (await getPayment(db, payment.id))!;
+  return (await getPayment(tx, payment.id))!;
+  });
 }
 
 // ─── Fulfillment side effects ───────────────────────────────────────

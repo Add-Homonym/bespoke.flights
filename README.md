@@ -20,6 +20,14 @@ Traveler submits request → Matching engine scores operators → RFQs dispatche
 
 There are three user roles — **customer**, **operator**, and **admin** — each with their own authenticated views and workflows.
 
+### Who can see what
+
+- A customer sees only their own requests, every quote on them, and which operators were invited (without the operators' contact details).
+- An operator sees requests that are open to quotes, or that it was invited to or has quoted; only its own quote on each; and the customer's contact details only after its quote has been paid for.
+- Admins see everything. The rules live in `src/lib/access.ts` and are covered by `src/app/api/authz.test.ts`.
+- Cancelling an unpaid request is for its customer (or an admin). A paid booking is cancelled through the refund flow so money moves with the status.
+- Rate limits (`src/lib/rate-limit.ts`, stored in the `rate_limits` table so they hold across serverless instances): sign-in/sign-up 10 per 15 min per IP; new booking requests 5 per hour per user; trip-sheet emails and staff test alerts 10 per hour; manual discovery runs 3 per hour. Exceeding one returns 429 with `Retry-After`.
+
 ---
 
 ## Customer Workflow
@@ -129,7 +137,7 @@ A weekly automated pipeline finds new charter operators and invites them to join
 
 ### How It Works
 
-1. **Vercel Cron** triggers `GET /api/cron/weekly-discovery` every Monday at 8:00 AM HST (18:00 UTC).
+1. **Vercel Cron** triggers `GET /api/cron/weekly-discovery` every Monday at 8:00 AM HST (18:00 UTC), sending `Authorization: Bearer $CRON_SECRET`. The route refuses every call when `CRON_SECRET` is unset. Each FAA request has an 8 s timeout and the scrape stops after 35 s so storing and emailing fit the 60 s function limit; states that were skipped or failed are listed in the run's `errors`.
 2. **FAA scraper** queries `av-info.faa.gov` for Part 135 on-demand air taxi certificate holders, processing 10 states per run and rotating through all US states across ~5 weeks.
 3. **Deduplication** skips operators already in the `discovered_operators` table or registered on the platform.
 4. **Storage** inserts new records. Since the FAA registry does not publish email addresses, most land with status `no_email`.
@@ -153,7 +161,7 @@ At `/admin/discoveries`, admins can:
 - Filter by status, state, or search by company name / cert number
 - Click **Add Email** on any `no_email` operator — status auto-upgrades to `new`, and the next cron run sends the invite
 - Click **Opt out** to suppress future contact
-- Click **Run Discovery Now** to manually trigger the pipeline
+- Click **Run Discovery Now** to manually trigger the pipeline (admin session; 3 runs per hour)
 - View pipeline stats in the dashboard: total discovered, ready to email, need email, invited
 
 ---
@@ -273,7 +281,9 @@ src/
 │   ├── operator/               # Outreach status display
 │   └── ui/                     # Badge, Button, Card, Input, Select, Table, AirportInput
 └── lib/
-    ├── auth.ts                 # JWT sessions via jose + cookies
+    ├── auth.ts                 # Neon Auth sessions (production); bcrypt + JWT cookie (development)
+    ├── access.ts               # Who may read or change a booking request
+    ├── rate-limit.ts           # Database-backed fixed-window limits
     ├── airports.ts             # Airport code data
     ├── types.ts                # All TypeScript interfaces + market/fleet constants
     ├── validations.ts          # Zod schemas for all API inputs
@@ -307,7 +317,7 @@ Fifteen tables in Postgres:
 
 | Table | Purpose |
 |---|---|
-| `users` | All accounts (customer, operator, admin). Passwords hashed with bcryptjs. |
+| `users` | App profile for every account (customer, operator, admin): role, phone, `auth_id` link to Neon Auth, `is_demo`. `password_hash` is used only by the development sign-in. |
 | `operators` | Linked to a user. Company name, certificate, approval status, contact preferences, market/fleet/safety profile for matching. |
 | `aircraft` | Operator fleet inventory. Tail number, type, capacity, range, year. |
 | `booking_requests` | Customer trip requests. Status lifecycle: open → quoted → booked → completed (or cancelled). |
@@ -322,6 +332,7 @@ Fifteen tables in Postgres:
 | `operator_staff` | An operator's staff roster: contact details, alert channels and which events each person receives. |
 | `staff_notifications` | One row per staff alert per channel. Unique on (staff_id, event_key, channel) so alerts are never duplicated. |
 | `operator_boards` | The private staff board link token for each operator. |
+| `rate_limits` | Fixed-window request counters, keyed by scope and user or IP. |
 
 The `operators` table also stores the Stripe Connect account ID, capability flags, and an optional fee override.
 
@@ -380,7 +391,9 @@ Created by `npm run seed` locally, or automatically in [test mode](#test-mode). 
 
 | Variable | Required | Description |
 |---|---|---|
-| `JWT_SECRET` | Yes | Random string for signing session tokens |
+| `NEON_AUTH_BASE_URL` | Production | Neon Auth endpoint (Neon console → Auth). Leave empty locally to use bcrypt accounts and a JWT cookie instead. |
+| `NEON_AUTH_COOKIE_SECRET` | Production | Signs Neon Auth session cookies (32+ random characters). |
+| `JWT_SECRET` | Development | Signs the development session cookie. Must be 16+ characters and not `change-me`; without it, development uses a random per-process key (sessions end on restart) and production refuses to sign. |
 | `RESEND_API_KEY` | No | Resend API key. Without it, emails log to stdout. |
 | `EMAIL_FROM` | No | Verified sender address (default: `hello@bespoke.flights`) |
 | `CRON_SECRET` | Production | Secures the `/api/cron/weekly-discovery` endpoint |
@@ -388,12 +401,12 @@ Created by `npm run seed` locally, or automatically in [test mode](#test-mode). 
 | `STRIPE_WEBHOOK_SECRET` | Production | Signing secret for the platform webhook endpoint |
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | Production | Signing secret for the connected-accounts webhook endpoint |
 | `PLATFORM_FEE_BPS` | No | Platform commission in basis points (default `500` = 5%) |
-| `APP_URL` | Production | Public base URL for Stripe redirect URLs and links in emails and texts (defaults to the request origin; set it so links sent from webhooks point at the right domain) |
+| `APP_URL` | Production | Public base URL for Stripe redirect URLs and links in emails and texts. In production the request's Host header is never used; without `APP_URL` the app falls back to Vercel's `VERCEL_PROJECT_PRODUCTION_URL` and otherwise fails the request. |
 | `TWILIO_ACCOUNT_SID` | No | Twilio account for RFQ texts and staff text alerts. Without the Twilio variables, texts log to stdout. |
 | `TWILIO_AUTH_TOKEN` | No | Twilio auth token |
 | `TWILIO_MESSAGING_SERVICE_SID` | No | Twilio Messaging Service to send from (or set `TWILIO_FROM_NUMBER`) |
 | `TWILIO_FROM_NUMBER` | No | Sending number in E.164, used when no Messaging Service is set |
-| `APP_TEST_MODE` | No | `true` simulates all payments, shows a test banner, and loads demo data into an empty database |
+| `APP_TEST_MODE` | No | `true` simulates all payments, shows a test banner, and loads demo data into an empty database. Demo accounts (`is_demo`) cannot sign in once this is off. Refused alongside a live Stripe key. |
 | `DATABASE_URL` | Production | Postgres connection string. Set automatically by the Vercel Neon integration (pooled). |
 | `DATABASE_POOL_MAX` | No | Max connections per function instance (default 5) |
 | `PGLITE_DIR` | No | Local PGlite data directory when `DATABASE_URL` is unset (default `data/pglite`; `memory` for in-memory) |
@@ -415,7 +428,7 @@ Optional: enable Neon's preview-branch option in the integration so each preview
 
 ### 2. Other environment variables
 
-Set `JWT_SECRET` (required: a long random string; without it, session tokens are signed with a public development key), `CRON_SECRET`, `APP_URL`, and the Stripe, Resend and Twilio variables from the table above.
+Set `NEON_AUTH_BASE_URL`, `NEON_AUTH_COOKIE_SECRET`, `CRON_SECRET` (required for the scheduled discovery run), `APP_URL`, and the Stripe, Resend and Twilio variables from the table above.
 
 ### 3. Deploy
 
@@ -425,10 +438,11 @@ vercel deploy
 
 The cron schedule in `vercel.json` runs the discovery pipeline every Monday at 18:00 UTC (8:00 AM HST). Vercel Cron requires a Pro plan.
 
-To test the cron endpoint locally:
+To test the cron endpoint locally (set `CRON_SECRET` in `.env.local`):
 
 ```bash
 curl -X POST http://localhost:3000/api/cron/weekly-discovery \
+  -H "Authorization: Bearer $CRON_SECRET" \
   -H "Content-Type: application/json" \
   -d '{"states": ["HI"], "emailsPerRun": 5}'
 ```

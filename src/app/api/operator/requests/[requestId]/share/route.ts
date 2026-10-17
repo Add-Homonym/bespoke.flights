@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { toId } from '@/lib/db/queries';
 import { appBaseUrl } from '@/lib/payments/config';
+import { rateLimited } from '@/lib/rate-limit';
 import {
   getShare,
   getOrCreateShare,
@@ -47,6 +48,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ request
       return NextResponse.json({ url: null });
     }
     if (body.action === 'email') {
+      const limited = await rateLimited('shareEmail', ctx.session.userId, ctx.db);
+      if (limited) return limited;
       const user = (await ctx.db.one<{ name: string }>('SELECT name FROM users WHERE id = ?', [ctx.session.userId]))!;
       const result = await emailTripSheet(ctx.db, {
         requestId: ctx.requestId,
