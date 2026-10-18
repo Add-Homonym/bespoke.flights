@@ -24,6 +24,7 @@ async function check(page, label, focus) {
     const out = [];
     if (document.documentElement.scrollWidth > w) out.push(`page scrollWidth ${document.documentElement.scrollWidth} > ${w}`);
     for (const el of document.querySelectorAll('body *')) {
+      if (el.classList.contains('sr-only') || el.tagName === 'NEXTJS-PORTAL') continue; // visually hidden by design
       const r = el.getBoundingClientRect();
       if (r.width && r.right > w + 1 && getComputedStyle(el).position !== 'fixed') out.push(`${el.tagName}.${(el.className||'').toString().slice(0,60)} right=${Math.round(r.right)}`);
       const cs = getComputedStyle(el);
@@ -40,7 +41,7 @@ async function check(page, label, focus) {
     for (let i = 0; i < 60; i++) {
       await page.keyboard.press('Tab');
       const f = await page.evaluate(() => {
-        const el = document.activeElement; if (!el || el === document.body) return null;
+        const el = document.activeElement; if (!el || el === document.body || el.tagName === 'NEXTJS-PORTAL') return null;
         const cs = getComputedStyle(el);
         return { id: el.outerHTML.slice(0, 80), ok: el.matches(':focus-visible') && cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) >= 2 };
       });
