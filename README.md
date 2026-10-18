@@ -180,6 +180,18 @@ Stripe → POST /api/webhooks/stripe (signature verified)
 - **Expired quotes** (`valid_until` in the past) cannot be paid.
 - **Webhooks are idempotent.** Event IDs are recorded in `payment_events`, and every handler can safely run more than once. If processing fails, the endpoint returns 500 so Stripe retries.
 
+### Cancelling a paid booking
+
+A traveler cancels from the trip page (**Cancel trip** → confirmation panel showing the refund). The refund follows the operator's **cancellation policy** (`operators.cancellation_policy`, set at `/operator/settings`), measured from the first leg's departure (its local date and time, or 23:59 when no time was given):
+
+| Window | Default | Refund |
+|---|---|---|
+| ≥ `full_refund_hours` before departure | 72 h | 100% |
+| ≥ `partial_refund_hours` | 24 h | `partial_refund_bps` (default 5000 = 50%) |
+| Closer than that | | none |
+
+`GET /api/booking-requests/[id]/cancel` previews the refund; `POST` performs it (owner or admin): the refund goes through the normal refund path (transfer reversal and fee return), the request becomes `cancelled`, pending quotes are rejected, both sides get a cancellation email and the operator's staff are alerted. Unpaid requests are still withdrawn with `PATCH /api/booking-requests/[id] {status:'cancelled'}`.
+
 ### Platform fee
 
 `PLATFORM_FEE_BPS` sets the fee in basis points (default `500` = 5%). The `operators.platform_fee_bps` column overrides it for one operator. The fee is rounded to the nearest cent. Stripe's processing fees come out of the platform's share.

@@ -17,6 +17,7 @@ let request: typeof import('./booking-requests/[requestId]/route');
 let quotes: typeof import('./booking-requests/[requestId]/quotes/route');
 let outreach: typeof import('./outreach/route');
 let cron: typeof import('./cron/weekly-discovery/route');
+let cancel: typeof import('./booking-requests/[requestId]/cancel/route');
 
 const params = (requestId: number) => ({ params: Promise.resolve({ requestId: String(requestId) }) });
 const json = (body: unknown, method = 'PATCH') =>
@@ -32,6 +33,7 @@ beforeAll(async () => {
   quotes = await import('./booking-requests/[requestId]/quotes/route');
   outreach = await import('./outreach/route');
   cron = await import('./cron/weekly-discovery/route');
+  cancel = await import('./booking-requests/[requestId]/cancel/route');
   await f.db.run(
     'INSERT INTO outreach_log (request_id, operator_id, method, match_score, rfq_subject, rfq_body, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
     [f.requestId, f.operatorA, 'email', 80, 'RFQ', 'body', 'sent']);
@@ -155,6 +157,40 @@ describe('PATCH /api/booking-requests/[id] (cancel)', () => {
     expect((await row<{ n: number }>(f.db, "SELECT COUNT(*) AS n FROM quotes WHERE request_id = ? AND status = 'pending'", f.requestId)).n).toBe(0);
     await f.db.run("UPDATE booking_requests SET status = 'quoted' WHERE id = ?", [f.requestId]);
     await f.db.run("UPDATE quotes SET status = 'pending' WHERE request_id = ?", [f.requestId]);
+  });
+});
+
+describe('/api/booking-requests/[id]/cancel (paid booking)', () => {
+  it('refuses operators and other customers, 409 on an unpaid request', async () => {
+    await asOperatorA();
+    expect((await cancel.POST(new Request('http://localhost/x', { method: 'POST' }), params(f.requestId))).status).toBe(403);
+    asOther();
+    expect((await cancel.GET(new Request('http://localhost/x'), params(f.requestId))).status).toBe(403);
+    asCustomer();
+    expect((await cancel.GET(new Request('http://localhost/x'), params(f.requestId))).status).toBe(409);
+    expect((await cancel.POST(new Request('http://localhost/x', { method: 'POST' }), params(f.requestId))).status).toBe(409);
+  });
+
+  it('previews and performs the refund for the owner', async () => {
+    const { createCheckout, simulateStubPayment } = await import('@/lib/payments/service');
+    vi.stubEnv('STRIPE_SECRET_KEY', '');
+    vi.stubEnv('NODE_ENV', 'test');
+    const { paymentId } = await createCheckout(f.db, { quoteId: f.quoteA, customerId: f.customerId, baseUrl: 'http://localhost:3000' });
+    await simulateStubPayment(f.db, paymentId, f.customerId, 'http://localhost:3000');
+
+    asCustomer();
+    const preview = await (await cancel.GET(new Request('http://localhost/x'), params(f.requestId))).json();
+    expect(preview).toMatchObject({ tier: 'full', refundCents: 8_500_000 });
+    const res = await cancel.POST(new Request('http://localhost/x', { method: 'POST' }), params(f.requestId));
+    expect(res.status).toBe(200);
+    expect((await res.json()).refundCents).toBe(8_500_000);
+    expect((await row<{ status: string }>(f.db, 'SELECT status FROM booking_requests WHERE id = ?', f.requestId)).status).toBe('cancelled');
+
+    // Reset for later suites.
+    await f.db.run("UPDATE booking_requests SET status = 'quoted' WHERE id = ?", [f.requestId]);
+    await f.db.run("UPDATE quotes SET status = 'pending' WHERE request_id = ?", [f.requestId]);
+    await f.db.run('DELETE FROM refunds');
+    await f.db.run('DELETE FROM payments');
   });
 });
 

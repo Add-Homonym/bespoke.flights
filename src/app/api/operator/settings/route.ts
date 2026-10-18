@@ -1,7 +1,19 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
+import { operatorSettingsSchema } from '@/lib/validations';
+import { parsePolicy } from '@/lib/bookings/cancellation';
 import type { Operator } from '@/lib/types';
+
+function present(operator: Operator & { cancellation_policy?: string | null }) {
+  return {
+    ...operator,
+    fleet_types: operator.fleet_types ? JSON.parse(operator.fleet_types) : [],
+    markets: operator.markets ? JSON.parse(operator.markets) : [],
+    cancellation_policy: parsePolicy(operator.cancellation_policy),
+    cancellation_policy_custom: !!operator.cancellation_policy,
+  };
+}
 
 export async function GET() {
   const session = await getSession();
@@ -16,9 +28,7 @@ export async function GET() {
   const user = (await db.one<{ email: string; phone: string | null }>('SELECT email, phone FROM users WHERE id = ?', [session.userId]))!;
 
   return NextResponse.json({
-    ...operator,
-    fleet_types: operator.fleet_types ? JSON.parse(operator.fleet_types) : [],
-    markets: operator.markets ? JSON.parse(operator.markets) : [],
+    ...present(operator),
     user_email: user.email,
     user_phone: user.phone,
   });
@@ -30,7 +40,10 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const body = await req.json();
+  const parsed = operatorSettingsSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
+  }
   const db = getDb();
 
   const operator = await db.one<Operator>('SELECT * FROM operators WHERE user_id = ?', [session.userId]);
@@ -48,7 +61,8 @@ export async function PATCH(req: Request) {
     transoceanic,
     certificate,
     notes,
-  } = body;
+    cancellation_policy,
+  } = parsed.data;
 
   await db.run(`
     UPDATE operators SET
@@ -62,7 +76,8 @@ export async function PATCH(req: Request) {
       hi_capable = COALESCE(?, hi_capable),
       transoceanic = COALESCE(?, transoceanic),
       certificate = COALESCE(?, certificate),
-      notes = COALESCE(?, notes)
+      notes = COALESCE(?, notes),
+      cancellation_policy = COALESCE(?, cancellation_policy)
     WHERE id = ?
   `, [
     contact_method || null,
@@ -76,13 +91,10 @@ export async function PATCH(req: Request) {
     transoceanic ?? null,
     certificate || null,
     notes || null,
+    cancellation_policy ? JSON.stringify(cancellation_policy) : null,
     operator.id,
   ]);
 
   const updated = (await db.one<Operator>('SELECT * FROM operators WHERE id = ?', [operator.id]))!;
-  return NextResponse.json({
-    ...updated,
-    fleet_types: updated.fleet_types ? JSON.parse(updated.fleet_types) : [],
-    markets: updated.markets ? JSON.parse(updated.markets) : [],
-  });
+  return NextResponse.json(present(updated));
 }

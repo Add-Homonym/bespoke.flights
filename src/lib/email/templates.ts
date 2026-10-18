@@ -291,3 +291,49 @@ export function staffAlertEmail(data: {
 
   return { subject: data.subject, html: layout(body) };
 }
+
+// ─── Booking cancelled (customer and operator) ──────────────────────
+
+export function bookingCancelledEmail(data: {
+  audience: 'customer' | 'operator';
+  requestId: number;
+  route: string;
+  legLines: string[];
+  passengerCount: number;
+  operatorCompany: string;
+  paid: string;
+  refund: string;
+  tier: 'full' | 'partial' | 'none';
+  policyText: string;
+  baseUrl: string;
+}): { subject: string; html: string } {
+  const customer = data.audience === 'customer';
+  const subject = 'Booking cancelled — Request #' + data.requestId + ' — ' + data.route;
+  const refundLine = data.tier === 'none'
+    ? 'No refund is due under the cancellation policy.'
+    : (customer ? 'A refund of ' + data.refund + ' is on its way to your original payment method.'
+                : data.refund + ' is being returned to the traveler; the rest stays with your payout.');
+
+  const body =
+    '<h1 style="margin:0 0 8px 0;color:' + BRAND.cream + ';font-size:22px;font-weight:600">' +
+    (customer ? 'Your trip is cancelled' : 'A charter was cancelled') +
+    '</h1>' +
+    p('Request #' + data.requestId, 'color:' + BRAND.muted + ';font-size:13px') +
+    '<table cellpadding="0" cellspacing="0" style="width:100%;background:#0f1724;border-radius:8px;margin:20px 0">' +
+    '<tr><td style="padding:16px">' +
+    '<table cellpadding="0" cellspacing="0" style="width:100%">' +
+    summaryRow('Route', escapeHtml(data.route)) +
+    data.legLines.map((line, i) => summaryRow(i === 0 ? 'Legs' : '', escapeHtml(line.replace(/^Leg \d+: /, '')))).join('') +
+    summaryRow('Passengers', String(data.passengerCount)) +
+    summaryRow('Operator', escapeHtml(data.operatorCompany)) +
+    summaryRow('Paid', data.paid) +
+    summaryRow('Refund', data.refund) +
+    '</table></td></tr></table>' +
+    p(refundLine) +
+    p('Policy: ' + escapeHtml(data.policyText), 'color:' + BRAND.muted + ';font-size:13px') +
+    (customer
+      ? button('View trip', data.baseUrl + '/requests/' + data.requestId)
+      : button('View request', data.baseUrl + '/operator/requests/' + data.requestId));
+
+  return { subject, html: layout(body) };
+}

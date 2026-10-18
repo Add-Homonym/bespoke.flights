@@ -256,4 +256,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_quotes_one_live_per_operator
 
 -- Demo accounts are usable only in test mode (APP_TEST_MODE=true).
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_demo BOOLEAN NOT NULL DEFAULT false;
+
+-- Operator cancellation policy, JSON: {"full_refund_hours":72,"partial_refund_hours":24,"partial_refund_bps":5000}.
+-- NULL means the platform default.
+ALTER TABLE operators ADD COLUMN IF NOT EXISTS cancellation_policy TEXT;
 `;

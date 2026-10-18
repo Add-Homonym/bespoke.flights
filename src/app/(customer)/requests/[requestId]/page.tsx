@@ -12,6 +12,8 @@ import { QuoteActions } from '@/components/booking/quote-actions';
 import { RequestStatusBadge } from '@/components/booking/request-status';
 import { OutreachStatus } from '@/components/operator/outreach-status';
 import { PaymentStatus } from '@/components/booking/payment-status';
+import { CancelTrip } from '@/components/booking/cancel-trip';
+import { previewCancellation } from '@/lib/bookings/cancellation';
 import { formatMoney, getPaymentsMode } from '@/lib/payments/config';
 import type { BookingRequest, BookingLeg, Quote, Payment } from '@/lib/types';
 
@@ -78,6 +80,10 @@ export default async function RequestDetailPage({
   // One "Best value" per list: the lowest price still open to book, when there is a choice.
   const bookable = quotes.filter(q => q.status === 'pending' && !isExpired(q.valid_until, today));
   const bestValueId = !acceptedQuote && bookable.length > 1 ? bookable[0].id : null;
+
+  // Cancellation: paid bookings refund per the operator's policy; unpaid requests are simply withdrawn.
+  const canCancel = session.role === 'customer' && ['open', 'quoted', 'booked'].includes(request.status) && !(payment && payment.status === 'processing');
+  const cancelPreview = canCancel && request.status === 'booked' ? await previewCancellation(db, request) : null;
 
   return (
     <div className={`mx-auto max-w-3xl ${payment?.status === 'pending' ? 'pb-28' : ''}`}>
@@ -153,6 +159,20 @@ export default async function RequestDetailPage({
           <dd className="text-ink break-words">{request.notes?.trim() || <span className="text-ink-subtle">None</span>}</dd>
         </dl>
       </Card>
+
+      {canCancel && (request.status !== 'booked' || cancelPreview) && (
+        <CancelTrip
+          requestId={request.id}
+          preview={cancelPreview && {
+            tier: cancelPreview.tier,
+            refund: cancelPreview.refund,
+            paid: cancelPreview.paid,
+            hoursBeforeDeparture: cancelPreview.hoursBeforeDeparture,
+            policyText: cancelPreview.policyText,
+            operatorCompany: cancelPreview.operatorCompany,
+          }}
+        />
+      )}
 
       {/* Outreach Status — shows which operators were auto-contacted */}
       {outreachCount > 0 && <OutreachStatus requestId={request.id} />}

@@ -24,6 +24,8 @@ interface OperatorSettings {
   transoceanic: number;
   certificate: string | null;
   notes: string | null;
+  cancellation_policy: { full_refund_hours: number; partial_refund_hours: number; partial_refund_bps: number };
+  cancellation_policy_custom: boolean;
   user_email: string;
   user_phone: string | null;
 }
@@ -52,6 +54,22 @@ export default function OperatorSettingsPage() {
       setTimeout(() => setMessage(''), 2000);
     }
     setSaving(false);
+  };
+
+  const [policyError, setPolicyError] = useState('');
+  const savePolicy = async (patch: Partial<OperatorSettings['cancellation_policy']>) => {
+    if (!settings) return;
+    const policy = { ...settings.cancellation_policy, ...patch };
+    if (Object.values(policy).some(v => !Number.isInteger(v) || v < 0)) {
+      setPolicyError('Enter whole numbers.');
+      return;
+    }
+    if (policy.partial_refund_hours > policy.full_refund_hours) {
+      setPolicyError('The partial refund window must end before the full refund window.');
+      return;
+    }
+    setPolicyError('');
+    await save({ cancellation_policy: policy });
   };
 
   const toggleArrayItem = (arr: string[], item: string): string[] =>
@@ -150,6 +168,40 @@ export default function OperatorSettingsPage() {
             </select>
           </div>
         </div>
+      </Card>
+
+      {/* Cancellation policy */}
+      <Card className="mb-6">
+        <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wider mb-2">Cancellation policy</h2>
+        <p className="text-ink-muted text-sm mb-6">
+          Applied when a traveler cancels a paid booking. Refunds are measured from the first leg&apos;s departure and go back automatically.
+          {!settings.cancellation_policy_custom && ' Showing the platform default.'}
+        </p>
+        <div className="grid grid-cols-3 gap-4">
+          <Input
+            label="Full refund until (hours before)"
+            type="number"
+            min={0}
+            defaultValue={settings.cancellation_policy.full_refund_hours}
+            onBlur={e => savePolicy({ full_refund_hours: Number(e.target.value) })}
+          />
+          <Input
+            label="Partial refund until (hours before)"
+            type="number"
+            min={0}
+            defaultValue={settings.cancellation_policy.partial_refund_hours}
+            onBlur={e => savePolicy({ partial_refund_hours: Number(e.target.value) })}
+          />
+          <Input
+            label="Partial refund (%)"
+            type="number"
+            min={0}
+            max={100}
+            defaultValue={Math.round(settings.cancellation_policy.partial_refund_bps / 100)}
+            onBlur={e => savePolicy({ partial_refund_bps: Math.round(Number(e.target.value) * 100) })}
+          />
+        </div>
+        {policyError && <p className="text-danger text-xs mt-2" role="alert">{policyError}</p>}
       </Card>
 
       {/* Market Coverage */}

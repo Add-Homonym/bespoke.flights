@@ -58,11 +58,13 @@ export const aircraftSchema = z.object({
   year: z.number().int().optional(),
 });
 
+const blankToNull = (v: unknown) => (typeof v === 'string' && v.trim() === '' ? null : v);
+
 export const operatorSettingsSchema = z.object({
   contact_method: z.enum(['email', 'text', 'both']).optional(),
-  contact_email: z.string().email().optional().nullable(),
-  contact_phone: z.string().min(7).optional().nullable(),
-  safety_rating: z.string().optional().nullable(),
+  contact_email: z.preprocess(blankToNull, z.string().email().max(200).optional().nullable()),
+  contact_phone: z.preprocess(blankToNull, z.string().min(7).max(30).optional().nullable()),
+  safety_rating: z.string().max(60).optional().nullable(),
   fleet_types: z.array(z.string()).optional(),
   markets: z.array(z.string()).optional(),
   range_max_nm: z.number().int().optional().nullable(),
@@ -70,6 +72,14 @@ export const operatorSettingsSchema = z.object({
   transoceanic: z.number().int().min(0).max(1).optional(),
   certificate: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
+  cancellation_policy: z.object({
+    full_refund_hours: z.number().int().min(0).max(24 * 365),
+    partial_refund_hours: z.number().int().min(0).max(24 * 365),
+    partial_refund_bps: z.number().int().min(0).max(10_000),
+  }).refine(p => p.partial_refund_hours <= p.full_refund_hours, {
+    message: 'The partial refund window must end before the full refund window',
+    path: ['partial_refund_hours'],
+  }).optional().nullable(),
 });
 
 export const checkoutSchema = z.object({
