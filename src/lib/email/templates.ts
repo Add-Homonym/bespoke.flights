@@ -372,6 +372,64 @@ export function changeRequestEmail(data: {
   return { subject, html: layout(body) };
 }
 
+// ─── New quote (to the traveler) ────────────────────────────────────
+
+export function newQuoteEmail(data: {
+  requestId: number;
+  route: string;
+  operatorCompany: string;
+  aircraft: string | null;
+  price: string;
+  validUntil: string | null;
+  message: string | null;
+  quoteCount: number;
+  baseUrl: string;
+  /** 'new' for a first quote, 'revised' when the operator changed it. */
+  kind?: 'new' | 'revised';
+  previousPrice?: string | null;
+}): { subject: string; html: string } {
+  const revised = data.kind === 'revised';
+  const subject = (revised ? 'Quote revised — ' : 'New quote — ') + data.price + ' from ' + data.operatorCompany + ' — Request #' + data.requestId;
+  const body =
+    '<h1 style="margin:0 0 8px 0;color:' + BRAND.cream + ';font-size:22px;font-weight:600">' +
+    (revised ? 'A quote on your trip was revised' : 'You have a new quote') + '</h1>' +
+    p('Request #' + data.requestId + ' &middot; ' + escapeHtml(data.route), 'color:' + BRAND.muted + ';font-size:13px') +
+    '<table cellpadding="0" cellspacing="0" style="width:100%;background:#0f1724;border-radius:8px;margin:20px 0">' +
+    '<tr><td style="padding:16px"><table cellpadding="0" cellspacing="0" style="width:100%">' +
+    summaryRow('Operator', escapeHtml(data.operatorCompany) + ' &middot; Part 135') +
+    (data.aircraft ? summaryRow('Aircraft', escapeHtml(data.aircraft)) : '') +
+    summaryRow('All-in price', data.price) +
+    (revised && data.previousPrice ? summaryRow('Previously', data.previousPrice) : '') +
+    (data.validUntil ? summaryRow('Valid until', escapeHtml(data.validUntil)) : '') +
+    (data.message ? summaryRow('Message', escapeHtml(data.message)) : '') +
+    '</table></td></tr></table>' +
+    p(data.quoteCount > 1
+      ? 'You now have ' + data.quoteCount + ' quotes to compare. Every price is all-in, with no broker markup.'
+      : 'Every price is all-in, with no broker markup. More quotes may follow as other operators respond.') +
+    button('Compare quotes', data.baseUrl + '/requests/' + data.requestId);
+  return { subject, html: layout(body) };
+}
+
+// ─── Status change (to the traveler or the operator) ────────────────
+
+/** A short, plain status email: used where no richer template applies. */
+export function statusUpdateEmail(data: {
+  requestId: number;
+  route: string;
+  heading: string;
+  text: string;
+  url: string;
+  buttonLabel: string;
+}): { subject: string; html: string } {
+  const subject = data.heading + ' — Request #' + data.requestId;
+  const body =
+    '<h1 style="margin:0 0 8px 0;color:' + BRAND.cream + ';font-size:22px;font-weight:600">' + escapeHtml(data.heading) + '</h1>' +
+    p('Request #' + data.requestId + ' &middot; ' + escapeHtml(data.route), 'color:' + BRAND.muted + ';font-size:13px') +
+    p(escapeHtml(data.text)) +
+    button(escapeHtml(data.buttonLabel), data.url);
+  return { subject, html: layout(body) };
+}
+
 // ─── New message (in-app thread) ────────────────────────────────────
 
 /** Points at the thread; the body stays in the app so contact details never travel by email. */

@@ -130,6 +130,21 @@ describe('POST /api/booking-requests/[id]/quotes', () => {
     const res = await quotes.POST(new Request('http://localhost/x', { method: 'POST', body: '{' }), params(f.requestId));
     expect(res.status).toBe(400);
   });
+
+  it('emails the traveler when a quote arrives', async () => {
+    await f.db.run("UPDATE quotes SET status = 'withdrawn' WHERE id = ?", [f.quoteA]);
+    await asOperatorA();
+    const log = vi.mocked(console.log);
+    log.mockClear();
+    const res = await quotes.POST(json({ priceCents: 7_000_000, message: 'Fresh offer' }, 'POST'), params(f.requestId));
+    expect(res.status).toBe(201);
+    const to = log.mock.calls.filter(c => c[0] === '  To:').map(c => c[1]);
+    const subjects = log.mock.calls.filter(c => c[0] === '  Subject:').map(c => String(c[1]));
+    expect(to).toEqual(['cust@example.com']);
+    expect(subjects[0]).toBe(`New quote — $70,000.00 from Alpha Air — Request #${f.requestId}`);
+    await f.db.run('DELETE FROM quotes WHERE id = ?', [(await res.json()).id]);
+    await f.db.run("UPDATE quotes SET status = 'pending' WHERE id = ?", [f.quoteA]);
+  });
 });
 
 describe('PATCH /api/booking-requests/[id] (cancel)', () => {

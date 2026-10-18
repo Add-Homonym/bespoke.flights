@@ -258,16 +258,21 @@ To go live: remove `APP_TEST_MODE`, set the Stripe variables, and delete the dem
 
 ## Email System
 
-All email is sent through Resend's API via `src/lib/email/resend.ts`. Four email templates exist:
+All email is sent through Resend's API via `src/lib/email/resend.ts`. Templates (`src/lib/email/templates.ts`):
 
 | Template | Trigger | Content |
 |---|---|---|
 | **Operator Invite** | Discovery pipeline or manual trigger | Introduces Bespoke Flights, explains the marketplace model, links to `/register?role=operator` |
 | **RFQ Notification** | Customer submits a booking request | Full itinerary, passenger count, match score, link to `/operator/inbound` |
-| **Payment Receipt** | Payment succeeds | Sent to the customer: route, dates, operator, aircraft, total paid |
+| **New quote / Quote revised** | Operator submits or revises a quote | Sent to the traveler: operator, aircraft, all-in price, validity, link to compare |
+| **Payment Receipt** | Payment succeeds | Sent to the customer: route, dates, operator, aircraft, total paid, receipt link |
 | **Booking Confirmed** | Payment succeeds | Sent to the operator: itinerary, quote amount, platform fee, payout |
+| **Booking Cancelled** | Traveler cancels a paid booking | Both sides: itinerary, amount paid, refund, policy |
+| **Change request** | Proposed, accepted (with or without payment due), applied, declined | Proposed vs current itinerary, new price, operator note |
+| **New message** | A message arrives in a thread (≤ 1 per thread and side per 10 min) | Sender and a link to the thread; the body stays in the app |
+| **Status update** | Request withdrawn, quote declined or withdrawn, quotes expired, trip completed | One-paragraph notice with a link |
 | **Trip Sheet** | Operator emails a booking to colleagues | Itinerary and the private trip sheet link |
-| **Staff Alert** | Booking, cancellation or new request, per staff preferences | Itinerary, passengers, special requests, aircraft, lead passenger and a link |
+| **Staff Alert** | Booking, cancellation, new request, change request or message, per staff preferences | Itinerary, passengers, special requests, aircraft, lead passenger and a link |
 
 Texts go through Twilio (`src/lib/notify/sms.ts`). Phone numbers are normalized to E.164: 10-digit numbers are treated as US/Canada.
 

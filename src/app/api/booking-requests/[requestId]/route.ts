@@ -6,6 +6,7 @@ import { toId } from '@/lib/db/queries';
 import { canManageRequest, requestAccess } from '@/lib/access';
 import { alertStaff, bookedOperatorId } from '@/lib/staff/alerts';
 import { appBaseUrl } from '@/lib/payments/config';
+import { notifyRequestWithdrawn } from '@/lib/notify/traveler';
 import type { BookingRequest, BookingLeg } from '@/lib/types';
 
 export async function GET(_req: Request, { params }: { params: Promise<{ requestId: string }> }) {
@@ -56,12 +57,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ reques
     return NextResponse.json({ error: 'This trip is booked and paid. Cancel it from the trip page to request a refund.' }, { status: 409 });
   }
 
+  const quoting = (await db.query<{ operator_id: number }>(
+    "SELECT DISTINCT operator_id FROM quotes WHERE request_id = ? AND status = 'pending'", [request.id])).map(r => r.operator_id);
   await db.run("UPDATE booking_requests SET status = 'cancelled', updated_at = now() WHERE id = ? AND status <> 'cancelled'", [request.id]);
   await db.run("UPDATE quotes SET status = 'rejected' WHERE request_id = ? AND status = 'pending'", [request.id]);
 
+  const baseUrl = appBaseUrl(req);
   // A booked charter was called off: tell the operator's staff.
   const operatorId = request.status === 'booked' ? await bookedOperatorId(db, request.id) : null;
-  if (operatorId) await alertStaff(db, { kind: 'cancellation', requestId: request.id, operatorId }, appBaseUrl(req));
+  if (operatorId) await alertStaff(db, { kind: 'cancellation', requestId: request.id, operatorId }, baseUrl);
+  // Operators with live quotes learn the request is gone.
+  if (quoting.length) await notifyRequestWithdrawn(db, request.id, quoting, baseUrl);
 
   return NextResponse.json({ success: true, status: 'cancelled' });
 }
