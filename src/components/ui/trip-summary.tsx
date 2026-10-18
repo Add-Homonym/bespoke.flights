@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { AirportIcon } from '@/components/ui/AirportBadge';
 
 export interface SummaryPlace {
   code: string;
@@ -61,9 +62,12 @@ export function TripSummary({
 
 function Place({ code, city, align = 'left' }: SummaryPlace & { align?: 'left' | 'right' }) {
   return (
-    <div className={align === 'right' ? 'text-right' : ''}>
-      <p className="text-display tabular-nums">{code}</p>
-      <p className="text-label text-on-night-muted">{city}</p>
+    <div className={`flex min-w-0 items-center gap-3 ${align === 'right' ? 'flex-row-reverse text-right' : ''}`}>
+      <AirportIcon iata={code} size={32} />
+      <div className="min-w-0">
+        <p className="text-display tabular-nums">{code}</p>
+        <p className="text-label text-on-night-muted">{city}</p>
+      </div>
     </div>
   );
 }
