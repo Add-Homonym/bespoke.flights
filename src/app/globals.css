@@ -362,6 +362,19 @@ body:has([data-action-bar]) #site-footer { padding-bottom: calc(96px + env(safe-
 }
 .feed-row-new { animation: feed-in 2.4s ease-out both; }
 
+/* Dashboard: new inquiries slide in with a brief highlight. */
+@keyframes inquiry-in {
+  0% { transform: translateY(-10px); opacity: 0; box-shadow: 0 0 0 2px var(--royal); }
+  50% { transform: none; opacity: 1; box-shadow: 0 0 0 2px var(--royal); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+.inquiry-new { animation: inquiry-in 2.4s ease-out both; }
+/* Autopilot response being written: three dots. */
+@keyframes typing { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+.typing span { animation: typing 1.2s infinite both; }
+.typing span:nth-child(2) { animation-delay: 0.15s; }
+.typing span:nth-child(3) { animation-delay: 0.3s; }
+
 /* Trip ticket: a printed airline ticket. Perforation between the main part
    and the stub, with half-circle notches cut in the page colour. */
 .ticket {

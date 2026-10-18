@@ -9,6 +9,7 @@ import { getDb } from '@/lib/db';
 import { buildDashboard } from '@/lib/operator/dashboard';
 import { formatMoney as money } from '@/lib/payments/config';
 import { CompanyBoard } from '@/components/board/company-board';
+import { LiveInquiries } from '@/components/operator/live-inquiries';
 import { Notice } from '@/components/ui/notice';
 import { StatusBadge } from '@/components/ui/status-badge';
 import type { Operator } from '@/lib/types';
@@ -78,6 +79,8 @@ export default async function OperatorDashboardPage() {
           {operator.status}
         </StatusBadge>
       </div>
+
+      <LiveInquiries />
 
       {operator.status === 'pending' && (
         <Notice tone="warning">Your account is pending approval. Requests start arriving once it is approved.</Notice>
