@@ -2,8 +2,8 @@
 
 import { Check, Pencil, Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { RouteField } from '@/components/ui/route-field';
+import { ScheduleField } from '@/components/ui/schedule-field';
 import { airportLabel } from '@/lib/airports';
 import { formatLandUnits, formatNm, legDistance } from '@/lib/distance';
 import { formatTripDate, formatTripTime } from '@/lib/trip-format';
@@ -135,19 +135,13 @@ export function LegCard({
             />
           </div>
 
-          <div id={`${base}-schedule`} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Input
-              label="Date"
-              type="date"
-              value={leg.departureDate}
-              onChange={e => onChange('departureDate', e.target.value)}
-              required
-            />
-            <Input
-              label="Departure time (local)"
-              type="time"
-              value={leg.departureTime}
-              onChange={e => onChange('departureTime', e.target.value)}
+          <div id={`${base}-schedule`}>
+            <ScheduleField
+              idPrefix={base}
+              date={leg.departureDate}
+              time={leg.departureTime}
+              onDateChange={v => onChange('departureDate', v)}
+              onTimeChange={v => onChange('departureTime', v)}
             />
           </div>
 

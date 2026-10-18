@@ -219,6 +219,21 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* Native date/time pickers follow the theme through color-scheme. */
+/* Date and time values in ScheduleField use the field's own type and colour,
+   not the browser's (Safari tints and pads them). */
+.schedule-input { appearance: none; -webkit-appearance: none; min-height: 30px; padding: 0; color: var(--ink); }
+.schedule-input::-webkit-date-and-time-value { text-align: left; margin: 0; }
+.schedule-input::-webkit-datetime-edit,
+.schedule-input::-webkit-datetime-edit-fields-wrapper { padding: 0; color: inherit; }
+.schedule-input::-webkit-datetime-edit-month-field,
+.schedule-input::-webkit-datetime-edit-day-field,
+.schedule-input::-webkit-datetime-edit-year-field,
+.schedule-input::-webkit-datetime-edit-hour-field,
+.schedule-input::-webkit-datetime-edit-minute-field,
+.schedule-input::-webkit-datetime-edit-ampm-field,
+.schedule-input::-webkit-datetime-edit-text { color: inherit; padding: 0; }
+.schedule-input[data-empty="true"] { color: var(--ink-subtle); }
+.schedule-input::-webkit-calendar-picker-indicator { opacity: 0.7; cursor: pointer; }
 
 /* Next steps: quotes being prepared. Rows fill in turn, then the best one is marked.
    The last keyframe is the resting state, so reduced motion shows filled rows. */
