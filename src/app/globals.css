@@ -215,7 +215,8 @@ h1, h2, h3, h4, h5, h6 {
 /*
  * Booking form focus, at two levels.
  * .form-part   — a leg, Guests or Special requests: the whole part lifts and
- *                takes a royal border while anything inside it has focus.
+ *                takes a royal border while anything inside it has focus or
+ *                the pointer is over it.
  * .field-card  — a raised field group (route, schedule, guests, requests):
  *                its border turns royal.
  * .field-cell  — one field (From, To, Date, Time, …): it shows the focus ring
@@ -234,6 +235,21 @@ h1, h2, h3, h4, h5, h6 {
   outline: 2px solid var(--focus);
   outline-offset: -2px;
   background-color: color-mix(in srgb, var(--royal) 6%, transparent);
+}
+/* The pointer inside a part or field activates the same state. Mouse and
+   trackpad only, so a tap on a touchscreen does not leave it stuck on. */
+@media (hover: hover) and (pointer: fine) {
+  .form-part:hover {
+    border-color: var(--royal);
+    background-color: var(--surface-raised);
+    box-shadow: 0 0 0 1px var(--royal), var(--ds-shadow-raised);
+  }
+  .field-card:hover { border-color: var(--royal); }
+  .field-cell:hover {
+    outline: 2px solid var(--focus);
+    outline-offset: -2px;
+    background-color: color-mix(in srgb, var(--royal) 6%, transparent);
+  }
 }
 .field-cell :is(input, textarea):focus-visible { outline: none; }
 
