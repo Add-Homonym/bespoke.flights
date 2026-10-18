@@ -61,7 +61,7 @@ export function MultiLegForm({
   const legs = useMemo(() => legStates.map(s => s.leg), [legStates]);
   const distance = useMemo(() => tripDistance(legs), [legs]);
   const [passengerCount, setPassengerCount] = useState(start.passengerCount);
-  const [notes, setNotes] = useState(start.notes);
+  const [custom, setCustom] = useState<string[]>(start.custom);
   const [tags, setTags] = useState<RequestTagId[]>(start.tags);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -71,15 +71,15 @@ export function MultiLegForm({
   // Remember the itinerary in a cookie on every change, so a reload or a later
   // visit restores it and it survives the sign-up step.
   useEffect(() => {
-    writeDraftCookie({ legs, passengerCount, notes, tags });
-  }, [legs, passengerCount, notes, tags]);
+    writeDraftCookie({ legs, passengerCount, tags, custom });
+  }, [legs, passengerCount, tags, custom]);
 
   const startOver = () => {
     const fresh = emptyDraft();
     setLegStates(fresh.legs.map(toState));
     setRemoved(null);
     setPassengerCount(fresh.passengerCount);
-    setNotes(fresh.notes);
+    setCustom(fresh.custom);
     setTags(fresh.tags);
     setNeedsAccount(false);
     setError('');
@@ -142,7 +142,7 @@ export function MultiLegForm({
     e.preventDefault();
     setError('');
 
-    const payload = draftToRequest({ legs, passengerCount, notes, tags });
+    const payload = draftToRequest({ legs, passengerCount, tags, custom });
     if (!bookingRequestSchema.safeParse(payload).success || !legs.every(legIsComplete)) {
       setError('Choose an origin, destination and date for every leg.');
       return;
@@ -189,7 +189,7 @@ export function MultiLegForm({
       <AccountStep
         legs={fromDraftLegs(legs)}
         passengerCount={passengerCount}
-        notes={combineRequests(tags, notes)}
+        notes={combineRequests(tags, custom)}
         onBack={() => setNeedsAccount(false)}
       />
     );
@@ -275,14 +275,14 @@ export function MultiLegForm({
           <span className="text-label text-ink-muted">Optional</span>
         </div>
         <div id="requests-card" className="form-part rounded-lg border border-hairline bg-surface-sunken p-4">
-          <RequestsField value={notes} onChange={setNotes} tags={tags} onTagsChange={setTags} />
+          <RequestsField tags={tags} onTagsChange={setTags} custom={custom} onCustomChange={setCustom} />
         </div>
       </section>
 
       {/* Trip summary: every detail entered so far */}
-      {draftHasContent({ legs, passengerCount, notes, tags }) && (
+      {draftHasContent({ legs, passengerCount, tags, custom }) && (
         <div id="trip-summary" className="rounded-lg border border-hairline bg-surface-raised px-6 py-4 shadow-raised">
-          <TripDetails title="Trip summary" legs={fromDraftLegs(legs)} passengerCount={passengerCount} notes={combineRequests(tags, notes)} />
+          <TripDetails title="Trip summary" legs={fromDraftLegs(legs)} passengerCount={passengerCount} notes={combineRequests(tags, custom)} />
         </div>
       )}
 

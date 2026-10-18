@@ -256,6 +256,10 @@ h1, h2, h3, h4, h5, h6 {
 /* While the fixed action bar is on screen, keep the footer's last line above it. */
 body:has([data-action-bar]) #site-footer { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
 
+/* A chip being typed into shows the ring around the pill, not the bare input. */
+.chip-field:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
+.chip-field input:focus-visible { outline: none; }
+
 /* Focus ring on every interactive element. */
 :focus-visible {
   outline: 2px solid var(--focus);

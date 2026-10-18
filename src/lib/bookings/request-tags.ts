@@ -29,10 +29,34 @@ export function normalizeTags(ids: unknown): RequestTagId[] {
   return REQUEST_TAGS.filter(t => chosen.has(t.id)).map(t => t.id);
 }
 
-/** 'Pets, Surfboards. Two dogs under 20 lb.' — tags first, then the free text. */
-export function combineRequests(tags: readonly string[], notes: string): string {
+/** Requests the traveler writes themselves, each shown as an editable chip. */
+export const MAX_CUSTOM_REQUESTS = 6;
+export const MAX_CUSTOM_REQUEST_CHARS = 120;
+
+/** Trim, drop empties and duplicates, cap count and length. */
+export function normalizeCustom(entries: unknown): string[] {
+  if (!Array.isArray(entries)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const e of entries) {
+    if (typeof e !== 'string') continue;
+    const text = e.replace(/\s+/g, ' ').trim().slice(0, MAX_CUSTOM_REQUEST_CHARS);
+    const key = text.toLowerCase();
+    if (!text || seen.has(key)) continue;
+    seen.add(key);
+    out.push(text);
+    if (out.length === MAX_CUSTOM_REQUESTS) break;
+  }
+  return out;
+}
+
+/**
+ * The text operators see: preset tags, then the traveler's own requests.
+ * 'Pets, Surfboards. Two dogs under 20 lb; Late arrival'
+ */
+export function combineRequests(tags: readonly string[], custom: readonly string[]): string {
   const labels = REQUEST_TAGS.filter(t => tags.includes(t.id)).map(t => t.label);
-  const text = notes.trim();
-  if (labels.length === 0) return text;
-  return text ? `${labels.join(', ')}. ${text}` : labels.join(', ');
+  const own = custom.map(c => c.trim().replace(/[.;,\s]+$/, '')).filter(Boolean);
+  const parts = [labels.join(', '), own.join('; ')].filter(Boolean);
+  return parts.join('. ');
 }
