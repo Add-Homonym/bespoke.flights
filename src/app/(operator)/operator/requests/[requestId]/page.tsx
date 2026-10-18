@@ -126,19 +126,21 @@ export default async function OperatorRequestDetailPage({ params }: { params: Pr
               message={existingQuote.message}
               validUntil={existingQuote.valid_until}
               aircraftId={existingQuote.aircraft_id}
+              legs={legs}
+              passengerCount={request.passenger_count}
             />
           )}
           {canQuoteAgain && (
             <div className="mt-6 border-t border-hairline pt-6">
               <h3 className="text-sm font-semibold text-ink-muted uppercase tracking-wider mb-4">Submit a new quote</h3>
-              <SubmitQuoteForm requestId={request.id} aircraft={aircraft} />
+              <SubmitQuoteForm requestId={request.id} aircraft={aircraft} legs={legs} passengerCount={request.passenger_count} />
             </div>
           )}
         </Card>
       ) : operator?.status === 'approved' ? (
         <Card>
           <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wider mb-6">Submit a Quote</h2>
-          <SubmitQuoteForm requestId={request.id} aircraft={aircraft} />
+          <SubmitQuoteForm requestId={request.id} aircraft={aircraft} legs={legs} passengerCount={request.passenger_count} />
         </Card>
       ) : (
         <Card>

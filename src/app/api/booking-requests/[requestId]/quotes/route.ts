@@ -6,6 +6,7 @@ import { quoteSchema } from '@/lib/validations';
 import { requestAccess } from '@/lib/access';
 import { appBaseUrl } from '@/lib/payments/config';
 import { notifyNewQuote } from '@/lib/notify/traveler';
+import { saveWorksheet } from '@/lib/quotes/worksheet-store';
 import type { Quote, Operator, BookingRequest } from '@/lib/types';
 
 function isUniqueViolation(err: unknown): boolean {
@@ -62,7 +63,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ request
     return NextResponse.json({ error: `This request is ${request.status} and no longer accepts quotes` }, { status: 409 });
   }
 
-  const { priceCents, currency, message, aircraftId, validUntil } = parsed.data;
+  const { priceCents, currency, message, aircraftId, validUntil, worksheet } = parsed.data;
 
   if (aircraftId) {
     const owned = await db.one('SELECT id FROM aircraft WHERE id = ? AND operator_id = ?', [aircraftId, operator.id]);
@@ -91,6 +92,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ request
       "UPDATE outreach_log SET status = 'responded', responded_at = now() WHERE request_id = ? AND operator_id = ?",
       [request.id, operator.id]
     );
+
+    // Private working for the price; never returned to the traveler.
+    if (worksheet) await saveWorksheet(tx, id, operator.id, worksheet);
 
     return id;
     });

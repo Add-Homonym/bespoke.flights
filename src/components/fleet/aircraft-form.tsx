@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Search } from 'lucide-react';
+import { Lock, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Notice } from '@/components/ui/notice';
@@ -18,6 +18,8 @@ export interface AircraftValues {
   serialNumber: string;
   manufacturer: string;
   model: string;
+  hourlyRate: string;
+  cruiseKtas: string;
 }
 
 export const valuesFrom = (a?: AircraftView): AircraftValues => ({
@@ -29,6 +31,8 @@ export const valuesFrom = (a?: AircraftView): AircraftValues => ({
   serialNumber: a?.serial_number ?? '',
   manufacturer: a?.manufacturer ?? '',
   model: a?.model ?? '',
+  hourlyRate: a?.hourly_rate_cents ? String(a.hourly_rate_cents / 100) : '',
+  cruiseKtas: a?.cruise_ktas ? String(a.cruise_ktas) : '',
 });
 
 const words = (s: string) => s.toUpperCase().split(/[^A-Z0-9]+/).filter(w => w.length > 1);
@@ -52,6 +56,8 @@ export function toPayload(v: AircraftValues) {
     serialNumber: v.serialNumber.trim() || null,
     manufacturer: v.manufacturer.trim() || null,
     model: v.model.trim() || null,
+    hourlyRateCents: v.hourlyRate.trim() ? Math.round(Number(v.hourlyRate) * 100) : null,
+    cruiseKtas: num(v.cruiseKtas),
   };
 }
 
@@ -169,6 +175,19 @@ export function AircraftForm({
           <Input name="model" label="Model" value={v.model} onChange={set('model')} error={errors.model} />
           <Input name="serialNumber" label="Serial number" value={v.serialNumber} onChange={set('serialNumber')} error={errors.serialNumber} />
         </div>
+      </fieldset>
+
+      <fieldset>
+        <legend className="mb-3 inline-flex items-center gap-1.5 text-overline text-ink-muted">
+          <Lock size={14} strokeWidth={1.5} aria-hidden="true" /> Pricing defaults (private)
+        </legend>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <Input name="hourlyRate" label="Hourly rate (USD)" type="number" inputMode="decimal" min={0} step={50} placeholder="5500"
+            value={v.hourlyRate} onChange={set('hourlyRate')} error={errors.hourlyRateCents} />
+          <Input name="cruiseKtas" label="Cruise speed (kt)" type="number" inputMode="numeric" min={50} max={700} placeholder="450"
+            value={v.cruiseKtas} onChange={set('cruiseKtas')} error={errors.cruiseKtas} />
+        </div>
+        <p className="mt-2 text-label text-ink-muted">Used to start the price worksheet on quotes. Not shown to travelers.</p>
       </fieldset>
 
       {message && <Notice tone="danger">{message}</Notice>}

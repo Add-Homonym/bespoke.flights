@@ -5,13 +5,19 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Notice } from '@/components/ui/notice';
+import { Calculator } from 'lucide-react';
+import { QuoteWorksheet } from '@/components/booking/quote-worksheet';
+import type { QuoteLeg } from '@/components/booking/submit-quote-form';
+import { defaultWorksheet, type WorksheetInputs } from '@/lib/quotes/worksheet';
 import type { Aircraft } from '@/lib/types';
 
 /** Operator controls on a pending quote: revise it or withdraw it. */
 export function ManageQuote({
-  quoteId, aircraft, priceCents, message, validUntil, aircraftId,
+  quoteId, aircraft, priceCents, message, validUntil, aircraftId, legs, passengerCount,
 }: {
   quoteId: number;
+  legs: QuoteLeg[];
+  passengerCount: number;
   aircraft: Aircraft[];
   priceCents: number;
   message: string | null;
@@ -27,6 +33,24 @@ export function ManageQuote({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [done, setDone] = useState('');
+  const [sheet, setSheet] = useState<WorksheetInputs | null>(null);
+  const [sheetLoaded, setSheetLoaded] = useState(false);
+  const [sheetChanged, setSheetChanged] = useState(false);
+
+  /** Open the revise form with the saved private worksheet, or a fresh one. */
+  const startRevise = async () => {
+    setMode('revise');
+    if (sheetLoaded) return;
+    const res = await fetch(`/api/quotes/${quoteId}/worksheet`).catch(() => null);
+    const saved = res?.ok ? ((await res.json()) as WorksheetInputs) : null;
+    const a = aircraft.find(x => x.id === aircraftId) ?? null;
+    setSheet(saved ?? defaultWorksheet({
+      legs: legs.map(l => ({ origin: l.origin_code, dest: l.dest_code, date: l.departure_date })),
+      passengers: passengerCount,
+      aircraft: a,
+    }));
+    setSheetLoaded(true);
+  };
 
   const patch = async (body: unknown) => {
     setBusy(true);
@@ -50,6 +74,7 @@ export function ManageQuote({
     if (note.trim() !== (message ?? '')) body.message = note.trim();
     if (until && until !== validUntil) body.validUntil = until;
     if (plane && Number(plane) !== aircraftId) body.aircraftId = Number(plane);
+    if (sheet && sheetChanged) body.worksheet = { ...sheet, aircraftId: plane ? Number(plane) : aircraftId };
     if (await patch(body)) { setDone('Quote revised. The traveler has been emailed.'); setMode('idle'); router.refresh(); }
   };
 
@@ -62,7 +87,7 @@ export function ManageQuote({
   if (mode === 'idle') {
     return (
       <div className="mt-4 flex flex-wrap gap-2">
-        <Button variant="secondary" size="sm" onClick={() => setMode('revise')}>Revise quote</Button>
+        <Button variant="secondary" size="sm" onClick={startRevise}>Revise quote</Button>
         <Button variant="quiet" size="sm" onClick={() => setMode('withdraw')}>Withdraw quote</Button>
       </div>
     );
@@ -100,6 +125,19 @@ export function ManageQuote({
             {aircraft.map(a => <option key={a.id} value={a.id}>{a.type} — {a.tail_number} ({a.capacity} seats)</option>)}
           </select>
         </div>
+      )}
+      {sheet && (
+        <details className="group">
+          <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-2 text-label text-royal hover:underline underline-offset-4">
+            <Calculator size={16} strokeWidth={1.5} aria-hidden="true" /> Price worksheet (private)
+          </summary>
+          <div className="mt-3">
+            <QuoteWorksheet id={`revise-${quoteId}-worksheet`} value={sheet}
+              onChange={w => { setSheet(w); setSheetChanged(true); }}
+              cruiseKtas={aircraft.find(a => a.id === (plane ? Number(plane) : aircraftId))?.cruise_ktas}
+              onUse={c => { setPrice((c / 100).toFixed(2)); setSheetChanged(true); }} />
+          </div>
+        </details>
       )}
       <div className="space-y-2">
         <label htmlFor="revise-message" className="block text-label text-ink-muted">Message to traveler</label>

@@ -346,6 +346,20 @@ CREATE TABLE IF NOT EXISTS aircraft_photos (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_aircraft_photos_aircraft ON aircraft_photos(aircraft_id, position);
+
+-- Operator pricing defaults per aircraft, for the quote worksheet. Private to the operator.
+ALTER TABLE aircraft ADD COLUMN IF NOT EXISTS hourly_rate_cents BIGINT;
+ALTER TABLE aircraft ADD COLUMN IF NOT EXISTS cruise_ktas INTEGER;
+
+-- The operator's working for a quote (src/lib/quotes/worksheet.ts). Private to
+-- the quoting operator: no traveler or admin route reads this table.
+CREATE TABLE IF NOT EXISTS quote_worksheets (
+  quote_id     INTEGER PRIMARY KEY REFERENCES quotes(id) ON DELETE CASCADE,
+  operator_id  INTEGER NOT NULL REFERENCES operators(id),
+  inputs       TEXT NOT NULL,
+  total_cents  BIGINT NOT NULL,
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 `;
 
 /**

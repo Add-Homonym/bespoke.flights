@@ -27,9 +27,10 @@ export async function POST(req: Request) {
   const a = parsed.data;
   const tail = normalizeNNumber(a.tailNumber) ?? a.tailNumber.toUpperCase();
   const { id } = (await db.one<{ id: number }>(
-    `INSERT INTO aircraft (operator_id, tail_number, type, capacity, range_nm, year, serial_number, manufacturer, model)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
-    [me.operator.id, tail, a.type, a.capacity, a.rangeNm ?? null, a.year ?? null, a.serialNumber || null, a.manufacturer || null, a.model || null],
+    `INSERT INTO aircraft (operator_id, tail_number, type, capacity, range_nm, year, serial_number, manufacturer, model, hourly_rate_cents, cruise_ktas)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+    [me.operator.id, tail, a.type, a.capacity, a.rangeNm ?? null, a.year ?? null, a.serialNumber || null, a.manufacturer || null, a.model || null,
+     a.hourlyRateCents ?? null, a.cruiseKtas ?? null],
   ))!;
 
   return NextResponse.json({ id }, { status: 201 });

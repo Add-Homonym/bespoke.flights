@@ -6,6 +6,7 @@ import { toId } from '@/lib/db/queries';
 import { appBaseUrl } from '@/lib/payments/config';
 import { notifyNewQuote, notifyQuoteDeclined, notifyQuoteWithdrawn } from '@/lib/notify/traveler';
 import { quoteSchema } from '@/lib/validations';
+import { saveWorksheet } from '@/lib/quotes/worksheet-store';
 import type { Quote, BookingRequest, Operator } from '@/lib/types';
 
 /**
@@ -61,7 +62,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ quoteI
   if (!['open', 'quoted'].includes(request.status)) {
     return NextResponse.json({ error: `This request is ${request.status}` }, { status: 409 });
   }
-  const { priceCents, message, validUntil, aircraftId } = parsed.data;
+  const { priceCents, message, validUntil, aircraftId, worksheet } = parsed.data;
+  if (worksheet) await saveWorksheet(db, quote.id, operator.id, worksheet);
+  // Saving only the private worksheet is not a revision the traveler hears about.
+  if (Object.keys(parsed.data).every(k => k === 'worksheet')) {
+    return NextResponse.json((await db.one<Quote>('SELECT * FROM quotes WHERE id = ?', [quote.id]))!);
+  }
   if (aircraftId) {
     const owned = await db.one('SELECT id FROM aircraft WHERE id = ? AND operator_id = ?', [aircraftId, operator.id]);
     if (!owned) return NextResponse.json({ error: { aircraftId: ['Aircraft not in your fleet'] } }, { status: 400 });

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { X } from 'lucide-react';
 import { Notice } from '@/components/ui/notice';
 import { Button } from '@/components/ui/button';
 import { AccountStep } from '@/components/booking/account-step';
@@ -200,7 +201,13 @@ export function MultiLegForm({
       {restored && (
         <div id="restored-draft-notice" role="status" className="flex items-center justify-between gap-3 rounded-md border border-hairline bg-surface-sunken px-4 py-3 text-body">
           <span className="text-ink">Your unfinished trip is restored.</span>
-          <Button type="button" variant="quiet" size="sm" onClick={startOver}>Start over</Button>
+          <span className="flex items-center gap-1">
+            <Button type="button" variant="quiet" size="sm" onClick={startOver}>Start over</Button>
+            <button id="restored-draft-close" type="button" onClick={() => setRestored(false)} aria-label="Close"
+              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-ink-muted transition-colors duration-200 ease-out hover:bg-surface-raised hover:text-ink cursor-pointer">
+              <X size={18} strokeWidth={1.5} aria-hidden="true" />
+            </button>
+          </span>
         </div>
       )}
 

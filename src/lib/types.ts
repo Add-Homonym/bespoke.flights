@@ -51,6 +51,9 @@ export interface Aircraft {
   /** JSON RegistryRecord from the last FAA lookup. */
   faa_record: string | null;
   faa_checked_at: string | null;
+  /** Pricing defaults for the quote worksheet; private to the operator. */
+  hourly_rate_cents: number | null;
+  cruise_ktas: number | null;
   updated_at: string | null;
   created_at: string;
 }

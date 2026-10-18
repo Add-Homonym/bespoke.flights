@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { SubmitQuoteForm } from '@/components/booking/submit-quote-form';
 import type { BookingLeg, Aircraft } from '@/lib/types';
 
 interface InboundRFQ {
@@ -45,28 +45,9 @@ export default function OperatorInboundPage() {
     });
   }, []);
 
-  const submitQuote = async (requestId: number, form: HTMLFormElement) => {
-    const formData = new FormData(form);
-    const price = parseFloat(formData.get('price') as string);
-    if (isNaN(price) || price <= 0) return;
-
-    const res = await fetch(`/api/booking-requests/${requestId}/quotes`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        priceCents: Math.round(price * 100),
-        aircraftId: formData.get('aircraftId') ? Number(formData.get('aircraftId')) : undefined,
-        message: formData.get('message') || undefined,
-        validUntil: formData.get('validUntil') || undefined,
-      }),
-    });
-
-    if (res.ok) {
-      // Refresh data
-      const updated = await fetch('/api/operator/inbound').then(r => r.json());
-      setRfqs(updated);
-      setExpandedId(null);
-    }
+  const refresh = async () => {
+    setRfqs(await fetch('/api/operator/inbound').then(r => r.json()));
+    setExpandedId(null);
   };
 
   const pending = rfqs.filter(r => !r.quote_id && r.request_status !== 'booked' && r.request_status !== 'cancelled');
@@ -113,7 +94,7 @@ export default function OperatorInboundPage() {
                   aircraft={aircraft}
                   expanded={expandedId === rfq.request_id}
                   onToggle={() => setExpandedId(expandedId === rfq.request_id ? null : rfq.request_id)}
-                  onSubmit={(form) => submitQuote(rfq.request_id, form)}
+                  onSubmitted={refresh}
                   onViewDetails={() => router.push(`/operator/requests/${rfq.request_id}`)}
                 />
               ))}
@@ -131,7 +112,7 @@ export default function OperatorInboundPage() {
                   aircraft={aircraft}
                   expanded={false}
                   onToggle={() => {}}
-                  onSubmit={() => {}}
+                  onSubmitted={() => {}}
                   onViewDetails={() => router.push(`/operator/requests/${rfq.request_id}`)}
                 />
               ))}
@@ -148,14 +129,14 @@ function RFQCard({
   aircraft,
   expanded,
   onToggle,
-  onSubmit,
+  onSubmitted,
   onViewDetails,
 }: {
   rfq: InboundRFQ;
   aircraft: Aircraft[];
   expanded: boolean;
   onToggle: () => void;
-  onSubmit: (form: HTMLFormElement) => void;
+  onSubmitted: () => void;
   onViewDetails: () => void;
 }) {
   const legs = rfq.legs as BookingLeg[];
@@ -224,40 +205,12 @@ function RFQCard({
         ))}
       </div>
 
-      {/* Inline quote form */}
+      {/* Inline quote form, with the private price worksheet */}
       {expanded && !hasQuote && (
-        <form
-          className="mt-5 pt-5 border-t border-hairline"
-          onSubmit={e => { e.preventDefault(); onSubmit(e.currentTarget); }}
-        >
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Input name="price" label="Total Price (USD)" type="number" step="0.01" min="0" placeholder="25000" required />
-            <div>
-              <label className="block text-sm font-medium text-ink-muted mb-1.5">Aircraft</label>
-              <select
-                name="aircraftId"
-                className="w-full rounded-md border border-hairline bg-surface-raised px-3 py-2.5 text-ink text-sm focus:outline-none transition-colors"
-              >
-                <option value="">Optional</option>
-                {aircraft.map(a => (
-                  <option key={a.id} value={a.id}>{a.type} ({a.tail_number})</option>
-                ))}
-              </select>
-            </div>
-            <Input name="validUntil" label="Valid Until" type="date" />
-            <div className="flex items-end">
-              <Button type="submit" block>Submit Quote</Button>
-            </div>
-          </div>
-          <div className="mt-3">
-            <textarea
-              name="message"
-              rows={2}
-              placeholder="Optional message: describe your offer, amenities, etc."
-              className="w-full rounded-md border border-hairline bg-surface-raised px-3 py-2 text-sm text-ink placeholder:text-ink-subtle focus:outline-none transition-colors resize-none"
-            />
-          </div>
-        </form>
+        <div className="mt-5 border-t border-hairline pt-5">
+          <SubmitQuoteForm requestId={rfq.request_id} aircraft={aircraft} legs={legs}
+            passengerCount={rfq.passenger_count} onSubmitted={onSubmitted} />
+        </div>
       )}
     </Card>
   );

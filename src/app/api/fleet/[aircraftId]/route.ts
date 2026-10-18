@@ -10,6 +10,7 @@ type Ctx = { params: Promise<{ aircraftId: string }> };
 const COLUMNS = {
   tailNumber: 'tail_number', type: 'type', capacity: 'capacity', rangeNm: 'range_nm', year: 'year',
   serialNumber: 'serial_number', manufacturer: 'manufacturer', model: 'model',
+  hourlyRateCents: 'hourly_rate_cents', cruiseKtas: 'cruise_ktas',
 } as const;
 
 export async function GET(_req: Request, { params }: Ctx) {

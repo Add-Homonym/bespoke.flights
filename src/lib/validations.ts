@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { worksheetSchema } from '@/lib/quotes/worksheet';
 
 export const registerSchema = z.object({
   email: z.string().email(),
@@ -42,6 +43,8 @@ export const quoteSchema = z.object({
   message: z.string().max(2000).optional(),
   validUntil: z.string().regex(ISO_DATE).optional()
     .refine(d => !d || d >= new Date().toISOString().slice(0, 10), { message: 'Valid-until date is in the past' }),
+  /** The operator's private working for the price. Never shown to the traveler. */
+  worksheet: worksheetSchema.optional().nullable(),
 });
 
 export const profileSchema = z.object({
@@ -61,6 +64,8 @@ export const aircraftSchema = z.object({
   serialNumber: z.string().trim().max(40).optional().nullable(),
   manufacturer: z.string().trim().max(80).optional().nullable(),
   model: z.string().trim().max(80).optional().nullable(),
+  hourlyRateCents: z.number().int().min(0).max(100_000_000).optional().nullable(),
+  cruiseKtas: z.number().int().min(50).max(700).optional().nullable(),
 });
 
 export const aircraftPatchSchema = aircraftSchema.partial().strict();
