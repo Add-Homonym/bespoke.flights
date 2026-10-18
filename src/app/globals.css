@@ -212,6 +212,31 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 700;
 }
 
+/*
+ * Booking form focus, at two levels.
+ * .form-part   — a leg, Guests or Special requests: the whole part lifts and
+ *                takes a royal border while anything inside it has focus.
+ * .field-card  — a raised field group (route, schedule, guests, requests):
+ *                its border turns royal.
+ * .field-cell  — one field (From, To, Date, Time, …): it shows the focus ring
+ *                and a light tint, so the bare input inside needs no outline.
+ */
+.form-part, .field-card, .field-cell {
+  transition: border-color 200ms ease-out, box-shadow 200ms ease-out, background-color 200ms ease-out;
+}
+.form-part:focus-within {
+  border-color: var(--royal);
+  background-color: var(--surface-raised);
+  box-shadow: 0 0 0 1px var(--royal), var(--ds-shadow-raised);
+}
+.field-card:focus-within { border-color: var(--royal); }
+.field-cell:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+  background-color: color-mix(in srgb, var(--royal) 6%, transparent);
+}
+.field-cell :is(input, textarea):focus-visible { outline: none; }
+
 /* Focus ring on every interactive element. */
 :focus-visible {
   outline: 2px solid var(--focus);

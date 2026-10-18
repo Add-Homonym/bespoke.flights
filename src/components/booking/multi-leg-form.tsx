@@ -3,11 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Notice } from '@/components/ui/notice';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { AccountStep } from '@/components/booking/account-step';
 import { LegCard, legIsComplete } from '@/components/booking/leg-card';
 import { NextSteps } from '@/components/booking/next-steps';
+import { GuestsField, RequestsField } from '@/components/booking/trip-extras';
 import { formatLandUnits, formatNm, tripDistance } from '@/lib/distance';
 import { TripDetails } from '@/components/booking/trip-details';
 import { fromDraftLegs } from '@/lib/trip-format';
@@ -254,24 +254,25 @@ export function MultiLegForm({
         )}
       </section>
 
-      {/* Passengers and notes */}
+      {/* Guests */}
       <section id="guests-section" aria-labelledby="guests-heading" className="space-y-4">
-        <h2 id="guests-heading" className="text-title text-ink">Guests</h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[8rem_1fr]">
-          <Input
-            label="Guests"
-            type="number"
-            min={1}
-            max={19}
-            value={passengerCount}
-            onChange={e => setPassengerCount(Number(e.target.value))}
-          />
-          <Input
-            label="Special requests"
-            placeholder="Pets, luggage, catering"
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-          />
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 id="guests-heading" className="text-title text-ink">Guests</h2>
+          <span className="text-label text-ink-muted tabular-nums">{passengerCount} {passengerCount === 1 ? 'guest' : 'guests'}</span>
+        </div>
+        <div id="guests-card" className="form-part rounded-lg border border-hairline bg-surface-sunken p-4">
+          <GuestsField value={passengerCount} onChange={setPassengerCount} />
+        </div>
+      </section>
+
+      {/* Special requests */}
+      <section id="requests-section" aria-labelledby="requests-heading" className="space-y-4">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 id="requests-heading" className="text-title text-ink">Special requests</h2>
+          <span className="text-label text-ink-muted">Optional</span>
+        </div>
+        <div id="requests-card" className="form-part rounded-lg border border-hairline bg-surface-sunken p-4">
+          <RequestsField value={notes} onChange={setNotes} />
         </div>
       </section>
 

@@ -101,7 +101,7 @@ export function LegCard({
       id={base}
       role="group"
       aria-labelledby={`${base}-title`}
-      className="space-y-4 rounded-lg border border-hairline bg-surface-sunken p-4"
+      className="form-part space-y-4 rounded-lg border border-hairline bg-surface-sunken p-4"
     >
       <div id={`${base}-header`} className="flex items-center justify-between gap-3">
         <h3 id={`${base}-title`} className="text-heading text-ink">

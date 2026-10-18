@@ -42,8 +42,10 @@ async function check(page, label, focus) {
       await page.keyboard.press('Tab');
       const f = await page.evaluate(() => {
         const el = document.activeElement; if (!el || el === document.body || el.tagName === 'NEXTJS-PORTAL') return null;
-        const cs = getComputedStyle(el);
-        return { id: el.outerHTML.slice(0, 80), ok: el.matches(':focus-visible') && cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) >= 2 };
+        // Fields inside a .field-cell show the ring on the cell instead of the bare input.
+        const ring = (e) => { const c = getComputedStyle(e); return c.outlineStyle !== 'none' && parseFloat(c.outlineWidth) >= 2; };
+        const cell = el.closest('.field-cell');
+        return { id: el.outerHTML.slice(0, 80), ok: el.matches(':focus-visible') && (ring(el) || (cell !== null && ring(cell))) };
       });
       if (!f || seen.has(f.id)) break; seen.add(f.id);
       if (!f.ok) issues.push(`${label}: no focus ring on ${f.id}`);

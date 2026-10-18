@@ -27,8 +27,8 @@ export function ScheduleField({
   const timeId = idPrefix ? `${idPrefix}-time` : `${id}-time`;
 
   return (
-    <div className="grid grid-cols-1 rounded-md border border-border-control bg-surface-raised sm:grid-cols-2">
-      <div className="px-4 py-3">
+    <div className="field-card grid grid-cols-1 rounded-md border border-border-control bg-surface-raised sm:grid-cols-2">
+      <div className="field-cell rounded-t-md px-4 py-3 sm:rounded-l-md sm:rounded-tr-none">
         <label htmlFor={dateId} className="block text-label text-ink-muted">Date</label>
         <input
           id={dateId}
@@ -41,7 +41,7 @@ export function ScheduleField({
         />
         <p className="min-h-[18px] text-[13px] leading-[18px] text-ink-muted">{formatTripDate(date)}</p>
       </div>
-      <div className="border-t border-hairline px-4 py-3 sm:border-l sm:border-t-0">
+      <div className="field-cell rounded-b-md border-t border-hairline px-4 py-3 sm:rounded-r-md sm:rounded-bl-none sm:border-l sm:border-t-0">
         <label htmlFor={timeId} className="block text-label text-ink-muted">Departure time (local)</label>
         <input
           id={timeId}

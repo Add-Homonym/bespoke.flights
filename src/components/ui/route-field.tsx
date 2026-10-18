@@ -17,7 +17,7 @@ interface AirportFieldProps {
  * (upper-cased) until an airport is chosen, then its ICAO code. Accepts city,
  * airport name, IATA or ICAO.
  */
-function AirportField({ label, value, onChange, readOnly, required }: AirportFieldProps) {
+function AirportField({ label, value, onChange, readOnly, required, cellClass = '' }: AirportFieldProps & { cellClass?: string }) {
   const id = useId();
   const listId = `${id}-list`;
   const [open, setOpen] = useState(false);
@@ -59,7 +59,7 @@ function AirportField({ label, value, onChange, readOnly, required }: AirportFie
   };
 
   return (
-    <div className="relative px-4 py-3 pr-16">
+    <div className={`field-cell relative px-4 py-3 pr-16 ${cellClass}`}>
       <label htmlFor={id} className="block text-label text-ink-muted">{label}</label>
       <input
         id={id}
@@ -136,10 +136,10 @@ export function RouteField({
   originLocked?: boolean;
 }) {
   return (
-    <div className="relative rounded-md border border-border-control bg-surface-raised">
-      <AirportField label="From" value={origin} onChange={onOriginChange} readOnly={originLocked} required />
+    <div className="field-card relative rounded-md border border-border-control bg-surface-raised">
+      <AirportField label="From" value={origin} onChange={onOriginChange} readOnly={originLocked} required cellClass="rounded-t-md" />
       <div className="border-t border-hairline" />
-      <AirportField label="To" value={destination} onChange={onDestinationChange} required />
+      <AirportField label="To" value={destination} onChange={onDestinationChange} required cellClass="rounded-b-md" />
       <button
         type="button"
         aria-label="Swap origin and destination"
