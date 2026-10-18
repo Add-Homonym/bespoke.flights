@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { formatTripDate, formatTripTime } from '@/lib/trip-format';
 import { Badge } from '@/components/ui/badge';
 import { SubmitQuoteForm } from '@/components/booking/submit-quote-form';
+import { ManageQuote } from '@/components/booking/manage-quote';
 import { TripShare } from '@/components/operator/trip-share';
 import { OperatorChangeRequests } from '@/components/booking/change-request';
 import { changeRequestViews } from '@/lib/bookings/changes';
@@ -30,9 +31,13 @@ export default async function OperatorRequestDetailPage({ params }: { params: Pr
     ? (await db.query<Aircraft>('SELECT * FROM aircraft WHERE operator_id = ?', [operator.id]))
     : [];
 
-  const existingQuote = operator
-    ? (await db.one<Quote>('SELECT * FROM quotes WHERE request_id = ? AND operator_id = ?', [request.id, operator.id]))
-    : undefined;
+  // The live quote if there is one, otherwise the most recent (withdrawn, rejected, expired).
+  const quotes = operator
+    ? await db.query<Quote>('SELECT * FROM quotes WHERE request_id = ? AND operator_id = ? ORDER BY id DESC', [request.id, operator.id])
+    : [];
+  const liveQuote = quotes.find(q => q.status === 'pending' || q.status === 'accepted');
+  const existingQuote = liveQuote ?? quotes[0];
+  const canQuoteAgain = !liveQuote && ['open', 'quoted'].includes(request.status) && operator?.status === 'approved';
 
   const route = legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).join(' → ');
   const won = existingQuote?.status === 'accepted' && ['booked', 'completed'].includes(request.status);
@@ -106,10 +111,29 @@ export default async function OperatorRequestDetailPage({ params }: { params: Pr
               <p className="text-brass-ink font-display text-2xl">${(existingQuote.price_cents / 100).toLocaleString()}</p>
               {existingQuote.message && <p className="text-ink-muted text-sm mt-2 italic">&quot;{existingQuote.message}&quot;</p>}
             </div>
-            <Badge variant={existingQuote.status === 'accepted' ? 'success' : existingQuote.status === 'rejected' ? 'error' : 'warning'}>
+            <Badge variant={existingQuote.status === 'accepted' ? 'success' : existingQuote.status === 'rejected' ? 'error' : existingQuote.status === 'pending' ? 'warning' : 'default'}>
               {existingQuote.status}
             </Badge>
           </div>
+          {existingQuote.previous_price_cents != null && (
+            <p className="text-ink-muted text-xs mt-2">Revised from ${(existingQuote.previous_price_cents / 100).toLocaleString()}</p>
+          )}
+          {existingQuote.status === 'pending' && ['open', 'quoted'].includes(request.status) && (
+            <ManageQuote
+              quoteId={existingQuote.id}
+              aircraft={aircraft}
+              priceCents={existingQuote.price_cents}
+              message={existingQuote.message}
+              validUntil={existingQuote.valid_until}
+              aircraftId={existingQuote.aircraft_id}
+            />
+          )}
+          {canQuoteAgain && (
+            <div className="mt-6 border-t border-hairline pt-6">
+              <h3 className="text-sm font-semibold text-ink-muted uppercase tracking-wider mb-4">Submit a new quote</h3>
+              <SubmitQuoteForm requestId={request.id} aircraft={aircraft} />
+            </div>
+          )}
         </Card>
       ) : operator?.status === 'approved' ? (
         <Card>

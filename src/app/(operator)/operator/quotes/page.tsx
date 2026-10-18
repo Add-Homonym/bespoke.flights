@@ -12,6 +12,7 @@ const statusBadge: Record<string, 'default' | 'success' | 'warning' | 'error' | 
   accepted: 'success',
   rejected: 'error',
   withdrawn: 'default',
+  expired: 'default',
 };
 
 const paymentBadge: Record<string, 'default' | 'success' | 'warning' | 'error' | 'gold'> = {

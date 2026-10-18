@@ -237,7 +237,7 @@ export default async function RequestDetailPage({
         ) : (
           <div className="grid gap-4">
             {quotes.map(quote => {
-              const expired = quote.status === 'pending' && isExpired(quote.valid_until, today);
+              const expired = quote.status === 'expired' || (quote.status === 'pending' && isExpired(quote.valid_until, today));
               const canBook = quote.status === 'pending' && ['open', 'quoted'].includes(request.status) && !paymentInFlight && session.role === 'customer';
               return (
                 <QuoteCard
@@ -250,6 +250,7 @@ export default async function RequestDetailPage({
                     : quote.status === 'rejected' ? <StatusBadge variant="neutral">Declined</StatusBadge>
                     : quote.status === 'withdrawn' ? <StatusBadge variant="neutral">Withdrawn</StatusBadge>
                     : expired ? <StatusBadge variant="warning">Expired</StatusBadge>
+                    : quote.revised_at ? <StatusBadge variant="neutral">Revised</StatusBadge>
                     : quote.id === bestValueId ? <StatusBadge variant="brass">Best value</StatusBadge>
                     : undefined
                   }
@@ -257,10 +258,13 @@ export default async function RequestDetailPage({
                   flightTime={null}
                   yearBuilt={quote.aircraft_year ?? null}
                   price={formatMoney(quote.price_cents, quote.currency)}
-                  note={(quote.message || quote.valid_until) && (
+                  note={(quote.message || quote.valid_until || quote.previous_price_cents != null) && (
                     <>
                       {quote.message && <span className="block italic">&ldquo;{quote.message}&rdquo;</span>}
-                      {quote.valid_until && <span className="block text-label">Valid until {quote.valid_until}</span>}
+                      {quote.valid_until && <span className="block text-label">{expired ? 'Expired' : 'Valid until'} {quote.valid_until}</span>}
+                      {quote.previous_price_cents != null && quote.previous_price_cents !== quote.price_cents && (
+                        <span className="block text-label">Previously {formatMoney(quote.previous_price_cents, quote.currency)}</span>
+                      )}
                     </>
                   )}
                   action={canBook && (

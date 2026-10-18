@@ -173,11 +173,11 @@ Stripe → POST /api/webhooks/stripe (signature verified)
      other quotes rejected, request booked, receipt + operator emails sent
 ```
 
-- **Quotes are accepted only through payment.** `PATCH /api/quotes/[id]` can only decline.
+- **Quotes are accepted only through payment.** `PATCH /api/quotes/[id]` declines (traveler), or withdraws / revises (the quoting operator, while pending).
 - **One open checkout per request.** Starting a checkout for a different quote expires the previous session.
 - **Double payment protection.** If two sessions are both paid, the second one is refunded automatically, including the transfer reversal.
 - **Bank payments (ACH).** The payment shows as `processing` until `checkout.session.async_payment_succeeded` or `..._failed` arrives. The request is not booked until funds clear.
-- **Expired quotes** (`valid_until` in the past) cannot be paid.
+- **Expired quotes** (`valid_until` in the past) cannot be paid. The daily lifecycle job marks them `expired`.
 - **Webhooks are idempotent.** Event IDs are recorded in `payment_events`, and every handler can safely run more than once. If processing fails, the endpoint returns 500 so Stripe retries.
 
 ### Cancelling a paid booking
@@ -255,6 +255,12 @@ To go live: remove `APP_TEST_MODE`, set the Stripe variables, and delete the dem
 4. Local testing: `stripe listen --forward-to localhost:3000/api/webhooks/stripe`.
 
 ---
+
+## Quote lifecycle
+
+- **Withdraw**: an operator withdraws a pending quote (`PATCH /api/quotes/[id] {status:'withdrawn'}`) from the request page; the traveler is emailed and the operator may quote again (the partial unique index only counts pending and accepted quotes).
+- **Revise**: an operator changes the price, message, valid-until date or aircraft of a pending quote (`PATCH /api/quotes/[id] {priceCents?, message?, validUntil?, aircraftId?}`). The old price is kept in `quotes.previous_price_cents` and `revised_at` is set; the traveler receives a "Quote revised" email and the quote card shows the previous price.
+- **Daily lifecycle** (`GET /api/cron/daily-lifecycle`, 10:00 UTC via `vercel.json`, bearer `CRON_SECRET`, or `POST` as an admin): `expireQuotes` sets pending quotes past `valid_until` to `expired` (one email per request to the traveler) and `completeTrips` sets booked requests whose last leg is before today to `completed` (traveler emailed with a receipt link). `src/lib/lifecycle.ts`. The `quotes.status` CHECK constraint gains `expired` through a guarded `DO` block in `SCHEMA_BLOCKS` that runs once per database.
 
 ## Email System
 
@@ -417,7 +423,7 @@ Created by `npm run seed` locally, or automatically in [test mode](#test-mode). 
 | `JWT_SECRET` | Yes | Random string for signing session tokens |
 | `RESEND_API_KEY` | No | Resend API key. Without it, emails log to stdout. |
 | `EMAIL_FROM` | No | Verified sender address (default: `hello@bespoke.flights`) |
-| `CRON_SECRET` | Production | Secures the `/api/cron/weekly-discovery` endpoint |
+| `CRON_SECRET` | Production | Secures the `/api/cron/weekly-discovery` and `/api/cron/daily-lifecycle` endpoints |
 | `STRIPE_SECRET_KEY` | Production | Stripe secret key. Without it, payments run in stub mode (development) or are disabled (production). |
 | `STRIPE_WEBHOOK_SECRET` | Production | Signing secret for the platform webhook endpoint |
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | Production | Signing secret for the connected-accounts webhook endpoint |
@@ -457,7 +463,7 @@ Set `JWT_SECRET` (required: a long random string; without it, session tokens are
 vercel deploy
 ```
 
-The cron schedule in `vercel.json` runs the discovery pipeline every Monday at 18:00 UTC (8:00 AM HST). Vercel Cron requires a Pro plan.
+The cron schedules in `vercel.json` run the discovery pipeline every Monday at 18:00 UTC (8:00 AM HST) and the quote/trip lifecycle job daily at 10:00 UTC. Vercel Cron requires a Pro plan.
 
 To test the cron endpoint locally:
 

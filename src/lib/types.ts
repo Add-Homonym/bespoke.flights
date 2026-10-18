@@ -78,8 +78,10 @@ export interface Quote {
   price_cents: number;
   currency: string;
   message: string | null;
-  status: 'pending' | 'accepted' | 'rejected' | 'withdrawn';
+  status: 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'expired';
   valid_until: string | null;
+  previous_price_cents: number | null;
+  revised_at: string | null;
   created_at: string;
 }
 

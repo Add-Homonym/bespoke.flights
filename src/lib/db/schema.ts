@@ -311,4 +311,27 @@ CREATE TABLE IF NOT EXISTS message_notifications (
 -- Staff alert subscriptions for change requests and traveler messages.
 ALTER TABLE operator_staff ADD COLUMN IF NOT EXISTS on_change INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE operator_staff ADD COLUMN IF NOT EXISTS on_message INTEGER NOT NULL DEFAULT 1;
+
+-- Quote revisions: the price before each change, so the traveler sees history.
+ALTER TABLE quotes ADD COLUMN IF NOT EXISTS previous_price_cents BIGINT;
+ALTER TABLE quotes ADD COLUMN IF NOT EXISTS revised_at TIMESTAMPTZ;
 `;
+
+/**
+ * Statements that contain semicolons of their own (DO blocks), run after
+ * SCHEMA. Each must be idempotent.
+ */
+export const SCHEMA_BLOCKS: string[] = [
+  // Add 'expired' to quotes.status. Guarded so it runs once per database.
+  `DO $$
+  BEGIN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid = c.conrelid
+      WHERE t.relname = 'quotes' AND c.conname = 'quotes_status_check' AND pg_get_constraintdef(c.oid) LIKE '%expired%'
+    ) THEN
+      ALTER TABLE quotes DROP CONSTRAINT IF EXISTS quotes_status_check;
+      ALTER TABLE quotes ADD CONSTRAINT quotes_status_check
+        CHECK (status IN ('pending','accepted','rejected','withdrawn','expired'));
+    END IF;
+  END $$`,
+];

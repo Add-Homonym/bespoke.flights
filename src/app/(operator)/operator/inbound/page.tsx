@@ -170,6 +170,8 @@ function RFQCard({
     pending: 'warning',
     accepted: 'success',
     rejected: 'error',
+    withdrawn: 'default',
+    expired: 'default',
   };
 
   return (
@@ -195,7 +197,7 @@ function RFQCard({
           {hasQuote ? (
             <div className="text-right">
               <p className="text-brass-ink font-display text-lg">${((rfq.quote_price || 0) / 100).toLocaleString()}</p>
-              <Badge variant={quoteBadge[rfq.quote_status || 'pending']}>
+              <Badge variant={quoteBadge[rfq.quote_status || 'pending'] ?? 'default'}>
                 {rfq.quote_status}
               </Badge>
             </div>
