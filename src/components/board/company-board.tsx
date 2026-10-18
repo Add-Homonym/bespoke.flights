@@ -114,9 +114,12 @@ export function CompanyBoard({ source, linkTrips }: { source: string; linkTrips:
                   const isNew = fresh.has(tripKey(s.key, trip));
                   const departsToday = trip.legs.some(l => l.date === today);
                   const card = (
-                    <div className={`h-full rounded-lg border bg-surface-raised p-5 ${isNew ? 'border-brass' : 'border-hairline'} ${linkTrips ? 'hover:border-border-control transition-colors' : ''}`}>
+                    <div className={`relative h-full rounded-lg border bg-surface-raised p-5 ${isNew ? 'border-brass' : 'border-hairline'} ${linkTrips ? 'hover:border-border-control transition-colors' : ''}`}>
                       <div className="flex items-center justify-between gap-2 mb-3">
-                        <span className="text-xs text-ink-muted">#{trip.requestId}</span>
+                        {linkTrips
+                          // The whole card is the link (stretched), so the phone link inside it stays a separate link.
+                          ? <Link href={`/operator/requests/${trip.requestId}`} className="text-xs text-ink-muted after:absolute after:inset-0 after:rounded-lg after:content-['']">#{trip.requestId}<span className="sr-only"> — open trip</span></Link>
+                          : <span className="text-xs text-ink-muted">#{trip.requestId}</span>}
                         <div className="flex gap-1.5">
                           {isNew && <StatusBadge variant="brass">{s.key === 'upcoming' || s.key === 'cancelled' ? 'Updated' : 'New'}</StatusBadge>}
                           {s.key === 'changeRequests' && <StatusBadge variant="warning">Decision needed</StatusBadge>}
@@ -140,7 +143,7 @@ export function CompanyBoard({ source, linkTrips }: { source: string; linkTrips:
                             <dt className="text-ink-muted">Lead passenger</dt>
                             <dd className="text-ink">
                               {trip.leadPassenger.name}
-                              {trip.leadPassenger.phone && <> · <a href={`tel:${trip.leadPassenger.phone}`} className="hover:text-royal">{trip.leadPassenger.phone}</a></>}
+                              {trip.leadPassenger.phone && <> · <a href={`tel:${trip.leadPassenger.phone}`} className="relative z-10 hover:text-royal">{trip.leadPassenger.phone}</a></>}
                             </dd>
                           </>
                         )}
@@ -150,9 +153,7 @@ export function CompanyBoard({ source, linkTrips }: { source: string; linkTrips:
                       )}
                     </div>
                   );
-                  return linkTrips
-                    ? <Link key={trip.requestId} href={`/operator/requests/${trip.requestId}`} className="block">{card}</Link>
-                    : <div key={trip.requestId}>{card}</div>;
+                  return <div key={trip.requestId}>{card}</div>;
                 })}
               </div>
             )}

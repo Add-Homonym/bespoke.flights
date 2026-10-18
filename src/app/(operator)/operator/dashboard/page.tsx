@@ -80,21 +80,34 @@ export default async function OperatorDashboardPage() {
         </StatusBadge>
       </div>
 
-      <LiveInquiries />
-
       {operator.status === 'pending' && (
         <Notice tone="warning">Your account is pending approval. Requests start arriving once it is approved.</Notice>
       )}
 
       <div id="dashboard-tiles" className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Tile id="tile-deals" title="Deals" icon={Handshake} href="/operator/inbound"
-          action={deals.awaiting ? `${deals.awaiting} awaiting your quote` : 'Inbound requests'}>
-          <Stat icon={Inbox} label="Inbound requests" value={deals.inbound} />
-          <Stat icon={Send} label="Quotes submitted" value={deals.submitted} />
-          <Stat icon={BadgeCheck} label="Quotes accepted" value={deals.accepted} />
-          <Stat icon={Trophy} label="Total value won" value={formatMoney(deals.wonCents)} tone={deals.wonCents ? 'confirmed' : 'ink'} />
-          {deals.drafts > 0 && <Stat icon={Bot} label="Autopilot drafts to review" value={deals.drafts} tone="danger" />}
-        </Tile>
+        {/* Deals: totals beside the live inquiries and Autopilot's drafted responses. Full width. */}
+        <section id="tile-deals" aria-labelledby="tile-deals-title"
+          className="grid gap-6 rounded-lg border border-hairline bg-surface-raised p-6 shadow-raised md:col-span-2 xl:col-span-4 xl:grid-cols-[16rem_1fr]">
+          <div className="flex flex-col">
+            <h2 id="tile-deals-title" className="flex items-center gap-3 text-heading text-ink">
+              <span className="flex h-10 w-10 items-center justify-center rounded-md bg-surface-sunken text-royal">
+                <Handshake size={20} strokeWidth={1.5} aria-hidden="true" />
+              </span>
+              Deals
+            </h2>
+            <ul className="mt-5 flex-1 divide-y divide-hairline">
+              <Stat icon={Inbox} label="Inbound requests" value={deals.inbound} />
+              <Stat icon={Send} label="Quotes submitted" value={deals.submitted} />
+              <Stat icon={BadgeCheck} label="Quotes accepted" value={deals.accepted} />
+              <Stat icon={Trophy} label="Total value won" value={formatMoney(deals.wonCents)} tone={deals.wonCents ? 'confirmed' : 'ink'} />
+              {deals.drafts > 0 && <Stat icon={Bot} label="Drafts to review" value={deals.drafts} tone="danger" />}
+            </ul>
+            <Link href="/operator/inbound" className="mt-4 inline-flex min-h-11 items-center gap-1.5 text-label text-royal hover:underline underline-offset-4">
+              {deals.awaiting ? `${deals.awaiting} awaiting your quote` : 'Inbound requests'} <ArrowRight size={14} strokeWidth={1.5} aria-hidden="true" />
+            </Link>
+          </div>
+          <LiveInquiries compact />
+        </section>
 
         <Tile id="tile-fleet" title="Fleet" icon={Plane} href="/operator/fleet" action="Fleet management">
           <Stat icon={Plane} label="Aircraft" value={fleet.count} />

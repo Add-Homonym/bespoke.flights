@@ -117,7 +117,7 @@ function ResponseCard({ r, engaged }: { r: Inquiry; engaged: boolean }) {
  * Newest inquiries matched to this operator, each paired with Autopilot's
  * drafted response. Refreshes every few seconds while the tab is visible.
  */
-export function LiveInquiries() {
+export function LiveInquiries({ compact = false }: { compact?: boolean } = {}) {
   const [items, setItems] = useState<Inquiry[] | null>(null);
   const [engaged, setEngaged] = useState(false);
   const [fresh, setFresh] = useState<Set<number>>(new Set());
@@ -149,13 +149,13 @@ export function LiveInquiries() {
     <section id="live-inquiries" aria-labelledby="live-inquiries-title" className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 id="live-inquiries-title" className="inline-flex items-center gap-2 text-title text-ink">
+          <h2 id="live-inquiries-title" className={`inline-flex items-center gap-2 text-ink ${compact ? 'text-heading' : 'text-title'}`}>
             New inquiries
             <span className="inline-flex items-center gap-1.5 rounded-pill border border-hairline px-2 py-0.5 text-overline text-ink-muted">
               <span aria-hidden="true" className="size-1.5 animate-pulse rounded-full bg-confirmed" /> Live
             </span>
           </h2>
-          <p className="mt-1 text-body text-ink-muted">
+          <p className={`mt-1 text-ink-muted ${compact ? 'text-label' : 'text-body'}`}>
             Each request beside the response Autopilot drafted. {waiting > 0 ? `${waiting} waiting.` : ''}
           </p>
         </div>
@@ -177,7 +177,7 @@ export function LiveInquiries() {
         <ol aria-live="polite" className="space-y-3">
           {shown.map(r => (
             <li key={r.outreach_id}
-              className={`grid grid-cols-1 overflow-hidden rounded-lg border border-hairline bg-surface-raised shadow-raised md:grid-cols-[1fr_auto_1fr] ${fresh.has(r.outreach_id) ? 'inquiry-new' : ''}`}>
+              className={`grid grid-cols-1 overflow-hidden rounded-lg border border-hairline bg-surface-raised md:grid-cols-[1fr_auto_1fr] ${compact ? '' : 'shadow-raised'} ${fresh.has(r.outreach_id) ? 'inquiry-new' : ''}`}>
               <InquiryCard r={r} now={now} />
               <div aria-hidden="true" className="flex items-center justify-center border-t border-dashed border-hairline text-ink-subtle md:border-l md:border-t-0">
                 <ArrowRight size={18} strokeWidth={1.5} className="m-1 rotate-90 md:rotate-0" />
