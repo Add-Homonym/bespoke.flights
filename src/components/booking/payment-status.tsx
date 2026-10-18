@@ -30,9 +30,11 @@ const badge: Record<string, { variant: StatusVariant; label: string }> = {
   canceled: { variant: 'neutral', label: 'Canceled' },
 };
 
-export function PaymentStatus({ payment, returnedFromCheckout }: {
+export function PaymentStatus({ payment, returnedFromCheckout, title }: {
   payment: PaymentSummary;
   returnedFromCheckout: boolean;
+  /** Card heading; defaults to "Receipt" once paid, otherwise "Payment". */
+  title?: string;
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -66,7 +68,7 @@ export function PaymentStatus({ payment, returnedFromCheckout }: {
     <>
       <Card className="mb-8 space-y-3">
         <div className="flex items-start justify-between gap-3">
-          <h2 className="text-title text-ink">{payment.status === 'succeeded' ? 'Receipt' : 'Payment'}</h2>
+          <h2 className="text-title text-ink">{title ?? (payment.status === 'succeeded' ? 'Receipt' : 'Payment')}</h2>
           <StatusBadge variant={status.variant}>{status.label}</StatusBadge>
         </div>
         <p className="text-figure text-ink">{payment.amount}</p>

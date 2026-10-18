@@ -292,6 +292,86 @@ export function staffAlertEmail(data: {
   return { subject: data.subject, html: layout(body) };
 }
 
+// ─── Change request (traveler proposes, operator resolves) ──────────
+
+export function changeRequestEmail(data: {
+  event: 'proposed' | 'accepted' | 'accepted_payment_due' | 'applied' | 'declined';
+  audience: 'customer' | 'operator';
+  requestId: number;
+  changeRequestId: number;
+  route: string;
+  proposedLegLines: string[];
+  currentLegLines: string[];
+  passengerCount: number;
+  notes: string | null;
+  operatorNote: string | null;
+  operatorCompany: string;
+  customerName: string;
+  amount: string | null;
+  url: string | null;
+  baseUrl: string;
+}): { subject: string; html: string } {
+  const customer = data.audience === 'customer';
+  const pageUrl = customer ? data.baseUrl + '/requests/' + data.requestId : data.baseUrl + '/operator/requests/' + data.requestId;
+  let heading: string, subject: string, lead: string, cta: string, ctaUrl = pageUrl;
+  switch (data.event) {
+    case 'proposed':
+      subject = 'Change requested — Request #' + data.requestId + ' — ' + data.route;
+      heading = 'A traveler asked to change a booked trip';
+      lead = escapeHtml(data.customerName) + ' proposed a new itinerary for booking #' + data.requestId + '. Accept it (at the same or a new all-in price) or decline it with a note.';
+      cta = 'Review change request';
+      break;
+    case 'accepted':
+      subject = 'Change accepted — Request #' + data.requestId + ' — ' + data.route;
+      heading = customer ? 'Your change is confirmed' : 'Itinerary updated';
+      lead = (customer ? escapeHtml(data.operatorCompany) + ' accepted your change.' : 'You accepted the traveler\'s change.') +
+        (data.amount ? ' ' + data.amount + ' is being refunded for the lower price.' : ' The price is unchanged.') + ' The booking now shows the new itinerary.';
+      cta = 'View trip';
+      break;
+    case 'accepted_payment_due':
+      subject = 'Change accepted, payment due — Request #' + data.requestId;
+      heading = 'Your change is accepted: pay the difference to confirm';
+      lead = escapeHtml(data.operatorCompany) + ' accepted your change at a new price. Pay ' + (data.amount ?? 'the difference') + ' to apply it. Until then the original itinerary stands.';
+      cta = 'Pay the difference';
+      ctaUrl = data.url ?? pageUrl;
+      break;
+    case 'applied':
+      subject = 'Itinerary updated — Request #' + data.requestId + ' — ' + data.route;
+      heading = customer ? 'Your new itinerary is confirmed' : 'Itinerary updated and paid';
+      lead = customer ? 'Payment received. The booking now shows the new itinerary.' : 'The traveler paid the difference. The booking now shows the new itinerary.';
+      cta = 'View trip';
+      break;
+    default:
+      subject = 'Change declined — Request #' + data.requestId + ' — ' + data.route;
+      heading = 'Your change could not be accommodated';
+      lead = escapeHtml(data.operatorCompany) + ' declined the change. Your original booking stands. You can message the operator or propose a different change.';
+      cta = 'View trip';
+  }
+
+  const body =
+    '<h1 style="margin:0 0 8px 0;color:' + BRAND.cream + ';font-size:22px;font-weight:600">' + heading + '</h1>' +
+    p('Request #' + data.requestId + ' &middot; Change #' + data.changeRequestId, 'color:' + BRAND.muted + ';font-size:13px') +
+    p(lead) +
+    '<h2 style="margin:24px 0 12px 0;color:' + BRAND.muted + ';font-size:12px;text-transform:uppercase;letter-spacing:1px">Proposed itinerary</h2>' +
+    '<table cellpadding="0" cellspacing="0" style="width:100%;background:#0f1724;border-radius:8px;margin:0 0 20px 0">' +
+    '<tr><td style="padding:16px"><table cellpadding="0" cellspacing="0" style="width:100%">' +
+    data.proposedLegLines.map((line, i) => summaryRow(i === 0 ? 'Legs' : '', escapeHtml(line.replace(/^Leg \d+: /, '')))).join('') +
+    summaryRow('Passengers', String(data.passengerCount)) +
+    summaryRow('Special requests', data.notes ? escapeHtml(data.notes) : 'None') +
+    '</table></td></tr></table>' +
+    (data.event === 'proposed' && data.currentLegLines.length
+      ? '<h2 style="margin:0 0 12px 0;color:' + BRAND.muted + ';font-size:12px;text-transform:uppercase;letter-spacing:1px">Current itinerary</h2>' +
+        '<table cellpadding="0" cellspacing="0" style="width:100%;background:#0f1724;border-radius:8px;margin:0 0 20px 0">' +
+        '<tr><td style="padding:16px"><table cellpadding="0" cellspacing="0" style="width:100%">' +
+        data.currentLegLines.map((line, i) => summaryRow(i === 0 ? 'Legs' : '', escapeHtml(line.replace(/^Leg \d+: /, '')))).join('') +
+        '</table></td></tr></table>'
+      : '') +
+    (data.operatorNote ? p('Operator note: ' + escapeHtml(data.operatorNote), 'color:' + BRAND.muted + ';font-size:13px') : '') +
+    button(cta, ctaUrl);
+
+  return { subject, html: layout(body) };
+}
+
 // ─── Booking cancelled (customer and operator) ──────────────────────
 
 export function bookingCancelledEmail(data: {

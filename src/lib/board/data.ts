@@ -19,12 +19,16 @@ export interface BoardTrip {
   leadPassenger: { name: string; phone: string | null; email: string } | null;
   /** When this trip last changed, for "new" highlighting. */
   updatedAt: string;
+  /** For the change-requests section: what the traveler proposed. */
+  proposed?: { legs: TripLeg[]; passengerCount: number; notes: string | null; changeRequestId: number };
 }
 
 export interface Board {
   generatedAt: string;
   company: string;
   upcoming: BoardTrip[];
+  /** Booked charters with a change request waiting for a decision. */
+  changeRequests: BoardTrip[];
   toQuote: BoardTrip[];
   awaitingClient: BoardTrip[];
   cancelled: BoardTrip[];
@@ -58,7 +62,7 @@ export async function buildBoard(db: Db, operatorId: number): Promise<Board> {
   const company = (await db.one<{ company_name: string }>('SELECT company_name FROM operators WHERE id = ?', [operatorId]))?.company_name ?? '';
   const today = new Date().toISOString().slice(0, 10);
 
-  const [booked, toQuote, awaiting, cancelled] = await Promise.all([
+  const [booked, toQuote, awaiting, cancelled, changes] = await Promise.all([
     // Paid bookings won by this operator whose last leg is today or later
     db.query<Row>(`${BASE}
       WHERE q.status = 'accepted' AND br.status IN ('booked', 'completed')
@@ -80,9 +84,23 @@ export async function buildBoard(db: Db, operatorId: number): Promise<Board> {
       WHERE q.status = 'accepted' AND br.status = 'cancelled' AND br.updated_at > now() - interval '14 days'
       ORDER BY br.updated_at DESC LIMIT 20
     `, [operatorId]),
+    // Pending change requests on this operator's bookings
+    db.query<Row & { cr_id: number; cr_legs: string; cr_pax: number; cr_notes: string | null; cr_created: string }>(`
+      SELECT br.id, br.status, br.passenger_count, br.notes, br.updated_at,
+        u.name AS customer_name, u.phone AS customer_phone, u.email AS customer_email,
+        q.price_cents AS quote_cents, a.type AS aircraft_type, a.tail_number,
+        cr.id AS cr_id, cr.proposed_legs AS cr_legs, cr.proposed_passenger_count AS cr_pax, cr.proposed_notes AS cr_notes, cr.created_at AS cr_created
+      FROM change_requests cr
+      JOIN booking_requests br ON br.id = cr.request_id
+      JOIN users u ON u.id = br.customer_id
+      JOIN quotes q ON q.request_id = br.id AND q.operator_id = ? AND q.status = 'accepted'
+      LEFT JOIN aircraft a ON a.id = q.aircraft_id
+      WHERE cr.status = 'pending' AND br.status = 'booked'
+      ORDER BY cr.created_at DESC LIMIT 50
+    `, [operatorId]),
   ]);
 
-  const legs = await legsByRequest(db, [...booked, ...toQuote, ...awaiting, ...cancelled].map(r => r.id));
+  const legs = await legsByRequest(db, [...booked, ...toQuote, ...awaiting, ...cancelled, ...changes].map(r => r.id));
   const toTrip = (r: Row, withContact: boolean): BoardTrip => ({
     requestId: r.id,
     status: r.status,
@@ -101,10 +119,24 @@ export async function buildBoard(db: Db, operatorId: number): Promise<Board> {
     company,
     // Client contact details only once the client has booked with this operator.
     upcoming: booked.map(r => toTrip(r, true)).sort((a, b) => firstDeparture(a).localeCompare(firstDeparture(b))),
+    changeRequests: changes.map(r => ({
+      ...toTrip(r, true),
+      updatedAt: r.cr_created,
+      proposed: { changeRequestId: r.cr_id, legs: parseProposed(r.cr_legs), passengerCount: r.cr_pax, notes: r.cr_notes?.trim() || null },
+    })),
     toQuote: toQuote.map(r => toTrip(r, false)),
     awaitingClient: awaiting.map(r => toTrip(r, false)),
     cancelled: cancelled.map(r => toTrip(r, true)),
   };
+}
+
+function parseProposed(json: string): TripLeg[] {
+  try {
+    const arr = JSON.parse(json) as { originCode?: string; destCode?: string; departureDate?: string; departureTime?: string }[];
+    return Array.isArray(arr) ? arr.map(l => ({ from: l.originCode ?? '', to: l.destCode ?? '', date: l.departureDate ?? '', time: l.departureTime ?? '' })) : [];
+  } catch {
+    return [];
+  }
 }
 
 // ─── Staff board link ───────────────────────────────────────────────

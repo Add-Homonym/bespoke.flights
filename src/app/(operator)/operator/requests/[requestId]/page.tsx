@@ -6,6 +6,9 @@ import { formatTripDate, formatTripTime } from '@/lib/trip-format';
 import { Badge } from '@/components/ui/badge';
 import { SubmitQuoteForm } from '@/components/booking/submit-quote-form';
 import { TripShare } from '@/components/operator/trip-share';
+import { OperatorChangeRequests } from '@/components/booking/change-request';
+import { changeRequestViews } from '@/lib/bookings/changes';
+import { formatMoney } from '@/lib/payments/config';
 import type { BookingRequest, BookingLeg, Operator, Aircraft, Quote } from '@/lib/types';
 
 export default async function OperatorRequestDetailPage({ params }: { params: Promise<{ requestId: string }> }) {
@@ -30,6 +33,11 @@ export default async function OperatorRequestDetailPage({ params }: { params: Pr
     : undefined;
 
   const route = legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).join(' → ');
+  const won = existingQuote?.status === 'accepted' && ['booked', 'completed'].includes(request.status);
+  const changes = won ? await changeRequestViews(db, request.id, existingQuote!.currency) : [];
+  const currentPaid = won
+    ? await db.one<{ paid: number }>("SELECT COALESCE(SUM(amount_cents - refunded_cents), 0) AS paid FROM payments WHERE request_id = ? AND status IN ('succeeded','partially_refunded')", [request.id])
+    : undefined;
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -73,8 +81,11 @@ export default async function OperatorRequestDetailPage({ params }: { params: Pr
       </Card>
 
       {/* Quote submission */}
-      {existingQuote?.status === 'accepted' && ['booked', 'completed'].includes(request.status) && (
-        <TripShare requestId={request.id} />
+      {won && (
+        <>
+          <OperatorChangeRequests changes={changes} currentPrice={formatMoney(currentPaid?.paid ?? existingQuote!.price_cents, existingQuote!.currency)} />
+          <TripShare requestId={request.id} />
+        </>
       )}
 
       {existingQuote ? (

@@ -9,10 +9,11 @@ import type { Board, BoardTrip } from '@/lib/board/data';
 
 const REFRESH_MS = 15_000;
 
-type SectionKey = 'upcoming' | 'toQuote' | 'awaitingClient' | 'cancelled';
+type SectionKey = 'upcoming' | 'changeRequests' | 'toQuote' | 'awaitingClient' | 'cancelled';
 
 const SECTIONS: { key: SectionKey; title: string; empty: string }[] = [
   { key: 'upcoming', title: 'Upcoming charters', empty: 'No booked charters coming up.' },
+  { key: 'changeRequests', title: 'Change requests', empty: 'No change requests waiting for a decision.' },
   { key: 'toQuote', title: 'New requests to quote', empty: 'No new requests waiting for a quote.' },
   { key: 'awaitingClient', title: 'Quoted, awaiting client', empty: 'No quotes waiting on a client.' },
   { key: 'cancelled', title: 'Recently cancelled', empty: 'No cancellations in the last 14 days.' },
@@ -40,7 +41,7 @@ export function CompanyBoard({ source, linkTrips }: { source: string; linkTrips:
         return;
       }
       const data = (await res.json()) as Board;
-      const keys = SECTIONS.flatMap(s => data[s.key].map(t => tripKey(s.key, t)));
+      const keys = SECTIONS.flatMap(s => (data[s.key] ?? []).map(t => tripKey(s.key, t)));
       if (seen.current) {
         const added = keys.filter(k => !seen.current!.has(k));
         if (added.length) setFresh(prev => new Set([...prev, ...added]));
@@ -85,7 +86,7 @@ export function CompanyBoard({ source, linkTrips }: { source: string; linkTrips:
         <div className="flex flex-wrap gap-2">
           {SECTIONS.map(s => (
             <a key={s.key} href={`#${s.key}`} className="rounded-full border border-hairline px-3 py-1 text-xs text-ink hover:border-border-control">
-              {s.title} <span className="text-brass-ink">{board[s.key].length}</span>
+              {s.title} <span className="text-brass-ink">{(board[s.key] ?? []).length}</span>
             </a>
           ))}
         </div>
@@ -103,13 +104,13 @@ export function CompanyBoard({ source, linkTrips }: { source: string; linkTrips:
         {SECTIONS.map(s => (
           <section key={s.key} id={s.key} aria-labelledby={`${s.key}-title`}>
             <h2 id={`${s.key}-title`} className="font-display text-xl text-ink mb-4">
-              {s.title} <span className="text-ink-muted text-sm font-normal">({board[s.key].length})</span>
+              {s.title} <span className="text-ink-muted text-sm font-normal">({(board[s.key] ?? []).length})</span>
             </h2>
-            {board[s.key].length === 0 ? (
+            {(board[s.key] ?? []).length === 0 ? (
               <p className="text-ink-muted text-sm">{s.empty}</p>
             ) : (
               <div className="grid gap-3 md:grid-cols-2">
-                {board[s.key].map(trip => {
+                {(board[s.key] ?? []).map(trip => {
                   const isNew = fresh.has(tripKey(s.key, trip));
                   const departsToday = trip.legs.some(l => l.date === today);
                   const card = (
@@ -118,11 +119,19 @@ export function CompanyBoard({ source, linkTrips }: { source: string; linkTrips:
                         <span className="text-xs text-ink-muted">#{trip.requestId}</span>
                         <div className="flex gap-1.5">
                           {isNew && <Badge variant="gold">{s.key === 'upcoming' || s.key === 'cancelled' ? 'Updated' : 'New'}</Badge>}
+                          {s.key === 'changeRequests' && <Badge variant="warning">Decision needed</Badge>}
                           {departsToday && s.key === 'upcoming' && <Badge variant="warning">Departs today</Badge>}
                           {s.key === 'cancelled' && <Badge variant="error">Cancelled</Badge>}
                         </div>
                       </div>
-                      <TripDetails compact legs={trip.legs} passengerCount={trip.passengerCount} notes={trip.specialRequests} />
+                      {trip.proposed ? (
+                        <div className="space-y-3">
+                          <TripDetails compact title="Proposed" legs={trip.proposed.legs} passengerCount={trip.proposed.passengerCount} notes={trip.proposed.notes} />
+                          <TripDetails compact title="Currently booked" legs={trip.legs} passengerCount={trip.passengerCount} notes={trip.specialRequests} />
+                        </div>
+                      ) : (
+                        <TripDetails compact legs={trip.legs} passengerCount={trip.passengerCount} notes={trip.specialRequests} />
+                      )}
                       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-sm mt-2">
                         {trip.aircraft && (<><dt className="text-ink-muted">Aircraft</dt><dd className="text-ink">{trip.aircraft}</dd></>)}
                         {trip.quoteCents != null && (<><dt className="text-ink-muted">Quote</dt><dd className="text-ink">${(trip.quoteCents / 100).toLocaleString()}</dd></>)}

@@ -192,6 +192,17 @@ A traveler cancels from the trip page (**Cancel trip** → confirmation panel sh
 
 `GET /api/booking-requests/[id]/cancel` previews the refund; `POST` performs it (owner or admin): the refund goes through the normal refund path (transfer reversal and fee return), the request becomes `cancelled`, pending quotes are rejected, both sides get a cancellation email and the operator's staff are alerted. Unpaid requests are still withdrawn with `PATCH /api/booking-requests/[id] {status:'cancelled'}`.
 
+### Changing a booked trip
+
+On a booked trip the traveler can **Request a change** (new legs, guest count, special requests) from the trip page. One change can be pending at a time (`change_requests` table). The winning operator sees it on their request page and in the **Change requests** section of the company board, and either:
+
+- **accepts at the same price**: the booking is updated at once, both sides are emailed;
+- **accepts at a higher all-in price**: a payment for the difference is created (`payments.change_request_id`); the change is applied when it is paid, through the normal fulfillment path (webhook or the stub "simulate" button);
+- **accepts at a lower price**: the difference is refunded and the change applied;
+- **declines** with a note: the traveler is emailed and the booking stands.
+
+Routes: `GET/POST /api/booking-requests/[id]/changes`, `PATCH /api/change-requests/[id]` with `{action: 'accept' | 'decline' | 'withdraw', newPriceCents?, note?}`. Staff alerts of kind `change` go to staff subscribed to **Change requested**.
+
 ### Platform fee
 
 `PLATFORM_FEE_BPS` sets the fee in basis points (default `500` = 5%). The `operators.platform_fee_bps` column overrides it for one operator. The fee is rounded to the nearest cent. Stripe's processing fees come out of the platform's share.

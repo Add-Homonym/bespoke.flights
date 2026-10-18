@@ -18,6 +18,8 @@ let quotes: typeof import('./booking-requests/[requestId]/quotes/route');
 let outreach: typeof import('./outreach/route');
 let cron: typeof import('./cron/weekly-discovery/route');
 let cancel: typeof import('./booking-requests/[requestId]/cancel/route');
+let changes: typeof import('./booking-requests/[requestId]/changes/route');
+let changeOne: typeof import('./change-requests/[changeId]/route');
 
 const params = (requestId: number) => ({ params: Promise.resolve({ requestId: String(requestId) }) });
 const json = (body: unknown, method = 'PATCH') =>
@@ -34,6 +36,8 @@ beforeAll(async () => {
   outreach = await import('./outreach/route');
   cron = await import('./cron/weekly-discovery/route');
   cancel = await import('./booking-requests/[requestId]/cancel/route');
+  changes = await import('./booking-requests/[requestId]/changes/route');
+  changeOne = await import('./change-requests/[changeId]/route');
   await f.db.run(
     'INSERT INTO outreach_log (request_id, operator_id, method, match_score, rfq_subject, rfq_body, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
     [f.requestId, f.operatorA, 'email', 80, 'RFQ', 'body', 'sent']);
@@ -191,6 +195,56 @@ describe('/api/booking-requests/[id]/cancel (paid booking)', () => {
     await f.db.run("UPDATE quotes SET status = 'pending' WHERE request_id = ?", [f.requestId]);
     await f.db.run('DELETE FROM refunds');
     await f.db.run('DELETE FROM payments');
+  });
+});
+
+describe('change requests', () => {
+  const proposal = { legs: [{ originCode: 'KLAX', destCode: 'PHOG', departureDate: '2030-06-01' }], passengerCount: 3 };
+  const change = (id: number) => ({ params: Promise.resolve({ changeId: String(id) }) });
+
+  it('refuses proposals from operators, other customers, and on unpaid requests', async () => {
+    await asOperatorA();
+    expect((await changes.POST(json(proposal, 'POST'), params(f.requestId))).status).toBe(403);
+    asOther();
+    expect((await changes.POST(json(proposal, 'POST'), params(f.requestId))).status).toBe(403);
+    asCustomer();
+    expect((await changes.POST(json(proposal, 'POST'), params(f.requestId))).status).toBe(409);
+    expect((await changes.POST(json({ legs: [] }, 'POST'), params(f.requestId))).status).toBe(400);
+  });
+
+  it('owner proposes; only the winning operator resolves; losing operator cannot even list', async () => {
+    const { createCheckout, simulateStubPayment } = await import('@/lib/payments/service');
+    vi.stubEnv('STRIPE_SECRET_KEY', '');
+    vi.stubEnv('NODE_ENV', 'test');
+    const { paymentId } = await createCheckout(f.db, { quoteId: f.quoteA, customerId: f.customerId, baseUrl: 'http://localhost:3000' });
+    await simulateStubPayment(f.db, paymentId, f.customerId, 'http://localhost:3000');
+
+    asCustomer();
+    const created = await changes.POST(json(proposal, 'POST'), params(f.requestId));
+    expect(created.status).toBe(201);
+    const cr = await created.json();
+    expect(cr.proposed_legs[0].destCode).toBe('PHOG');
+
+    await asOperatorB();
+    expect((await changes.GET(new Request('http://localhost/x'), params(f.requestId))).status).toBe(403);
+    expect((await changeOne.PATCH(json({ action: 'accept' }), change(cr.id))).status).toBe(403);
+    asCustomer();
+    expect((await changeOne.PATCH(json({ action: 'accept' }), change(cr.id))).status).toBe(403);
+    expect((await changeOne.PATCH(json({ action: 'nope' }), change(cr.id))).status).toBe(400);
+
+    await asOperatorA();
+    expect((await changes.GET(new Request('http://localhost/x'), params(f.requestId))).status).toBe(200);
+    const accepted = await changeOne.PATCH(json({ action: 'accept', newPriceCents: 9_000_000 }), change(cr.id));
+    expect(accepted.status).toBe(200);
+    const body = await accepted.json();
+    expect(body.status).toBe('accepted');
+    expect(body.paymentDue.amountCents).toBe(500_000);
+
+    // Reset for later suites.
+    await f.db.run("UPDATE booking_requests SET status = 'quoted' WHERE id = ?", [f.requestId]);
+    await f.db.run("UPDATE quotes SET status = 'pending' WHERE request_id = ?", [f.requestId]);
+    await f.db.run('DELETE FROM payments');
+    await f.db.run('DELETE FROM change_requests');
   });
 });
 

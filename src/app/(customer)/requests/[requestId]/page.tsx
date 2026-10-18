@@ -13,6 +13,8 @@ import { RequestStatusBadge } from '@/components/booking/request-status';
 import { OutreachStatus } from '@/components/operator/outreach-status';
 import { PaymentStatus } from '@/components/booking/payment-status';
 import { CancelTrip } from '@/components/booking/cancel-trip';
+import { TravelerChangeRequests } from '@/components/booking/change-request';
+import { changeRequestViews } from '@/lib/bookings/changes';
 import { previewCancellation } from '@/lib/bookings/cancellation';
 import { formatMoney, getPaymentsMode } from '@/lib/payments/config';
 import type { BookingRequest, BookingLeg, Quote, Payment } from '@/lib/types';
@@ -55,11 +57,18 @@ export default async function RequestDetailPage({
   const payment = await db.one<(Payment & { company_name: string })>(`
     SELECT p.*, o.company_name FROM payments p
     JOIN operators o ON o.id = p.operator_id
-    WHERE p.request_id = ? AND p.status != 'canceled'
+    WHERE p.request_id = ? AND p.status != 'canceled' AND p.change_request_id IS NULL
     ORDER BY CASE p.status
       WHEN 'succeeded' THEN 0 WHEN 'partially_refunded' THEN 0 WHEN 'refunded' THEN 0
       WHEN 'processing' THEN 1 WHEN 'pending' THEN 2 ELSE 3 END, p.id DESC
     LIMIT 1
+  `, [request.id]);
+  // An open payment for the price difference of an accepted change request.
+  const changePayment = await db.one<(Payment & { company_name: string })>(`
+    SELECT p.*, o.company_name FROM payments p
+    JOIN operators o ON o.id = p.operator_id
+    WHERE p.request_id = ? AND p.change_request_id IS NOT NULL AND p.status IN ('pending', 'processing')
+    ORDER BY p.id DESC LIMIT 1
   `, [request.id]);
   const paymentInFlight = payment && ['processing', 'succeeded', 'partially_refunded'].includes(payment.status);
   const stripeMode = getPaymentsMode() === 'stripe';
@@ -84,9 +93,10 @@ export default async function RequestDetailPage({
   // Cancellation: paid bookings refund per the operator's policy; unpaid requests are simply withdrawn.
   const canCancel = session.role === 'customer' && ['open', 'quoted', 'booked'].includes(request.status) && !(payment && payment.status === 'processing');
   const cancelPreview = canCancel && request.status === 'booked' ? await previewCancellation(db, request) : null;
+  const changes = request.status === 'booked' || request.status === 'completed' ? await changeRequestViews(db, request.id, payment?.currency) : [];
 
   return (
-    <div className={`mx-auto max-w-3xl ${payment?.status === 'pending' ? 'pb-28' : ''}`}>
+    <div className={`mx-auto max-w-3xl ${payment?.status === 'pending' || changePayment?.status === 'pending' ? 'pb-28' : ''}`}>
       <div className="mb-6">
         {confirmed ? (
           <h1 className="text-display sm:text-display-xl text-ink">Booking confirmed</h1>
@@ -136,6 +146,24 @@ export default async function RequestDetailPage({
         />
       )}
 
+      {changePayment && (
+        <PaymentStatus
+          returnedFromCheckout={checkout === 'success'}
+          title="Itinerary change"
+          payment={{
+            id: changePayment.id,
+            status: changePayment.status,
+            provider: changePayment.provider,
+            amount: formatMoney(changePayment.amount_cents, changePayment.currency),
+            refunded: null,
+            companyName: changePayment.company_name,
+            paidAt: null,
+            failureReason: changePayment.failure_reason,
+            checkoutUrl: changePayment.status === 'pending' && session.role === 'customer' ? changePayment.checkout_url : null,
+          }}
+        />
+      )}
+
       {/* Itinerary */}
       <Card className="mb-8">
         <h2 className="text-title text-ink mb-4">Itinerary</h2>
@@ -159,6 +187,16 @@ export default async function RequestDetailPage({
           <dd className="text-ink break-words">{request.notes?.trim() || <span className="text-ink-subtle">None</span>}</dd>
         </dl>
       </Card>
+
+      {request.status === 'booked' && session.role === 'customer' && cancelPreview && (
+        <TravelerChangeRequests
+          requestId={request.id}
+          changes={changes}
+          currentLegs={legs.map(l => ({ originCode: l.origin_code, destCode: l.dest_code, departureDate: l.departure_date, departureTime: l.departure_time ?? '' }))}
+          passengerCount={request.passenger_count}
+          notes={request.notes ?? ''}
+        />
+      )}
 
       {canCancel && (request.status !== 'booked' || cancelPreview) && (
         <CancelTrip

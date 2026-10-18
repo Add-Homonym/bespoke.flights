@@ -33,6 +33,7 @@ export interface Operator {
   stripe_payouts_enabled: number;
   stripe_details_submitted: number;
   platform_fee_bps: number | null;  // per-operator override of PLATFORM_FEE_BPS
+  cancellation_policy: string | null;  // JSON, see src/lib/bookings/cancellation.ts
   created_at: string;
 }
 
@@ -118,6 +119,8 @@ export interface Payment {
   checkout_url: string | null;
   failure_reason: string | null;
   dispute_status: string | null;
+  /** Set on a price-difference payment for an accepted change request. */
+  change_request_id: number | null;
   created_at: string;
   updated_at: string;
   paid_at: string | null;
