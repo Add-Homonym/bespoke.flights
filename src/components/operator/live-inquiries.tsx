@@ -122,6 +122,7 @@ export function LiveInquiries({ compact = false }: { compact?: boolean } = {}) {
   const [engaged, setEngaged] = useState(false);
   const [fresh, setFresh] = useState<Set<number>>(new Set());
   const [now, setNow] = useState(() => Date.now());
+  const [hidden, setHidden] = useState(false);
   const seen = useRef<Set<number> | null>(null);
 
   const poll = useCallback(async () => {
@@ -139,7 +140,10 @@ export function LiveInquiries({ compact = false }: { compact?: boolean } = {}) {
   useEffect(() => {
     const first = setTimeout(() => { void poll(); }, 0);
     const t = setInterval(() => { if (document.visibilityState === 'visible') void poll(); }, POLL_MS);
-    return () => { clearTimeout(first); clearInterval(t); };
+    // Checking pauses in a background tab and catches up on return.
+    const onVis = () => { const h = document.visibilityState !== 'visible'; setHidden(h); if (!h) void poll(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { clearTimeout(first); clearInterval(t); document.removeEventListener('visibilitychange', onVis); };
   }, [poll]);
 
   const shown = items?.slice(0, SHOW) ?? [];
@@ -158,6 +162,15 @@ export function LiveInquiries({ compact = false }: { compact?: boolean } = {}) {
           <p className={`mt-1 text-ink-muted ${compact ? 'text-label' : 'text-body'}`}>
             Each request beside the response Autopilot drafted. {waiting > 0 ? `${waiting} waiting.` : ''}
           </p>
+          <div id="live-refresh" className="mt-2 flex items-center gap-2 text-label text-ink-muted">
+            <span>Updates every {POLL_MS / 1000} seconds{hidden ? ' · paused while this tab is hidden' : items ? ` · last checked ${new Date(now).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' })}` : ''}</span>
+            {/* Time until the next check. */}
+            {!hidden && (
+              <span aria-hidden="true" className="h-1 w-16 overflow-hidden rounded-pill bg-surface-sunken">
+                <span key={now} className="countdown-bar block h-full bg-royal" style={{ ['--countdown' as string]: `${POLL_MS}ms` }} />
+              </span>
+            )}
+          </div>
         </div>
         <span className="flex gap-4">
           <Link href="/operator/autopilot" className="inline-flex min-h-11 items-center gap-1.5 text-label text-royal hover:underline underline-offset-4">

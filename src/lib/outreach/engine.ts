@@ -321,7 +321,10 @@ export async function dispatchOutreach(
     dispatched++;
 
     pending.push(
-      deliverRFQ(op, {
+      // Autopilot drafts first, so the inquiry and its drafted response reach the dashboard together.
+      draftQuote(db, requestId, op.id)
+        .catch(err => { console.error(`Autopilot draft failed for operator ${op.id}:`, err); })
+        .then(() => deliverRFQ(op, {
         requestId,
         route,
         dateRange,
@@ -329,7 +332,7 @@ export async function dispatchOutreach(
         notes,
         legDetails,
         matchScore: match.score,
-      }).then(async result => {
+      })).then(async result => {
         if (result.emailId && !result.error) {
           await db.run("UPDATE outreach_log SET status = 'delivered' WHERE request_id = ? AND operator_id = ?", [requestId, op.id]);
         } else if (result.error) {
@@ -339,8 +342,6 @@ export async function dispatchOutreach(
       }).catch(err => {
         console.error(`RFQ delivery error for operator ${op.id}:`, err);
       })
-        // Autopilot operators get a draft quote ready for review.
-        .then(() => draftQuote(db, requestId, op.id).catch(err => { console.error(`Autopilot draft failed for operator ${op.id}:`, err); }))
         .then(() => alertStaff(db, { kind: 'new_request', requestId, operatorId: op.id }, baseUrl).then(() => {}))
     );
   }
