@@ -188,8 +188,9 @@ export function paymentReceiptEmail(data: BookingPaymentEmailData): { subject: s
     (data.aircraft ? summaryRow('Aircraft', data.aircraft) : '') +
     summaryRow('Total paid', data.amount) +
     '</table></td></tr></table>' +
-    p(data.operatorCompany + ' will contact you to confirm passenger details and flight logistics.') +
-    button('View Booking', data.baseUrl + '/requests/' + data.requestId);
+    p(data.operatorCompany + ' will confirm passenger details and flight logistics with you in the app.') +
+    button('View Booking', data.baseUrl + '/requests/' + data.requestId) +
+    p('<a href="' + data.baseUrl + '/requests/' + data.requestId + '/receipt" style="color:' + BRAND.gold + '">Printable receipt</a>', 'color:' + BRAND.muted + ';font-size:13px');
 
   return { subject, html: layout(body) };
 }

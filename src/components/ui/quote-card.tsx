@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 export function QuoteCard({
   aircraft,
   operatorName,
+  operatorDetail,
   badge,
   seats,
   flightTime,
@@ -20,6 +21,8 @@ export function QuoteCard({
   aircraft: string;
   /** Operator legal name. */
   operatorName: string;
+  /** One quiet line under the name: certificate number and safety rating. */
+  operatorDetail?: string;
   badge?: ReactNode;
   seats: number | null;
   flightTime: string | null;
@@ -48,6 +51,7 @@ export function QuoteCard({
         <div className="min-w-0">
           <h3 className="text-heading text-ink">{aircraft}</h3>
           <p className="text-label text-ink-muted break-words">{operatorName} · Part 135</p>
+          {operatorDetail && <p className="text-label text-ink-subtle break-words">{operatorDetail}</p>}
         </div>
         {badge}
       </div>

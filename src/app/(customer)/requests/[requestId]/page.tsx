@@ -46,8 +46,8 @@ export default async function RequestDetailPage({
 
   const legs = await db.query<BookingLeg>('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order', [request.id]);
 
-  const quotes = await db.query<Quote & { company_name: string; stripe_charges_enabled: number; aircraft_type?: string; aircraft_capacity?: number; tail_number?: string; aircraft_year?: number }>(`
-    SELECT q.*, o.company_name, o.stripe_charges_enabled, a.type as aircraft_type, a.capacity as aircraft_capacity, a.tail_number, a.year as aircraft_year
+  const quotes = await db.query<Quote & { company_name: string; certificate: string | null; safety_rating: string | null; stripe_charges_enabled: number; aircraft_type?: string; aircraft_capacity?: number; tail_number?: string; aircraft_year?: number }>(`
+    SELECT q.*, o.company_name, o.certificate, o.safety_rating, o.stripe_charges_enabled, a.type as aircraft_type, a.capacity as aircraft_capacity, a.tail_number, a.year as aircraft_year
     FROM quotes q
     JOIN operators o ON o.id = q.operator_id
     LEFT JOIN aircraft a ON a.id = q.aircraft_id
@@ -135,6 +135,7 @@ export default async function RequestDetailPage({
       {payment && (
         <PaymentStatus
           returnedFromCheckout={checkout === 'success'}
+          receiptHref={`/requests/${request.id}/receipt`}
           payment={{
             id: payment.id,
             status: payment.status,
@@ -245,6 +246,7 @@ export default async function RequestDetailPage({
                   selected={quote.status === 'accepted'}
                   aircraft={[quote.aircraft_type ?? 'Aircraft to be confirmed', quote.tail_number].filter(Boolean).join(' · ')}
                   operatorName={quote.company_name}
+                  operatorDetail={[quote.certificate && `FAA certificate ${quote.certificate}`, quote.safety_rating].filter(Boolean).join(' · ') || undefined}
                   badge={
                     quote.status === 'accepted' ? <StatusBadge variant="confirmed">Accepted</StatusBadge>
                     : quote.status === 'rejected' ? <StatusBadge variant="neutral">Declined</StatusBadge>

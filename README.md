@@ -180,6 +180,10 @@ Stripe → POST /api/webhooks/stripe (signature verified)
 - **Expired quotes** (`valid_until` in the past) cannot be paid. The daily lifecycle job marks them `expired`.
 - **Webhooks are idempotent.** Event IDs are recorded in `payment_events`, and every handler can safely run more than once. If processing fails, the endpoint returns 500 so Stripe retries.
 
+### Receipts
+
+`/requests/[id]/receipt` (owner or admin) is an invoice-style, printable receipt: number `BF-<year>-<payment id padded to 6>`, billed-to, operator legal name with FAA certificate and safety rating, legs, aircraft and tail, each charge (booking and any paid itinerary changes) with date and payment method when known, refunds, and the net. It is linked from the trip page and the receipt email. Quote cards show the operator's certificate number and safety rating under the company name.
+
 ### Cancelling a paid booking
 
 A traveler cancels from the trip page (**Cancel trip** → confirmation panel showing the refund). The refund follows the operator's **cancellation policy** (`operators.cancellation_policy`, set at `/operator/settings`), measured from the first leg's departure (its local date and time, or 23:59 when no time was given):
@@ -481,5 +485,5 @@ curl -X POST http://localhost:3000/api/cron/weekly-discovery \
 - **Resend webhooks** — track email bounces and mark discovered operators as `bounced` automatically.
 - **Secondary email discovery** — the FAA registry doesn't publish emails. A future enrichment step (website scraping or data API) could automate email collection for `no_email` operators.
 - **AI phone outreach** — the contact method enum can be extended with `phone` for Bland.ai / Vapi voice agent integration.
-- **Operator invoicing / 1099-K reporting** — Stripe Connect produces tax forms for Express accounts. No in-app invoice documents exist yet.
+- **Operator invoicing / 1099-K reporting** — Stripe Connect produces tax forms for Express accounts. Travelers have a printable receipt; operators have no in-app invoice document yet.
 - **Deposits and balance payments** — the full quote amount is charged at booking. Split payments (deposit now, balance before departure) are not supported.
