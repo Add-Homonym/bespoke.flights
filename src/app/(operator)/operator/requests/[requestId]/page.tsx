@@ -9,6 +9,8 @@ import { TripShare } from '@/components/operator/trip-share';
 import { OperatorChangeRequests } from '@/components/booking/change-request';
 import { changeRequestViews } from '@/lib/bookings/changes';
 import { formatMoney } from '@/lib/payments/config';
+import { MessageThread } from '@/components/messaging/message-thread';
+import { unreadForOperator } from '@/lib/messaging/messages';
 import type { BookingRequest, BookingLeg, Operator, Aircraft, Quote } from '@/lib/types';
 
 export default async function OperatorRequestDetailPage({ params }: { params: Promise<{ requestId: string }> }) {
@@ -35,6 +37,7 @@ export default async function OperatorRequestDetailPage({ params }: { params: Pr
   const route = legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).join(' → ');
   const won = existingQuote?.status === 'accepted' && ['booked', 'completed'].includes(request.status);
   const changes = won ? await changeRequestViews(db, request.id, existingQuote!.currency) : [];
+  const unread = existingQuote && operator ? await unreadForOperator(db, request.id, operator.id) : 0;
   const currentPaid = won
     ? await db.one<{ paid: number }>("SELECT COALESCE(SUM(amount_cents - refunded_cents), 0) AS paid FROM payments WHERE request_id = ? AND status IN ('succeeded','partially_refunded')", [request.id])
     : undefined;
@@ -86,6 +89,13 @@ export default async function OperatorRequestDetailPage({ params }: { params: Pr
           <OperatorChangeRequests changes={changes} currentPrice={formatMoney(currentPaid?.paid ?? existingQuote!.price_cents, existingQuote!.currency)} />
           <TripShare requestId={request.id} />
         </>
+      )}
+
+      {existingQuote && operator && (
+        <Card className="mb-8" id="messages">
+          <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wider mb-4">Messages with the traveler</h2>
+          <MessageThread requestId={request.id} operatorId={operator.id} title="Conversation" unread={unread} viewer="operator" />
+        </Card>
       )}
 
       {existingQuote ? (

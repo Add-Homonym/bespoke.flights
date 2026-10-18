@@ -203,6 +203,12 @@ On a booked trip the traveler can **Request a change** (new legs, guest count, s
 
 Routes: `GET/POST /api/booking-requests/[id]/changes`, `PATCH /api/change-requests/[id]` with `{action: 'accept' | 'decline' | 'withdraw', newPriceCents?, note?}`. Staff alerts of kind `change` go to staff subscribed to **Change requested**.
 
+### Messaging
+
+Travelers and operators talk in the app instead of by phone or email. One thread exists per (request, operator) once that operator has quoted (`messages` table, ≤ 2000 characters per message). On the trip page each quote has **Message operator** (expanded for the accepted quote); the operator's request page has the conversation with the traveler. Threads poll every 15 seconds. Phone numbers and email addresses are never part of the thread payload.
+
+`GET/POST /api/booking-requests/[id]/messages?operatorId=` (operators omit `operatorId`; `?after=<id>` returns only newer messages). Admins can read but not post. A new message emails the other side with a link to the thread, at most once per thread and recipient every 10 minutes (`message_notifications`), and raises a `message` staff alert for the operator on every traveler message.
+
 ### Platform fee
 
 `PLATFORM_FEE_BPS` sets the fee in basis points (default `500` = 5%). The `operators.platform_fee_bps` column overrides it for one operator. The fee is rounded to the nearest cent. Stripe's processing fees come out of the platform's share.

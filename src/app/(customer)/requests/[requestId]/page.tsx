@@ -15,6 +15,8 @@ import { PaymentStatus } from '@/components/booking/payment-status';
 import { CancelTrip } from '@/components/booking/cancel-trip';
 import { TravelerChangeRequests } from '@/components/booking/change-request';
 import { changeRequestViews } from '@/lib/bookings/changes';
+import { MessageThread } from '@/components/messaging/message-thread';
+import { unreadByOperator } from '@/lib/messaging/messages';
 import { previewCancellation } from '@/lib/bookings/cancellation';
 import { formatMoney, getPaymentsMode } from '@/lib/payments/config';
 import type { BookingRequest, BookingLeg, Quote, Payment } from '@/lib/types';
@@ -94,6 +96,7 @@ export default async function RequestDetailPage({
   const canCancel = session.role === 'customer' && ['open', 'quoted', 'booked'].includes(request.status) && !(payment && payment.status === 'processing');
   const cancelPreview = canCancel && request.status === 'booked' ? await previewCancellation(db, request) : null;
   const changes = request.status === 'booked' || request.status === 'completed' ? await changeRequestViews(db, request.id, payment?.currency) : [];
+  const unread = quotes.length ? await unreadByOperator(db, request.id, request.customer_id) : new Map<number, number>();
 
   return (
     <div className={`mx-auto max-w-3xl ${payment?.status === 'pending' || changePayment?.status === 'pending' ? 'pb-28' : ''}`}>
@@ -267,6 +270,16 @@ export default async function RequestDetailPage({
                       unavailableReason={expired ? 'This quote has expired.' : 'Operator is completing payment setup.'}
                     />
                   )}
+                  footer={
+                    <MessageThread
+                      requestId={request.id}
+                      operatorId={quote.operator_id}
+                      title={`Messages with ${quote.company_name}`}
+                      collapsed={quote.status !== 'accepted'}
+                      unread={unread.get(quote.operator_id) ?? 0}
+                      viewer={session.role}
+                    />
+                  }
                 />
               );
             })}

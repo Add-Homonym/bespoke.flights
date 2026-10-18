@@ -372,6 +372,20 @@ export function changeRequestEmail(data: {
   return { subject, html: layout(body) };
 }
 
+// ─── New message (in-app thread) ────────────────────────────────────
+
+/** Points at the thread; the body stays in the app so contact details never travel by email. */
+export function newMessageEmail(data: { requestId: number; route: string; senderName: string; url: string }): { subject: string; html: string } {
+  const subject = 'New message from ' + data.senderName + ' — Request #' + data.requestId;
+  const body =
+    '<h1 style="margin:0 0 8px 0;color:' + BRAND.cream + ';font-size:22px;font-weight:600">You have a new message</h1>' +
+    p('Request #' + data.requestId + ' &middot; ' + escapeHtml(data.route), 'color:' + BRAND.muted + ';font-size:13px') +
+    p(escapeHtml(data.senderName) + ' wrote to you about this trip. Read and reply in bespoke.flights.') +
+    button('Open conversation', data.url) +
+    p('You get at most one of these emails every 10 minutes per conversation.', 'color:' + BRAND.muted + ';font-size:12px');
+  return { subject, html: layout(body) };
+}
+
 // ─── Booking cancelled (customer and operator) ──────────────────────
 
 export function bookingCancelledEmail(data: {

@@ -55,6 +55,22 @@ export async function requestAccess(db: Db, session: SessionPayload, request: Bo
   };
 }
 
+/**
+ * Who may take part in the message thread between a request's traveler and
+ * one operator. A thread exists once that operator has quoted (any status).
+ * Returns the side the caller speaks for, or null.
+ */
+export async function threadAccess(
+  db: Db, session: SessionPayload, request: BookingRequest, operatorId: number,
+): Promise<'customer' | 'operator' | 'admin' | null> {
+  const quoted = await db.one('SELECT id FROM quotes WHERE request_id = ? AND operator_id = ? LIMIT 1', [request.id, operatorId]);
+  if (!quoted) return null;
+  if (session.role === 'admin') return 'admin';
+  if (session.role === 'customer') return request.customer_id === session.userId ? 'customer' : null;
+  const operator = await db.one<{ id: number; status: string }>('SELECT id, status FROM operators WHERE user_id = ?', [session.userId]);
+  return operator && operator.id === operatorId && operator.status === 'approved' ? 'operator' : null;
+}
+
 /** Admins and the owning customer may change a request's status. */
 export function canManageRequest(session: SessionPayload, request: BookingRequest): boolean {
   return session.role === 'admin' || (session.role === 'customer' && request.customer_id === session.userId);

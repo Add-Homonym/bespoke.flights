@@ -15,6 +15,7 @@ export function QuoteCard({
   note,
   selected = false,
   action,
+  footer,
 }: {
   aircraft: string;
   /** Operator legal name. */
@@ -29,6 +30,8 @@ export function QuoteCard({
   selected?: boolean;
   /** Bottom-right action, normally a `sm` Button. */
   action?: ReactNode;
+  /** Below the price row: e.g. the message thread with this operator. */
+  footer?: ReactNode;
 }) {
   const specs: [string, string][] = [
     ['Seats', seats ? String(seats) : 'Not listed'],
@@ -67,6 +70,8 @@ export function QuoteCard({
         </div>
         {action}
       </div>
+
+      {footer}
     </article>
   );
 }
