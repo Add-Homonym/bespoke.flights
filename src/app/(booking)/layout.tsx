@@ -12,7 +12,7 @@ export default async function BookingLayout({ children }: { children: React.Reac
   return (
     <>
       <Header user={user} />
-      <main className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 pt-12 pb-16">
+      <main id="main-content" className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 pt-12 pb-16">
         {children}
       </main>
     </>

@@ -48,12 +48,12 @@ export function Header({ user }: { user?: { name: string; role: string } | null 
   const roleLinks = user ? (links[user.role as keyof typeof links] ?? []) : links.guest;
 
   return (
-    <header className="border-b border-hairline bg-surface print:hidden">
-      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-6 px-4 py-2 sm:px-6">
-        <Link href="/" className="inline-flex min-h-11 items-center">
+    <header id="site-header" className="border-b border-hairline bg-surface print:hidden">
+      <div id="site-header-inner" className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-6 px-4 py-2 sm:px-6">
+        <Link id="site-logo" href="/" className="inline-flex min-h-11 items-center">
           <Logo />
         </Link>
-        <nav aria-label="Main" className="flex flex-wrap items-center gap-x-5">
+        <nav id="main-nav" aria-label="Main" className="flex flex-wrap items-center gap-x-5">
           {roleLinks.map(link => (
             <Link key={link.href} href={link.href} className={navLink}>{link.label}</Link>
           ))}

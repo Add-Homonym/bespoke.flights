@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus } from 'lucide-react';
 import { Notice } from '@/components/ui/notice';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { RouteField } from '@/components/ui/route-field';
 import { AccountStep } from '@/components/booking/account-step';
+import { LegCard, legIsComplete } from '@/components/booking/leg-card';
+import { formatLandUnits, formatNm, tripDistance } from '@/lib/distance';
 import { TripDetails } from '@/components/booking/trip-details';
 import { fromDraftLegs } from '@/lib/trip-format';
 import { bookingRequestSchema } from '@/lib/validations';
@@ -23,6 +23,23 @@ import {
 
 type LegInput = DraftLeg;
 
+/** One leg in the form: its fields plus UI state. `key` is stable across reorders. */
+interface LegState {
+  key: number;
+  leg: LegInput;
+  editing: boolean;
+  /** The leg as last set, restored by "Discard changes". Null for a leg never set. */
+  saved: LegInput | null;
+}
+
+/** Each leg departs where the previous one lands. */
+function rechain(states: LegState[]): LegState[] {
+  return states.map((s, i) =>
+    i === 0 || s.leg.originCode === states[i - 1].leg.destCode
+      ? s
+      : { ...s, leg: { ...s.leg, originCode: states[i - 1].leg.destCode } });
+}
+
 export function MultiLegForm({
   initialDraft,
   viewerRole,
@@ -32,7 +49,15 @@ export function MultiLegForm({
 }) {
   const router = useRouter();
   const start = initialDraft ?? emptyDraft();
-  const [legs, setLegs] = useState<LegInput[]>(start.legs);
+  const nextKey = useRef(0);
+  const toState = (leg: LegInput): LegState => {
+    const complete = legIsComplete(leg);
+    return { key: nextKey.current++, leg, editing: !complete, saved: complete ? leg : null };
+  };
+  const [legStates, setLegStates] = useState<LegState[]>(() => start.legs.map(toState));
+  const [removed, setRemoved] = useState<{ index: number; state: LegState } | null>(null);
+  const legs = useMemo(() => legStates.map(s => s.leg), [legStates]);
+  const distance = useMemo(() => tripDistance(legs), [legs]);
   const [passengerCount, setPassengerCount] = useState(start.passengerCount);
   const [notes, setNotes] = useState(start.notes);
   const [loading, setLoading] = useState(false);
@@ -48,7 +73,8 @@ export function MultiLegForm({
 
   const startOver = () => {
     const fresh = emptyDraft();
-    setLegs(fresh.legs);
+    setLegStates(fresh.legs.map(toState));
+    setRemoved(null);
     setPassengerCount(fresh.passengerCount);
     setNotes(fresh.notes);
     setNeedsAccount(false);
@@ -56,48 +82,56 @@ export function MultiLegForm({
     setRestored(false);
   };
 
-  const updateLeg = (index: number, field: keyof LegInput, value: string) => {
-    setLegs(prev => {
-      const updated = [...prev];
-      updated[index] = { ...updated[index], [field]: value };
+  const patch = (index: number, fn: (s: LegState) => LegState) =>
+    setLegStates(prev => rechain(prev.map((s, i) => (i === index ? fn(s) : s))));
 
-      // Auto-chain: when destination changes, update next leg's origin
-      if (field === 'destCode' && index < updated.length - 1) {
-        updated[index + 1] = { ...updated[index + 1], originCode: value };
-      }
-
-      return updated;
-    });
-  };
+  const updateLeg = (index: number, field: keyof LegInput, value: string) =>
+    patch(index, s => ({ ...s, leg: { ...s.leg, [field]: value } }));
 
   // Swap a leg's endpoints. The next leg keeps departing from where this one lands.
-  const swapLeg = (index: number) => {
-    setLegs(prev => {
-      const updated = [...prev];
-      const { originCode, destCode } = updated[index];
-      updated[index] = { ...updated[index], originCode: destCode, destCode: originCode };
-      if (index < updated.length - 1) {
-        updated[index + 1] = { ...updated[index + 1], originCode: originCode };
-      }
-      return updated;
-    });
-  };
+  const swapLeg = (index: number) =>
+    patch(index, s => ({ ...s, leg: { ...s.leg, originCode: s.leg.destCode, destCode: s.leg.originCode } }));
+
+  /** Close the fields and show the leg as a summary. */
+  const setLeg = (index: number) =>
+    patch(index, s => (legIsComplete(s.leg) ? { ...s, editing: false, saved: s.leg } : s));
+
+  const editLeg = (index: number) => patch(index, s => ({ ...s, editing: true }));
+
+  /** Put the leg back as it was last set. */
+  const discardLeg = (index: number) =>
+    patch(index, s => (s.saved ? { ...s, leg: s.saved, editing: false } : s));
 
   const addLeg = () => {
-    const lastLeg = legs[legs.length - 1];
-    setLegs(prev => [...prev, { ...emptyLeg(), originCode: lastLeg.destCode }]);
+    setRemoved(null);
+    setLegStates(prev => {
+      // A finished leg collapses to its summary as the next one opens.
+      const settled = prev.map(s => (s.editing && legIsComplete(s.leg) ? { ...s, editing: false, saved: s.leg } : s));
+      const last = settled[settled.length - 1].leg;
+      return [...settled, { key: nextKey.current++, leg: { ...emptyLeg(), originCode: last.destCode }, editing: true, saved: null }];
+    });
   };
 
-  const removeLeg = (index: number) => {
-    if (legs.length <= 1) return;
-    setLegs(prev => {
-      const updated = prev.filter((_, i) => i !== index);
-      // Re-chain origins
-      for (let i = 1; i < updated.length; i++) {
-        updated[i].originCode = updated[i - 1].destCode;
-      }
-      return updated;
+  /** Remove a leg (undoable), or clear the only leg. */
+  const cancelLeg = (index: number) => {
+    if (legStates.length <= 1) {
+      setRemoved(null);
+      setLegStates([{ key: nextKey.current++, leg: emptyLeg(), editing: true, saved: null }]);
+      return;
+    }
+    setRemoved({ index, state: legStates[index] });
+    setLegStates(prev => rechain(prev.filter((_, i) => i !== index)));
+  };
+
+  const undoRemove = () => {
+    if (!removed) return;
+    setLegStates(prev => {
+      const next = [...prev];
+      next.splice(Math.min(removed.index, next.length), 0, removed.state);
+      // The restored leg's landing becomes the next leg's departure again.
+      return rechain(next);
     });
+    setRemoved(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -105,7 +139,7 @@ export function MultiLegForm({
     setError('');
 
     const payload = draftToRequest({ legs, passengerCount, notes });
-    if (!bookingRequestSchema.safeParse(payload).success) {
+    if (!bookingRequestSchema.safeParse(payload).success || !legs.every(legIsComplete)) {
       setError('Choose an origin, destination and date for every leg.');
       return;
     }
@@ -158,69 +192,69 @@ export function MultiLegForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8 pb-4">
+    <form id="booking-form" onSubmit={handleSubmit} className="space-y-8 pb-4">
       {restored && (
-        <div role="status" className="flex items-center justify-between gap-3 rounded-md border border-hairline bg-surface-sunken px-4 py-3 text-body">
+        <div id="restored-draft-notice" role="status" className="flex items-center justify-between gap-3 rounded-md border border-hairline bg-surface-sunken px-4 py-3 text-body">
           <span className="text-ink">Your unfinished trip is restored.</span>
           <Button type="button" variant="quiet" size="sm" onClick={startOver}>Start over</Button>
         </div>
       )}
 
-      {error && <Notice tone="danger">{error}</Notice>}
+      {error && <div id="booking-error"><Notice tone="danger">{error}</Notice></div>}
 
       {/* Flight legs */}
-      <section aria-labelledby="legs-heading" className="space-y-4">
-        <div className="flex items-baseline justify-between">
+      <section id="route-section" aria-labelledby="legs-heading" className="space-y-4">
+        <div id="route-header" className="flex items-baseline justify-between gap-3">
           <h2 id="legs-heading" className="text-title text-ink">Your route</h2>
-          <span className="text-label text-ink-muted">{legs.length} {legs.length === 1 ? 'leg' : 'legs'}</span>
+          <span id="route-totals" className="text-right text-label text-ink-muted tabular-nums">
+            {legs.length} {legs.length === 1 ? 'leg' : 'legs'}
+            {distance.measured > 0 && (
+              <>
+                {' · '}<span className="text-ink">{formatNm(distance.total)}</span>
+                {!distance.complete && ' so far'}
+              </>
+            )}
+          </span>
         </div>
 
-        {legs.map((leg, i) => (
-          <div key={i} className="space-y-4 rounded-lg border border-hairline bg-surface-sunken p-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-heading text-ink">Leg {i + 1}</h3>
-              {legs.length > 1 && (
-                <Button type="button" variant="quiet" size="sm" onClick={() => removeLeg(i)} aria-label={`Remove leg ${i + 1}`}>
-                  Remove leg
-                </Button>
-              )}
-            </div>
-
-            <RouteField
-              origin={leg.originCode}
-              destination={leg.destCode}
-              onOriginChange={val => updateLeg(i, 'originCode', val)}
-              onDestinationChange={val => updateLeg(i, 'destCode', val)}
-              onSwap={() => swapLeg(i)}
-              originLocked={i > 0}
-            />
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Input
-                label="Date"
-                type="date"
-                value={leg.departureDate}
-                onChange={e => updateLeg(i, 'departureDate', e.target.value)}
-                required
-              />
-              <Input
-                label="Departure time (local)"
-                type="time"
-                value={leg.departureTime}
-                onChange={e => updateLeg(i, 'departureTime', e.target.value)}
-              />
-            </div>
+        {removed && (
+          <div id="leg-removed-notice" role="status" className="flex items-center justify-between gap-3 rounded-md border border-hairline bg-surface-raised px-4 py-2">
+            <span className="text-body text-ink">Leg {removed.index + 1} cancelled.</span>
+            <Button id="undo-leg-cancel" type="button" variant="quiet" size="sm" onClick={undoRemove}>Undo</Button>
           </div>
-        ))}
+        )}
 
-        <Button type="button" variant="secondary" block onClick={addLeg}>
-          <Plus size={24} strokeWidth={1.5} aria-hidden="true" />
-          Add a leg
-        </Button>
+        <div id="leg-list" className="space-y-4">
+          {legStates.map((s, i) => (
+            <LegCard
+              key={s.key}
+              index={i}
+              leg={s.leg}
+              editing={s.editing}
+              wasSet={s.saved !== null}
+              legCount={legStates.length}
+              isLast={i === legStates.length - 1}
+              onChange={(field, value) => updateLeg(i, field, value)}
+              onSwap={() => swapLeg(i)}
+              onDone={() => setLeg(i)}
+              onEdit={() => editLeg(i)}
+              onCancel={() => cancelLeg(i)}
+              onDiscard={() => discardLeg(i)}
+              onAddLeg={addLeg}
+            />
+          ))}
+        </div>
+
+        {legs.length > 1 && distance.measured > 0 && (
+          <p id="trip-distance" className="text-right text-label text-ink-muted tabular-nums">
+            Total {distance.complete ? '' : 'so far '}
+            <span className="text-ink">{formatNm(distance.total)}</span> · {formatLandUnits(distance.total)}
+          </p>
+        )}
       </section>
 
       {/* Passengers and notes */}
-      <section aria-labelledby="guests-heading" className="space-y-4">
+      <section id="guests-section" aria-labelledby="guests-heading" className="space-y-4">
         <h2 id="guests-heading" className="text-title text-ink">Guests</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-[8rem_1fr]">
           <Input
@@ -242,13 +276,13 @@ export function MultiLegForm({
 
       {/* Trip summary: every detail entered so far */}
       {draftHasContent({ legs, passengerCount, notes }) && (
-        <div className="rounded-lg border border-hairline bg-surface-raised px-6 py-4 shadow-raised">
+        <div id="trip-summary" className="rounded-lg border border-hairline bg-surface-raised px-6 py-4 shadow-raised">
           <TripDetails title="Trip summary" legs={fromDraftLegs(legs)} passengerCount={passengerCount} notes={notes} />
         </div>
       )}
 
-      <div className="space-y-3">
-        <Button type="submit" disabled={loading} block>
+      <div id="submit-section" className="space-y-3">
+        <Button id="request-quotes" type="submit" disabled={loading} block>
           {loading ? 'Requesting quotes…' : viewerRole === null ? 'Continue to account' : 'Request quotes'}
         </Button>
         {viewerRole === null && (

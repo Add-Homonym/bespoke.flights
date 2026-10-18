@@ -31,9 +31,9 @@ export default async function HomePage() {
   return (
     <>
       <Header user={user} />
-      <main className="flex-1">
+      <main id="home" className="flex-1">
         {/* Hero: the booking form is the first thing on the page. */}
-        <section className="border-b border-hairline bg-night text-on-night">
+        <section id="hero" className="border-b border-hairline bg-night text-on-night">
           <div className="mx-auto max-w-2xl px-4 pb-8 pt-12 sm:px-6">
             <p className="text-overline text-on-night-muted mb-4">Private charter</p>
             <h1 className="text-display text-on-night sm:text-display-xl">
@@ -45,12 +45,12 @@ export default async function HomePage() {
           </div>
         </section>
 
-        <section aria-label="Plan your trip" className="mx-auto max-w-2xl px-4 pt-8 pb-[var(--space-7)] sm:px-6">
+        <section id="plan-trip" aria-label="Plan your trip" className="mx-auto max-w-2xl px-4 pt-8 pb-[var(--space-7)] sm:px-6">
           <MultiLegForm initialDraft={draft} viewerRole={session?.role ?? null} />
         </section>
 
         {/* How it works */}
-        <section className="mx-auto max-w-3xl px-4 py-[var(--space-7)] sm:px-6">
+        <section id="how-it-works" className="mx-auto max-w-3xl px-4 py-[var(--space-7)] sm:px-6">
           <h2 className="text-display mb-8 text-ink">How it works</h2>
           <ol className="grid gap-4 md:grid-cols-3">
             {steps.map(({ icon: Icon, title, desc }) => (
@@ -64,7 +64,7 @@ export default async function HomePage() {
         </section>
 
         {/* For operators */}
-        <section className="border-t border-hairline bg-surface-sunken">
+        <section id="for-operators" className="border-t border-hairline bg-surface-sunken">
           <div className="mx-auto max-w-3xl px-4 py-[var(--space-7)] sm:px-6">
             <p className="text-overline text-ink-muted mb-2">For operators</p>
             <h2 className="text-display text-ink">Fill empty legs. Grow your business.</h2>
@@ -79,7 +79,7 @@ export default async function HomePage() {
         </section>
       </main>
 
-      <footer className="border-t border-hairline py-8">
+      <footer id="site-footer" className="border-t border-hairline py-8">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 sm:px-6">
           <Logo />
           <span className="text-label text-ink-muted">&copy; {new Date().getFullYear()} All rights reserved.</span>
