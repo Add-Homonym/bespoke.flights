@@ -12,6 +12,12 @@ import { QuoteActions } from '@/components/booking/quote-actions';
 import { RequestStatusBadge } from '@/components/booking/request-status';
 import { OutreachStatus } from '@/components/operator/outreach-status';
 import { PaymentStatus } from '@/components/booking/payment-status';
+import { CancelTrip } from '@/components/booking/cancel-trip';
+import { TravelerChangeRequests } from '@/components/booking/change-request';
+import { changeRequestViews } from '@/lib/bookings/changes';
+import { MessageThread } from '@/components/messaging/message-thread';
+import { unreadByOperator } from '@/lib/messaging/messages';
+import { previewCancellation } from '@/lib/bookings/cancellation';
 import { formatMoney, getPaymentsMode } from '@/lib/payments/config';
 import type { BookingRequest, BookingLeg, Quote, Payment } from '@/lib/types';
 
@@ -40,8 +46,8 @@ export default async function RequestDetailPage({
 
   const legs = await db.query<BookingLeg>('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order', [request.id]);
 
-  const quotes = await db.query<Quote & { company_name: string; stripe_charges_enabled: number; aircraft_type?: string; aircraft_capacity?: number; tail_number?: string; aircraft_year?: number }>(`
-    SELECT q.*, o.company_name, o.stripe_charges_enabled, a.type as aircraft_type, a.capacity as aircraft_capacity, a.tail_number, a.year as aircraft_year
+  const quotes = await db.query<Quote & { company_name: string; certificate: string | null; safety_rating: string | null; stripe_charges_enabled: number; aircraft_type?: string; aircraft_capacity?: number; tail_number?: string; aircraft_year?: number }>(`
+    SELECT q.*, o.company_name, o.certificate, o.safety_rating, o.stripe_charges_enabled, a.type as aircraft_type, a.capacity as aircraft_capacity, a.tail_number, a.year as aircraft_year
     FROM quotes q
     JOIN operators o ON o.id = q.operator_id
     LEFT JOIN aircraft a ON a.id = q.aircraft_id
@@ -53,11 +59,18 @@ export default async function RequestDetailPage({
   const payment = await db.one<(Payment & { company_name: string })>(`
     SELECT p.*, o.company_name FROM payments p
     JOIN operators o ON o.id = p.operator_id
-    WHERE p.request_id = ? AND p.status != 'canceled'
+    WHERE p.request_id = ? AND p.status != 'canceled' AND p.change_request_id IS NULL
     ORDER BY CASE p.status
       WHEN 'succeeded' THEN 0 WHEN 'partially_refunded' THEN 0 WHEN 'refunded' THEN 0
       WHEN 'processing' THEN 1 WHEN 'pending' THEN 2 ELSE 3 END, p.id DESC
     LIMIT 1
+  `, [request.id]);
+  // An open payment for the price difference of an accepted change request.
+  const changePayment = await db.one<(Payment & { company_name: string })>(`
+    SELECT p.*, o.company_name FROM payments p
+    JOIN operators o ON o.id = p.operator_id
+    WHERE p.request_id = ? AND p.change_request_id IS NOT NULL AND p.status IN ('pending', 'processing')
+    ORDER BY p.id DESC LIMIT 1
   `, [request.id]);
   const paymentInFlight = payment && ['processing', 'succeeded', 'partially_refunded'].includes(payment.status);
   const stripeMode = getPaymentsMode() === 'stripe';
@@ -79,8 +92,14 @@ export default async function RequestDetailPage({
   const bookable = quotes.filter(q => q.status === 'pending' && !isExpired(q.valid_until, today));
   const bestValueId = !acceptedQuote && bookable.length > 1 ? bookable[0].id : null;
 
+  // Cancellation: paid bookings refund per the operator's policy; unpaid requests are simply withdrawn.
+  const canCancel = session.role === 'customer' && ['open', 'quoted', 'booked'].includes(request.status) && !(payment && payment.status === 'processing');
+  const cancelPreview = canCancel && request.status === 'booked' ? await previewCancellation(db, request) : null;
+  const changes = request.status === 'booked' || request.status === 'completed' ? await changeRequestViews(db, request.id, payment?.currency) : [];
+  const unread = quotes.length ? await unreadByOperator(db, request.id, request.customer_id) : new Map<number, number>();
+
   return (
-    <div className={`mx-auto max-w-3xl ${payment?.status === 'pending' ? 'pb-28' : ''}`}>
+    <div className={`mx-auto max-w-3xl ${payment?.status === 'pending' || changePayment?.status === 'pending' ? 'pb-28' : ''}`}>
       <div className="mb-6">
         {confirmed ? (
           <h1 className="text-display sm:text-display-xl text-ink">Booking confirmed</h1>
@@ -116,6 +135,7 @@ export default async function RequestDetailPage({
       {payment && (
         <PaymentStatus
           returnedFromCheckout={checkout === 'success'}
+          receiptHref={`/requests/${request.id}/receipt`}
           payment={{
             id: payment.id,
             status: payment.status,
@@ -126,6 +146,24 @@ export default async function RequestDetailPage({
             paidAt: payment.paid_at ? payment.paid_at.slice(0, 16).replace('T', ' ') : null,
             failureReason: payment.failure_reason,
             checkoutUrl: payment.status === 'pending' && session.role === 'customer' ? payment.checkout_url : null,
+          }}
+        />
+      )}
+
+      {changePayment && (
+        <PaymentStatus
+          returnedFromCheckout={checkout === 'success'}
+          title="Itinerary change"
+          payment={{
+            id: changePayment.id,
+            status: changePayment.status,
+            provider: changePayment.provider,
+            amount: formatMoney(changePayment.amount_cents, changePayment.currency),
+            refunded: null,
+            companyName: changePayment.company_name,
+            paidAt: null,
+            failureReason: changePayment.failure_reason,
+            checkoutUrl: changePayment.status === 'pending' && session.role === 'customer' ? changePayment.checkout_url : null,
           }}
         />
       )}
@@ -154,6 +192,30 @@ export default async function RequestDetailPage({
         </dl>
       </Card>
 
+      {request.status === 'booked' && session.role === 'customer' && cancelPreview && (
+        <TravelerChangeRequests
+          requestId={request.id}
+          changes={changes}
+          currentLegs={legs.map(l => ({ originCode: l.origin_code, destCode: l.dest_code, departureDate: l.departure_date, departureTime: l.departure_time ?? '' }))}
+          passengerCount={request.passenger_count}
+          notes={request.notes ?? ''}
+        />
+      )}
+
+      {canCancel && (request.status !== 'booked' || cancelPreview) && (
+        <CancelTrip
+          requestId={request.id}
+          preview={cancelPreview && {
+            tier: cancelPreview.tier,
+            refund: cancelPreview.refund,
+            paid: cancelPreview.paid,
+            hoursBeforeDeparture: cancelPreview.hoursBeforeDeparture,
+            policyText: cancelPreview.policyText,
+            operatorCompany: cancelPreview.operatorCompany,
+          }}
+        />
+      )}
+
       {/* Outreach Status — shows which operators were auto-contacted */}
       {outreachCount > 0 && <OutreachStatus requestId={request.id} />}
 
@@ -176,7 +238,7 @@ export default async function RequestDetailPage({
         ) : (
           <div className="grid gap-4">
             {quotes.map(quote => {
-              const expired = quote.status === 'pending' && isExpired(quote.valid_until, today);
+              const expired = quote.status === 'expired' || (quote.status === 'pending' && isExpired(quote.valid_until, today));
               const canBook = quote.status === 'pending' && ['open', 'quoted'].includes(request.status) && !paymentInFlight && session.role === 'customer';
               return (
                 <QuoteCard
@@ -184,11 +246,13 @@ export default async function RequestDetailPage({
                   selected={quote.status === 'accepted'}
                   aircraft={[quote.aircraft_type ?? 'Aircraft to be confirmed', quote.tail_number].filter(Boolean).join(' · ')}
                   operatorName={quote.company_name}
+                  operatorDetail={[quote.certificate && `FAA certificate ${quote.certificate}`, quote.safety_rating].filter(Boolean).join(' · ') || undefined}
                   badge={
                     quote.status === 'accepted' ? <StatusBadge variant="confirmed">Accepted</StatusBadge>
                     : quote.status === 'rejected' ? <StatusBadge variant="neutral">Declined</StatusBadge>
                     : quote.status === 'withdrawn' ? <StatusBadge variant="neutral">Withdrawn</StatusBadge>
                     : expired ? <StatusBadge variant="warning">Expired</StatusBadge>
+                    : quote.revised_at ? <StatusBadge variant="neutral">Revised</StatusBadge>
                     : quote.id === bestValueId ? <StatusBadge variant="brass">Best value</StatusBadge>
                     : undefined
                   }
@@ -196,10 +260,13 @@ export default async function RequestDetailPage({
                   flightTime={null}
                   yearBuilt={quote.aircraft_year ?? null}
                   price={formatMoney(quote.price_cents, quote.currency)}
-                  note={(quote.message || quote.valid_until) && (
+                  note={(quote.message || quote.valid_until || quote.previous_price_cents != null) && (
                     <>
                       {quote.message && <span className="block italic">&ldquo;{quote.message}&rdquo;</span>}
-                      {quote.valid_until && <span className="block text-label">Valid until {quote.valid_until}</span>}
+                      {quote.valid_until && <span className="block text-label">{expired ? 'Expired' : 'Valid until'} {quote.valid_until}</span>}
+                      {quote.previous_price_cents != null && quote.previous_price_cents !== quote.price_cents && (
+                        <span className="block text-label">Previously {formatMoney(quote.previous_price_cents, quote.currency)}</span>
+                      )}
                     </>
                   )}
                   action={canBook && (
@@ -209,6 +276,16 @@ export default async function RequestDetailPage({
                       unavailableReason={expired ? 'This quote has expired.' : 'Operator is completing payment setup.'}
                     />
                   )}
+                  footer={
+                    <MessageThread
+                      requestId={request.id}
+                      operatorId={quote.operator_id}
+                      title={`Messages with ${quote.company_name}`}
+                      collapsed={quote.status !== 'accepted'}
+                      unread={unread.get(quote.operator_id) ?? 0}
+                      viewer={session.role}
+                    />
+                  }
                 />
               );
             })}

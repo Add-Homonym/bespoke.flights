@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/weekly-discovery",
       "schedule": "0 18 * * 1"
+    },
+    {
+      "path": "/api/cron/daily-lifecycle",
+      "schedule": "0 10 * * *"
     }
   ]
 }

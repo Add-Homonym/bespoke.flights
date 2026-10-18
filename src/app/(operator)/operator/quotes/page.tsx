@@ -12,6 +12,7 @@ const statusBadge: Record<string, 'neutral' | 'confirmed' | 'warning' | 'danger'
   accepted: 'confirmed',
   rejected: 'danger',
   withdrawn: 'neutral',
+  expired: 'neutral',
 };
 
 const paymentBadge: Record<string, 'neutral' | 'confirmed' | 'warning' | 'danger' | 'neutral'> = {

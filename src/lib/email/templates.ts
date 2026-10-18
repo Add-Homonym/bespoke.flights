@@ -188,8 +188,9 @@ export function paymentReceiptEmail(data: BookingPaymentEmailData): { subject: s
     (data.aircraft ? summaryRow('Aircraft', data.aircraft) : '') +
     summaryRow('Total paid', data.amount) +
     '</table></td></tr></table>' +
-    p(data.operatorCompany + ' will contact you to confirm passenger details and flight logistics.') +
-    button('View Booking', data.baseUrl + '/requests/' + data.requestId);
+    p(data.operatorCompany + ' will confirm passenger details and flight logistics with you in the app.') +
+    button('View Booking', data.baseUrl + '/requests/' + data.requestId) +
+    p('<a href="' + data.baseUrl + '/requests/' + data.requestId + '/receipt" style="color:' + BRAND.gold + '">Printable receipt</a>', 'color:' + BRAND.muted + ';font-size:13px');
 
   return { subject, html: layout(body) };
 }
@@ -290,4 +291,202 @@ export function staffAlertEmail(data: {
     p('You receive this because your company added you to its bespoke.flights alerts.', 'color:' + BRAND.muted + ';font-size:12px');
 
   return { subject: data.subject, html: layout(body) };
+}
+
+// ─── Change request (traveler proposes, operator resolves) ──────────
+
+export function changeRequestEmail(data: {
+  event: 'proposed' | 'accepted' | 'accepted_payment_due' | 'applied' | 'declined';
+  audience: 'customer' | 'operator';
+  requestId: number;
+  changeRequestId: number;
+  route: string;
+  proposedLegLines: string[];
+  currentLegLines: string[];
+  passengerCount: number;
+  notes: string | null;
+  operatorNote: string | null;
+  operatorCompany: string;
+  customerName: string;
+  amount: string | null;
+  url: string | null;
+  baseUrl: string;
+}): { subject: string; html: string } {
+  const customer = data.audience === 'customer';
+  const pageUrl = customer ? data.baseUrl + '/requests/' + data.requestId : data.baseUrl + '/operator/requests/' + data.requestId;
+  let heading: string, subject: string, lead: string, cta: string, ctaUrl = pageUrl;
+  switch (data.event) {
+    case 'proposed':
+      subject = 'Change requested — Request #' + data.requestId + ' — ' + data.route;
+      heading = 'A traveler asked to change a booked trip';
+      lead = escapeHtml(data.customerName) + ' proposed a new itinerary for booking #' + data.requestId + '. Accept it (at the same or a new all-in price) or decline it with a note.';
+      cta = 'Review change request';
+      break;
+    case 'accepted':
+      subject = 'Change accepted — Request #' + data.requestId + ' — ' + data.route;
+      heading = customer ? 'Your change is confirmed' : 'Itinerary updated';
+      lead = (customer ? escapeHtml(data.operatorCompany) + ' accepted your change.' : 'You accepted the traveler\'s change.') +
+        (data.amount ? ' ' + data.amount + ' is being refunded for the lower price.' : ' The price is unchanged.') + ' The booking now shows the new itinerary.';
+      cta = 'View trip';
+      break;
+    case 'accepted_payment_due':
+      subject = 'Change accepted, payment due — Request #' + data.requestId;
+      heading = 'Your change is accepted: pay the difference to confirm';
+      lead = escapeHtml(data.operatorCompany) + ' accepted your change at a new price. Pay ' + (data.amount ?? 'the difference') + ' to apply it. Until then the original itinerary stands.';
+      cta = 'Pay the difference';
+      ctaUrl = data.url ?? pageUrl;
+      break;
+    case 'applied':
+      subject = 'Itinerary updated — Request #' + data.requestId + ' — ' + data.route;
+      heading = customer ? 'Your new itinerary is confirmed' : 'Itinerary updated and paid';
+      lead = customer ? 'Payment received. The booking now shows the new itinerary.' : 'The traveler paid the difference. The booking now shows the new itinerary.';
+      cta = 'View trip';
+      break;
+    default:
+      subject = 'Change declined — Request #' + data.requestId + ' — ' + data.route;
+      heading = 'Your change could not be accommodated';
+      lead = escapeHtml(data.operatorCompany) + ' declined the change. Your original booking stands. You can message the operator or propose a different change.';
+      cta = 'View trip';
+  }
+
+  const body =
+    '<h1 style="margin:0 0 8px 0;color:' + BRAND.cream + ';font-size:22px;font-weight:600">' + heading + '</h1>' +
+    p('Request #' + data.requestId + ' &middot; Change #' + data.changeRequestId, 'color:' + BRAND.muted + ';font-size:13px') +
+    p(lead) +
+    '<h2 style="margin:24px 0 12px 0;color:' + BRAND.muted + ';font-size:12px;text-transform:uppercase;letter-spacing:1px">Proposed itinerary</h2>' +
+    '<table cellpadding="0" cellspacing="0" style="width:100%;background:#0f1724;border-radius:8px;margin:0 0 20px 0">' +
+    '<tr><td style="padding:16px"><table cellpadding="0" cellspacing="0" style="width:100%">' +
+    data.proposedLegLines.map((line, i) => summaryRow(i === 0 ? 'Legs' : '', escapeHtml(line.replace(/^Leg \d+: /, '')))).join('') +
+    summaryRow('Passengers', String(data.passengerCount)) +
+    summaryRow('Special requests', data.notes ? escapeHtml(data.notes) : 'None') +
+    '</table></td></tr></table>' +
+    (data.event === 'proposed' && data.currentLegLines.length
+      ? '<h2 style="margin:0 0 12px 0;color:' + BRAND.muted + ';font-size:12px;text-transform:uppercase;letter-spacing:1px">Current itinerary</h2>' +
+        '<table cellpadding="0" cellspacing="0" style="width:100%;background:#0f1724;border-radius:8px;margin:0 0 20px 0">' +
+        '<tr><td style="padding:16px"><table cellpadding="0" cellspacing="0" style="width:100%">' +
+        data.currentLegLines.map((line, i) => summaryRow(i === 0 ? 'Legs' : '', escapeHtml(line.replace(/^Leg \d+: /, '')))).join('') +
+        '</table></td></tr></table>'
+      : '') +
+    (data.operatorNote ? p('Operator note: ' + escapeHtml(data.operatorNote), 'color:' + BRAND.muted + ';font-size:13px') : '') +
+    button(cta, ctaUrl);
+
+  return { subject, html: layout(body) };
+}
+
+// ─── New quote (to the traveler) ────────────────────────────────────
+
+export function newQuoteEmail(data: {
+  requestId: number;
+  route: string;
+  operatorCompany: string;
+  aircraft: string | null;
+  price: string;
+  validUntil: string | null;
+  message: string | null;
+  quoteCount: number;
+  baseUrl: string;
+  /** 'new' for a first quote, 'revised' when the operator changed it. */
+  kind?: 'new' | 'revised';
+  previousPrice?: string | null;
+}): { subject: string; html: string } {
+  const revised = data.kind === 'revised';
+  const subject = (revised ? 'Quote revised — ' : 'New quote — ') + data.price + ' from ' + data.operatorCompany + ' — Request #' + data.requestId;
+  const body =
+    '<h1 style="margin:0 0 8px 0;color:' + BRAND.cream + ';font-size:22px;font-weight:600">' +
+    (revised ? 'A quote on your trip was revised' : 'You have a new quote') + '</h1>' +
+    p('Request #' + data.requestId + ' &middot; ' + escapeHtml(data.route), 'color:' + BRAND.muted + ';font-size:13px') +
+    '<table cellpadding="0" cellspacing="0" style="width:100%;background:#0f1724;border-radius:8px;margin:20px 0">' +
+    '<tr><td style="padding:16px"><table cellpadding="0" cellspacing="0" style="width:100%">' +
+    summaryRow('Operator', escapeHtml(data.operatorCompany) + ' &middot; Part 135') +
+    (data.aircraft ? summaryRow('Aircraft', escapeHtml(data.aircraft)) : '') +
+    summaryRow('All-in price', data.price) +
+    (revised && data.previousPrice ? summaryRow('Previously', data.previousPrice) : '') +
+    (data.validUntil ? summaryRow('Valid until', escapeHtml(data.validUntil)) : '') +
+    (data.message ? summaryRow('Message', escapeHtml(data.message)) : '') +
+    '</table></td></tr></table>' +
+    p(data.quoteCount > 1
+      ? 'You now have ' + data.quoteCount + ' quotes to compare. Every price is all-in, with no broker markup.'
+      : 'Every price is all-in, with no broker markup. More quotes may follow as other operators respond.') +
+    button('Compare quotes', data.baseUrl + '/requests/' + data.requestId);
+  return { subject, html: layout(body) };
+}
+
+// ─── Status change (to the traveler or the operator) ────────────────
+
+/** A short, plain status email: used where no richer template applies. */
+export function statusUpdateEmail(data: {
+  requestId: number;
+  route: string;
+  heading: string;
+  text: string;
+  url: string;
+  buttonLabel: string;
+}): { subject: string; html: string } {
+  const subject = data.heading + ' — Request #' + data.requestId;
+  const body =
+    '<h1 style="margin:0 0 8px 0;color:' + BRAND.cream + ';font-size:22px;font-weight:600">' + escapeHtml(data.heading) + '</h1>' +
+    p('Request #' + data.requestId + ' &middot; ' + escapeHtml(data.route), 'color:' + BRAND.muted + ';font-size:13px') +
+    p(escapeHtml(data.text)) +
+    button(escapeHtml(data.buttonLabel), data.url);
+  return { subject, html: layout(body) };
+}
+
+// ─── New message (in-app thread) ────────────────────────────────────
+
+/** Points at the thread; the body stays in the app so contact details never travel by email. */
+export function newMessageEmail(data: { requestId: number; route: string; senderName: string; url: string }): { subject: string; html: string } {
+  const subject = 'New message from ' + data.senderName + ' — Request #' + data.requestId;
+  const body =
+    '<h1 style="margin:0 0 8px 0;color:' + BRAND.cream + ';font-size:22px;font-weight:600">You have a new message</h1>' +
+    p('Request #' + data.requestId + ' &middot; ' + escapeHtml(data.route), 'color:' + BRAND.muted + ';font-size:13px') +
+    p(escapeHtml(data.senderName) + ' wrote to you about this trip. Read and reply in bespoke.flights.') +
+    button('Open conversation', data.url) +
+    p('You get at most one of these emails every 10 minutes per conversation.', 'color:' + BRAND.muted + ';font-size:12px');
+  return { subject, html: layout(body) };
+}
+
+// ─── Booking cancelled (customer and operator) ──────────────────────
+
+export function bookingCancelledEmail(data: {
+  audience: 'customer' | 'operator';
+  requestId: number;
+  route: string;
+  legLines: string[];
+  passengerCount: number;
+  operatorCompany: string;
+  paid: string;
+  refund: string;
+  tier: 'full' | 'partial' | 'none';
+  policyText: string;
+  baseUrl: string;
+}): { subject: string; html: string } {
+  const customer = data.audience === 'customer';
+  const subject = 'Booking cancelled — Request #' + data.requestId + ' — ' + data.route;
+  const refundLine = data.tier === 'none'
+    ? 'No refund is due under the cancellation policy.'
+    : (customer ? 'A refund of ' + data.refund + ' is on its way to your original payment method.'
+                : data.refund + ' is being returned to the traveler; the rest stays with your payout.');
+
+  const body =
+    '<h1 style="margin:0 0 8px 0;color:' + BRAND.cream + ';font-size:22px;font-weight:600">' +
+    (customer ? 'Your trip is cancelled' : 'A charter was cancelled') +
+    '</h1>' +
+    p('Request #' + data.requestId, 'color:' + BRAND.muted + ';font-size:13px') +
+    '<table cellpadding="0" cellspacing="0" style="width:100%;background:#0f1724;border-radius:8px;margin:20px 0">' +
+    '<tr><td style="padding:16px">' +
+    '<table cellpadding="0" cellspacing="0" style="width:100%">' +
+    summaryRow('Route', escapeHtml(data.route)) +
+    data.legLines.map((line, i) => summaryRow(i === 0 ? 'Legs' : '', escapeHtml(line.replace(/^Leg \d+: /, '')))).join('') +
+    summaryRow('Passengers', String(data.passengerCount)) +
+    summaryRow('Operator', escapeHtml(data.operatorCompany)) +
+    summaryRow('Paid', data.paid) +
+    summaryRow('Refund', data.refund) +
+    '</table></td></tr></table>' +
+    p(refundLine) +
+    p('Policy: ' + escapeHtml(data.policyText), 'color:' + BRAND.muted + ';font-size:13px') +
+    (customer
+      ? button('View trip', data.baseUrl + '/requests/' + data.requestId)
+      : button('View request', data.baseUrl + '/operator/requests/' + data.requestId));
+
+  return { subject, html: layout(body) };
 }

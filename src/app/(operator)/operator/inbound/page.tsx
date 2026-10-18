@@ -170,6 +170,8 @@ function RFQCard({
     pending: 'warning',
     accepted: 'confirmed',
     rejected: 'danger',
+    withdrawn: 'neutral',
+    expired: 'neutral',
   };
 
   return (
@@ -195,7 +197,7 @@ function RFQCard({
           {hasQuote ? (
             <div className="text-right">
               <p className="text-royal font-display text-lg">${((rfq.quote_price || 0) / 100).toLocaleString()}</p>
-              <StatusBadge variant={quoteBadge[rfq.quote_status || 'pending']}>
+              <StatusBadge variant={quoteBadge[rfq.quote_status || 'pending'] ?? 'neutral'}>
                 {rfq.quote_status}
               </StatusBadge>
             </div>

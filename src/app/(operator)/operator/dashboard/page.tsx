@@ -12,7 +12,6 @@ export default async function OperatorDashboardPage() {
   const user = (await db.one<{ name: string }>('SELECT name FROM users WHERE id = ?', [session!.userId]))!;
   const operator = await db.one<Operator>('SELECT * FROM operators WHERE user_id = ?', [session!.userId]);
 
-  const openRequests = (await db.one<{ count: number }>("SELECT COUNT(*) as count FROM booking_requests WHERE status IN ('open', 'quoted')"))!.count;
   const myQuotes = operator ? (await db.one<{ count: number }>('SELECT COUNT(*) as count FROM quotes WHERE operator_id = ?', [operator.id]))!.count : 0;
   const acceptedQuotes = operator ? (await db.one<{ count: number }>("SELECT COUNT(*) as count FROM quotes WHERE operator_id = ? AND status = 'accepted'", [operator.id]))!.count : 0;
   const fleetSize = operator ? (await db.one<{ count: number }>('SELECT COUNT(*) as count FROM aircraft WHERE operator_id = ?', [operator.id]))!.count : 0;

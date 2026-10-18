@@ -16,8 +16,8 @@
 
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
+import { adminSession, bearerOk } from '@/lib/cron-auth';
 import { runDiscoveryPipeline } from '@/lib/discovery/pipeline';
 import { rateLimited } from '@/lib/rate-limit';
 
@@ -29,20 +29,6 @@ const manualRunSchema = z.object({
   states: z.array(z.string().regex(US_STATE)).max(10).optional(),
   emailsPerRun: z.number().int().min(0).max(100).optional(),
 });
-
-function bearerOk(req: Request): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return false;
-  const header = req.headers.get('authorization') ?? '';
-  return timingSafeEqual(header, `Bearer ${secret}`);
-}
-
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
 
 async function run(options: Parameters<typeof runDiscoveryPipeline>[1], label: string) {
   try {
@@ -71,8 +57,8 @@ export async function GET(req: Request) {
  */
 export async function POST(req: Request) {
   if (!bearerOk(req)) {
-    const admin = await getSession().catch(() => null);
-    if (admin?.role !== 'admin') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const admin = await adminSession();
+    if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const limited = await rateLimited('discoveryRun', admin.userId);
     if (limited) return limited;
   }

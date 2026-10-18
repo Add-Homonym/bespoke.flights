@@ -18,13 +18,23 @@ import { fromDbLegs, legLine, tripRoute, formatTripDate, formatTripTime } from '
 import type { BookingLeg } from '@/lib/types';
 import type { StaffMember } from './roster';
 
-export type StaffEventKind = 'new_request' | 'booking' | 'cancellation';
+export type StaffEventKind = 'new_request' | 'booking' | 'cancellation' | 'change' | 'message';
 
 const SUBSCRIPTION: Record<StaffEventKind, keyof StaffMember> = {
   new_request: 'on_new_request',
   booking: 'on_booking',
   cancellation: 'on_cancellation',
+  change: 'on_change',
+  message: 'on_message',
 };
+
+/** Extra detail for change and message alerts. */
+export interface AlertDetail {
+  /** For 'change': what the traveler proposed. For 'message': nothing (bodies stay in the app). */
+  summary?: string;
+  /** Makes the event key unique per message or change request. */
+  eventId?: number;
+}
 
 export interface AlertResult {
   sent: number;
@@ -38,7 +48,7 @@ interface AlertContent {
   sms: string;
 }
 
-async function buildContent(db: Db, kind: StaffEventKind, requestId: number, operatorId: number, baseUrl: string): Promise<AlertContent | null> {
+async function buildContent(db: Db, kind: StaffEventKind, requestId: number, operatorId: number, baseUrl: string, detail: AlertDetail = {}): Promise<AlertContent | null> {
   const request = await db.one<{
     id: number; passenger_count: number; notes: string | null; customer_name: string; customer_phone: string | null;
   }>(`
@@ -75,6 +85,18 @@ async function buildContent(db: Db, kind: StaffEventKind, requestId: number, ope
     heading = `Charter cancelled: ${route}`;
     intro = `Booking #${requestId} for ${operator.company_name} has been cancelled. Release the aircraft and crew.`;
     smsLead = `CANCELLED #${requestId}`;
+  } else if (kind === 'change') {
+    link = `${baseUrl}/operator/requests/${requestId}`;
+    linkLabel = 'Review change request';
+    heading = `Change requested: ${route}`;
+    intro = `${request.customer_name} asked to change booking #${requestId} for ${operator.company_name}.${detail.summary ? ` ${detail.summary}` : ''} Accept or decline it on the request page.`;
+    smsLead = `CHANGE REQUEST #${requestId}`;
+  } else if (kind === 'message') {
+    link = `${baseUrl}/operator/requests/${requestId}`;
+    linkLabel = 'Read and reply';
+    heading = `New message: ${route}`;
+    intro = `${request.customer_name} sent a message about request #${requestId}. Reply on the request page.`;
+    smsLead = `MESSAGE #${requestId}`;
   } else {
     link = board ?? `${baseUrl}/operator/requests/${requestId}`;
     linkLabel = board ? 'Open Company Board' : 'Quote This Request';
@@ -128,7 +150,7 @@ async function markFailed(db: Db, staffId: number, eventKey: string, channel: 'e
 /** Alert the operator's subscribed staff about a charter event. Never throws. */
 export async function alertStaff(
   db: Db,
-  event: { kind: StaffEventKind; requestId: number; operatorId: number },
+  event: { kind: StaffEventKind; requestId: number; operatorId: number; detail?: AlertDetail },
   baseUrl: string
 ): Promise<AlertResult> {
   const result: AlertResult = { sent: 0, failed: 0, skipped: 0 };
@@ -138,9 +160,9 @@ export async function alertStaff(
     )).filter(s => s[SUBSCRIPTION[event.kind]] === 1);
     if (staff.length === 0) return result;
 
-    const content = await buildContent(db, event.kind, event.requestId, event.operatorId, baseUrl);
+    const content = await buildContent(db, event.kind, event.requestId, event.operatorId, baseUrl, event.detail);
     if (!content) return result;
-    const eventKey = `${event.kind}:${event.requestId}`;
+    const eventKey = `${event.kind}:${event.requestId}${event.detail?.eventId ? `:${event.detail.eventId}` : ''}`;
 
     for (const member of staff) {
       if (member.notify_email && member.email) {

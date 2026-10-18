@@ -181,12 +181,45 @@ Stripe → POST /api/webhooks/stripe (signature verified)
      other quotes rejected, request booked, receipt + operator emails sent
 ```
 
-- **Quotes are accepted only through payment.** `PATCH /api/quotes/[id]` can only decline.
+- **Quotes are accepted only through payment.** `PATCH /api/quotes/[id]` declines (traveler), or withdraws / revises (the quoting operator, while pending).
 - **One open checkout per request.** Starting a checkout for a different quote expires the previous session.
 - **Double payment protection.** If two sessions are both paid, the second one is refunded automatically, including the transfer reversal.
 - **Bank payments (ACH).** The payment shows as `processing` until `checkout.session.async_payment_succeeded` or `..._failed` arrives. The request is not booked until funds clear.
-- **Expired quotes** (`valid_until` in the past) cannot be paid.
+- **Expired quotes** (`valid_until` in the past) cannot be paid. The daily lifecycle job marks them `expired`.
 - **Webhooks are idempotent.** Event IDs are recorded in `payment_events`, and every handler can safely run more than once. If processing fails, the endpoint returns 500 so Stripe retries.
+
+### Receipts
+
+`/requests/[id]/receipt` (owner or admin) is an invoice-style, printable receipt: number `BF-<year>-<payment id padded to 6>`, billed-to, operator legal name with FAA certificate and safety rating, legs, aircraft and tail, each charge (booking and any paid itinerary changes) with date and payment method when known, refunds, and the net. It is linked from the trip page and the receipt email. Quote cards show the operator's certificate number and safety rating under the company name.
+
+### Cancelling a paid booking
+
+A traveler cancels from the trip page (**Cancel trip** → confirmation panel showing the refund). The refund follows the operator's **cancellation policy** (`operators.cancellation_policy`, set at `/operator/settings`), measured from the first leg's departure (its local date and time, or 23:59 when no time was given):
+
+| Window | Default | Refund |
+|---|---|---|
+| ≥ `full_refund_hours` before departure | 72 h | 100% |
+| ≥ `partial_refund_hours` | 24 h | `partial_refund_bps` (default 5000 = 50%) |
+| Closer than that | | none |
+
+`GET /api/booking-requests/[id]/cancel` previews the refund; `POST` performs it (owner or admin): the refund goes through the normal refund path (transfer reversal and fee return), the request becomes `cancelled`, pending quotes are rejected, both sides get a cancellation email and the operator's staff are alerted. Unpaid requests are still withdrawn with `PATCH /api/booking-requests/[id] {status:'cancelled'}`.
+
+### Changing a booked trip
+
+On a booked trip the traveler can **Request a change** (new legs, guest count, special requests) from the trip page. One change can be pending at a time (`change_requests` table). The winning operator sees it on their request page and in the **Change requests** section of the company board, and either:
+
+- **accepts at the same price**: the booking is updated at once, both sides are emailed;
+- **accepts at a higher all-in price**: a payment for the difference is created (`payments.change_request_id`); the change is applied when it is paid, through the normal fulfillment path (webhook or the stub "simulate" button);
+- **accepts at a lower price**: the difference is refunded and the change applied;
+- **declines** with a note: the traveler is emailed and the booking stands.
+
+Routes: `GET/POST /api/booking-requests/[id]/changes`, `PATCH /api/change-requests/[id]` with `{action: 'accept' | 'decline' | 'withdraw', newPriceCents?, note?}`. Staff alerts of kind `change` go to staff subscribed to **Change requested**.
+
+### Messaging
+
+Travelers and operators talk in the app instead of by phone or email. One thread exists per (request, operator) once that operator has quoted (`messages` table, ≤ 2000 characters per message). On the trip page each quote has **Message operator** (expanded for the accepted quote); the operator's request page has the conversation with the traveler. Threads poll every 15 seconds. Phone numbers and email addresses are never part of the thread payload.
+
+`GET/POST /api/booking-requests/[id]/messages?operatorId=` (operators omit `operatorId`; `?after=<id>` returns only newer messages). Admins can read but not post. A new message emails the other side with a link to the thread, at most once per thread and recipient every 10 minutes (`message_notifications`), and raises a `message` staff alert for the operator on every traveler message.
 
 ### Platform fee
 
@@ -235,18 +268,29 @@ To go live: remove `APP_TEST_MODE`, set the Stripe variables, and delete the dem
 
 ---
 
+## Quote lifecycle
+
+- **Withdraw**: an operator withdraws a pending quote (`PATCH /api/quotes/[id] {status:'withdrawn'}`) from the request page; the traveler is emailed and the operator may quote again (the partial unique index only counts pending and accepted quotes).
+- **Revise**: an operator changes the price, message, valid-until date or aircraft of a pending quote (`PATCH /api/quotes/[id] {priceCents?, message?, validUntil?, aircraftId?}`). The old price is kept in `quotes.previous_price_cents` and `revised_at` is set; the traveler receives a "Quote revised" email and the quote card shows the previous price.
+- **Daily lifecycle** (`GET /api/cron/daily-lifecycle`, 10:00 UTC via `vercel.json`, bearer `CRON_SECRET`, or `POST` as an admin): `expireQuotes` sets pending quotes past `valid_until` to `expired` (one email per request to the traveler) and `completeTrips` sets booked requests whose last leg is before today to `completed` (traveler emailed with a receipt link). `src/lib/lifecycle.ts`. The `quotes.status` CHECK constraint gains `expired` through a guarded `DO` block in `SCHEMA_BLOCKS` that runs once per database.
+
 ## Email System
 
-All email is sent through Resend's API via `src/lib/email/resend.ts`. Four email templates exist:
+All email is sent through Resend's API via `src/lib/email/resend.ts`. Templates (`src/lib/email/templates.ts`):
 
 | Template | Trigger | Content |
 |---|---|---|
 | **Operator Invite** | Discovery pipeline or manual trigger | Introduces Bespoke Flights, explains the marketplace model, links to `/register?role=operator` |
 | **RFQ Notification** | Customer submits a booking request | Full itinerary, passenger count, match score, link to `/operator/inbound` |
-| **Payment Receipt** | Payment succeeds | Sent to the customer: route, dates, operator, aircraft, total paid |
+| **New quote / Quote revised** | Operator submits or revises a quote | Sent to the traveler: operator, aircraft, all-in price, validity, link to compare |
+| **Payment Receipt** | Payment succeeds | Sent to the customer: route, dates, operator, aircraft, total paid, receipt link |
 | **Booking Confirmed** | Payment succeeds | Sent to the operator: itinerary, quote amount, platform fee, payout |
+| **Booking Cancelled** | Traveler cancels a paid booking | Both sides: itinerary, amount paid, refund, policy |
+| **Change request** | Proposed, accepted (with or without payment due), applied, declined | Proposed vs current itinerary, new price, operator note |
+| **New message** | A message arrives in a thread (≤ 1 per thread and side per 10 min) | Sender and a link to the thread; the body stays in the app |
+| **Status update** | Request withdrawn, quote declined or withdrawn, quotes expired, trip completed | One-paragraph notice with a link |
 | **Trip Sheet** | Operator emails a booking to colleagues | Itinerary and the private trip sheet link |
-| **Staff Alert** | Booking, cancellation or new request, per staff preferences | Itinerary, passengers, special requests, aircraft, lead passenger and a link |
+| **Staff Alert** | Booking, cancellation, new request, change request or message, per staff preferences | Itinerary, passengers, special requests, aircraft, lead passenger and a link |
 
 Texts go through Twilio (`src/lib/notify/sms.ts`). Phone numbers are normalized to E.164: 10-digit numbers are treated as US/Canada.
 
@@ -396,7 +440,7 @@ Created by `npm run seed` locally, or automatically in [test mode](#test-mode). 
 | `JWT_SECRET` | Development | Signs the development session cookie. Must be 16+ characters and not `change-me`; without it, development uses a random per-process key (sessions end on restart) and production refuses to sign. |
 | `RESEND_API_KEY` | No | Resend API key. Without it, emails log to stdout. |
 | `EMAIL_FROM` | No | Verified sender address (default: `hello@bespoke.flights`) |
-| `CRON_SECRET` | Production | Secures the `/api/cron/weekly-discovery` endpoint |
+| `CRON_SECRET` | Production | Secures the `/api/cron/weekly-discovery` and `/api/cron/daily-lifecycle` endpoints |
 | `STRIPE_SECRET_KEY` | Production | Stripe secret key. Without it, payments run in stub mode (development) or are disabled (production). |
 | `STRIPE_WEBHOOK_SECRET` | Production | Signing secret for the platform webhook endpoint |
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | Production | Signing secret for the connected-accounts webhook endpoint |
@@ -436,7 +480,7 @@ Set `NEON_AUTH_BASE_URL`, `NEON_AUTH_COOKIE_SECRET`, `CRON_SECRET` (required for
 vercel deploy
 ```
 
-The cron schedule in `vercel.json` runs the discovery pipeline every Monday at 18:00 UTC (8:00 AM HST). Vercel Cron requires a Pro plan.
+The cron schedules in `vercel.json` run the discovery pipeline every Monday at 18:00 UTC (8:00 AM HST) and the quote/trip lifecycle job daily at 10:00 UTC. Vercel Cron requires a Pro plan.
 
 To test the cron endpoint locally (set `CRON_SECRET` in `.env.local`):
 
@@ -455,5 +499,5 @@ curl -X POST http://localhost:3000/api/cron/weekly-discovery \
 - **Resend webhooks** — track email bounces and mark discovered operators as `bounced` automatically.
 - **Secondary email discovery** — the FAA registry doesn't publish emails. A future enrichment step (website scraping or data API) could automate email collection for `no_email` operators.
 - **AI phone outreach** — the contact method enum can be extended with `phone` for Bland.ai / Vapi voice agent integration.
-- **Operator invoicing / 1099-K reporting** — Stripe Connect produces tax forms for Express accounts. No in-app invoice documents exist yet.
+- **Operator invoicing / 1099-K reporting** — Stripe Connect produces tax forms for Express accounts. Travelers have a printable receipt; operators have no in-app invoice document yet.
 - **Deposits and balance payments** — the full quote amount is charged at booking. Split payments (deposit now, balance before departure) are not supported.

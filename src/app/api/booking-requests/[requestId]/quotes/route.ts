@@ -4,6 +4,8 @@ import { getDb } from '@/lib/db';
 import { toId } from '@/lib/db/queries';
 import { quoteSchema } from '@/lib/validations';
 import { requestAccess } from '@/lib/access';
+import { appBaseUrl } from '@/lib/payments/config';
+import { notifyNewQuote } from '@/lib/notify/traveler';
 import type { Quote, Operator, BookingRequest } from '@/lib/types';
 
 function isUniqueViolation(err: unknown): boolean {
@@ -96,6 +98,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ request
     if (isUniqueViolation(err)) return NextResponse.json({ error: 'You have already quoted this request' }, { status: 409 });
     throw err;
   }
+
+  await notifyNewQuote(db, quoteId, appBaseUrl(req));
 
   return NextResponse.json({ id: quoteId }, { status: 201 });
 }

@@ -30,9 +30,13 @@ const badge: Record<string, { variant: StatusVariant; label: string }> = {
   canceled: { variant: 'neutral', label: 'Canceled' },
 };
 
-export function PaymentStatus({ payment, returnedFromCheckout }: {
+export function PaymentStatus({ payment, returnedFromCheckout, title, receiptHref }: {
   payment: PaymentSummary;
   returnedFromCheckout: boolean;
+  /** Card heading; defaults to "Receipt" once paid, otherwise "Payment". */
+  title?: string;
+  /** Link to the printable receipt, shown once paid. */
+  receiptHref?: string;
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -66,13 +70,16 @@ export function PaymentStatus({ payment, returnedFromCheckout }: {
     <>
       <Card className="mb-8 space-y-3">
         <div className="flex items-start justify-between gap-3">
-          <h2 className="text-title text-ink">{payment.status === 'succeeded' ? 'Receipt' : 'Payment'}</h2>
+          <h2 className="text-title text-ink">{title ?? (payment.status === 'succeeded' ? 'Receipt' : 'Payment')}</h2>
           <StatusBadge variant={status.variant}>{status.label}</StatusBadge>
         </div>
         <p className="text-figure text-ink">{payment.amount}</p>
         <p className="text-body text-ink-muted">To {payment.companyName}</p>
         {payment.paidAt && <p className="text-label text-ink-muted tabular-nums">Paid {payment.paidAt} UTC</p>}
         {payment.refunded && <p className="text-label text-ink-muted">Refunded {payment.refunded}</p>}
+        {receiptHref && ['succeeded', 'partially_refunded', 'refunded'].includes(payment.status) && (
+          <a href={receiptHref} className="inline-block text-label text-royal underline underline-offset-4">View receipt</a>
+        )}
         {payment.failureReason && ['failed', 'canceled'].includes(payment.status) && (
           <p className="text-label text-ink-muted">{payment.failureReason}</p>
         )}

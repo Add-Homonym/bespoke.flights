@@ -58,6 +58,8 @@ export const aircraftSchema = z.object({
   year: z.number().int().optional(),
 });
 
+
+
 export const operatorSettingsSchema = z.object({
   contact_method: z.enum(['email', 'text', 'both']).optional(),
   contact_email: z.union([z.string().email().max(254), z.literal('')]).optional().nullable(),
@@ -70,6 +72,14 @@ export const operatorSettingsSchema = z.object({
   transoceanic: z.number().int().min(0).max(1).optional(),
   certificate: z.string().max(80).optional().nullable(),
   notes: z.string().max(2000).optional().nullable(),
+  cancellation_policy: z.object({
+    full_refund_hours: z.number().int().min(0).max(24 * 365),
+    partial_refund_hours: z.number().int().min(0).max(24 * 365),
+    partial_refund_bps: z.number().int().min(0).max(10_000),
+  }).refine(p => p.partial_refund_hours <= p.full_refund_hours, {
+    message: 'The partial refund window must end before the full refund window',
+    path: ['partial_refund_hours'],
+  }).optional().nullable(),
 }).strict();
 
 export const discoveryPatchSchema = z.object({

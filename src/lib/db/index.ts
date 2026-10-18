@@ -16,7 +16,7 @@ import path from 'path';
 import { types as pgTypes, Pool, type PoolClient } from 'pg';
 import { attachDatabasePool } from '@vercel/functions';
 import type { PGlite, Transaction as PGliteTransaction } from '@electric-sql/pglite';
-import { SCHEMA } from './schema';
+import { SCHEMA, SCHEMA_BLOCKS } from './schema';
 
 export interface Db {
   /** All rows. */
@@ -148,6 +148,9 @@ export async function migrate(db: Db): Promise<void> {
     await tx.query('SELECT pg_advisory_xact_lock(727274)');
     for (const statement of SCHEMA.split(';').map(s => s.trim()).filter(Boolean)) {
       await tx.run(statement);
+    }
+    for (const block of SCHEMA_BLOCKS) {
+      await tx.run(block);
     }
   });
 }
