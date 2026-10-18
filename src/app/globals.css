@@ -298,6 +298,52 @@ body:has([data-action-bar]) #site-footer { padding-bottom: calc(96px + env(safe-
 .quote-fill { width: 100%; animation: quote-fill 3s ease-out infinite both; }
 .quote-best { animation: quote-best 3s ease-out infinite both; }
 
+/* Trip ticket: a printed airline ticket. Perforation between the main part
+   and the stub, with half-circle notches cut in the page colour. */
+.ticket {
+  background-image:
+    repeating-linear-gradient(135deg, transparent 0 22px, color-mix(in srgb, var(--brass) 5%, transparent) 22px 23px);
+  background-color: var(--surface-raised);
+}
+.ticket-perf { position: relative; }
+.ticket-perf::before, .ticket-perf::after {
+  content: ""; position: absolute; width: 22px; height: 22px; border-radius: 9999px;
+  background: var(--surface); border: 1px solid var(--hairline);
+}
+/* Stacked (mobile): perforation is horizontal, notches on the left and right edges. */
+.ticket-perf { border-top: 2px dashed var(--hairline); }
+.ticket-perf::before { top: -12px; left: -12px; clip-path: inset(0 0 0 50%); }
+.ticket-perf::after { top: -12px; right: -12px; clip-path: inset(0 50% 0 0); }
+@media (min-width: 640px) {
+  .ticket-perf { border-top: 0; border-left: 2px dashed var(--hairline); }
+  .ticket-perf::before { top: -12px; left: -12px; clip-path: inset(50% 0 0 0); }
+  .ticket-perf::after { top: auto; bottom: -12px; right: auto; left: -12px; clip-path: inset(0 0 50% 0); }
+}
+.ticket-barcode {
+  background: repeating-linear-gradient(90deg,
+    var(--ink) 0 2px, transparent 2px 4px, var(--ink) 4px 5px, transparent 5px 8px,
+    var(--ink) 8px 11px, transparent 11px 12px, var(--ink) 12px 13px, transparent 13px 16px);
+  opacity: 0.85;
+}
+/* Fields filled in later (operator, aircraft, fare): a sweep of light over a placeholder bar. */
+@keyframes ticket-sweep {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.ticket-pending {
+  display: inline-block; height: 0.9em; border-radius: 3px; vertical-align: middle;
+  background: linear-gradient(90deg, var(--surface-sunken) 0%, color-mix(in srgb, var(--royal) 22%, var(--surface-sunken)) 50%, var(--surface-sunken) 100%);
+  background-size: 200% 100%;
+  animation: ticket-sweep 2.4s linear infinite;
+}
+@keyframes ticket-dots { 0%, 20% { opacity: 0.2; } 50% { opacity: 1; } 100% { opacity: 0.2; } }
+.ticket-dots span { animation: ticket-dots 1.4s infinite both; }
+.ticket-dots span:nth-child(2) { animation-delay: 0.2s; }
+.ticket-dots span:nth-child(3) { animation-delay: 0.4s; }
+/* Auto-request countdown bar. */
+@keyframes countdown { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+.countdown-bar { transform-origin: left; animation: countdown var(--countdown, 5s) linear forwards; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

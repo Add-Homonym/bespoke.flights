@@ -35,7 +35,7 @@ export class ChangeError extends Error {
 
 export const proposeChangeSchema = z.object({
   legs: z.array(legSchema).min(1).max(10),
-  passengerCount: z.number().int().min(1).max(19),
+  passengerCount: z.number().int().min(1).max(999),
   notes: z.string().max(2000).optional(),
 });
 export type ProposeChangeInput = z.infer<typeof proposeChangeSchema>;

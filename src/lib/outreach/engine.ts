@@ -185,7 +185,7 @@ export function generateRFQ(
 REQUEST #${requestId}
 ROUTE: ${route}
 DATES: ${dateRange}
-PASSENGERS: ${passengerCount}
+PASSENGERS: ${passengerCount}${passengerCount > 19 ? ' (may need more than one aircraft)' : ''}
 ${notes ? `NOTES: ${notes}` : ''}
 
 ITINERARY:

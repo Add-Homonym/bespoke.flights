@@ -28,7 +28,7 @@ export const legSchema = z.object({
 });
 
 export const bookingRequestSchema = z.object({
-  passengerCount: z.number().int().min(1).max(19),
+  passengerCount: z.number().int().min(1).max(999),
   notes: z.string().optional(),
   legs: z.array(legSchema).min(1).max(10),
 });

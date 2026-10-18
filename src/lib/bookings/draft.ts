@@ -55,7 +55,7 @@ export function parseDraft(raw: string | undefined | null): BookingDraft | null 
       : [];
     const pax = Number(data.passengerCount);
     return {
-      passengerCount: Number.isInteger(pax) && pax >= 1 && pax <= 19 ? pax : 1,
+      passengerCount: Number.isInteger(pax) && pax >= 1 && pax <= 999 ? pax : 1,
       tags: normalizeTags(data.tags),
       // Drafts saved before custom chips kept one free-text `notes` field.
       custom: Array.isArray(data.custom) ? normalizeCustom(data.custom) : normalizeCustom([str(data.notes, MAX_CUSTOM_REQUEST_CHARS)]),

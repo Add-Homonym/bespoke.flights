@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { X } from 'lucide-react';
+import { Send, X } from 'lucide-react';
 import { Notice } from '@/components/ui/notice';
 import { Button } from '@/components/ui/button';
 import { AccountStep } from '@/components/booking/account-step';
@@ -11,7 +11,7 @@ import { NextSteps } from '@/components/booking/next-steps';
 import { GuestsField, RequestsField } from '@/components/booking/trip-extras';
 import { combineRequests, type RequestTagId } from '@/lib/bookings/request-tags';
 import { formatLandUnits, formatNm, tripDistance } from '@/lib/distance';
-import { TripDetails } from '@/components/booking/trip-details';
+import { TripTicket } from '@/components/booking/trip-ticket';
 import { fromDraftLegs } from '@/lib/trip-format';
 import { bookingRequestSchema } from '@/lib/validations';
 import {
@@ -43,6 +43,9 @@ function rechain(states: LegState[]): LegState[] {
       : { ...s, leg: { ...s.leg, originCode: states[i - 1].leg.destCode } });
 }
 
+/** Pause between the route being set (or any later change) and the request going out. */
+const AUTO_SEND_MS = 5000;
+
 export function MultiLegForm({
   initialDraft,
   viewerRole,
@@ -66,7 +69,6 @@ export function MultiLegForm({
   const [tags, setTags] = useState<RequestTagId[]>(start.tags);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [needsAccount, setNeedsAccount] = useState(false);
   const [restored, setRestored] = useState(initialDraft !== null && draftHasContent(initialDraft));
 
   // Remember the itinerary in a cookie on every change, so a reload or a later
@@ -82,7 +84,7 @@ export function MultiLegForm({
     setPassengerCount(fresh.passengerCount);
     setCustom(fresh.custom);
     setTags(fresh.tags);
-    setNeedsAccount(false);
+    setHold(false);
     setError('');
     setRestored(false);
   };
@@ -139,28 +141,23 @@ export function MultiLegForm({
     setRemoved(null);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
+  const payload = draftToRequest({ legs, passengerCount, tags, custom });
+  /** Every leg complete and closed: the trip can go to operators. */
+  const ready = legStates.every(st => !st.editing && legIsComplete(st.leg)) && bookingRequestSchema.safeParse(payload).success;
+  /** Changes to any detail restart the countdown. */
+  const signature = JSON.stringify(payload);
+  // A restored draft waits for the traveler instead of sending on page load.
+  const [hold, setHold] = useState(restored);
+  const submitted = useRef(false);
 
-    const payload = draftToRequest({ legs, passengerCount, tags, custom });
-    if (!bookingRequestSchema.safeParse(payload).success || !legs.every(legIsComplete)) {
+  const submitRequest = async () => {
+    if (submitted.current) return;
+    setError('');
+    if (!ready) {
       setError('Choose an origin, destination and date for every leg.');
       return;
     }
-
-    if (viewerRole === null) {
-      // Not signed in: collect an account next. The draft cookie carries the
-      // itinerary; the server submits it once the account exists.
-      setNeedsAccount(true);
-      window.scrollTo({ top: 0 }); // the account step starts with the trip summary
-      return;
-    }
-    if (viewerRole !== 'customer') {
-      setError('You are signed in as an operator or admin. Sign in with a traveler account to request quotes.');
-      return;
-    }
-
+    submitted.current = true;
     setLoading(true);
     try {
       const res = await fetch('/api/booking-requests', {
@@ -168,36 +165,43 @@ export function MultiLegForm({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-
       if (!res.ok) {
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         setError(typeof data.error === 'string' ? data.error : 'Fill in all required fields.');
+        submitted.current = false;
+        setHold(true);
         return;
       }
-
       const { id } = await res.json();
       router.push(`/requests/${id}?submitted=1`);
       router.refresh();
     } catch {
       setError('Something went wrong. Try again.');
+      submitted.current = false;
+      setHold(true);
     } finally {
       setLoading(false);
     }
   };
 
-  if (needsAccount) {
-    return (
-      <AccountStep
-        legs={fromDraftLegs(legs)}
-        passengerCount={passengerCount}
-        notes={combineRequests(tags, custom)}
-        onBack={() => setNeedsAccount(false)}
-      />
-    );
-  }
+  // Signed-in travelers: once the route is set, quotes are requested
+  // automatically after a short pause. Any change restarts the pause.
+  const autoSend = viewerRole === 'customer' && ready && !hold && !loading;
+  useEffect(() => {
+    if (!autoSend) return;
+    const t = setTimeout(() => { void submitRequest(); }, AUTO_SEND_MS);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- signature captures every input
+  }, [autoSend, signature]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (viewerRole === 'customer') void submitRequest();
+  };
 
   return (
-    <form id="booking-form" onSubmit={handleSubmit} className="space-y-8 pb-4">
+    <div id="booking" className="space-y-8 pb-4">
+    <form id="booking-form" onSubmit={handleSubmit} className="space-y-8">
       {restored && (
         <div id="restored-draft-notice" role="status" className="flex items-center justify-between gap-3 rounded-md border border-hairline bg-surface-sunken px-4 py-3 text-body">
           <span className="text-ink">Your unfinished trip is restored.</span>
@@ -286,25 +290,52 @@ export function MultiLegForm({
         </div>
       </section>
 
-      {/* Trip summary: every detail entered so far */}
+      {/* The trip as a ticket: every detail entered so far */}
       {draftHasContent({ legs, passengerCount, tags, custom }) && (
-        <div id="trip-summary" className="rounded-lg border border-hairline bg-surface-raised px-6 py-4 shadow-raised">
-          <TripDetails title="Trip summary" legs={fromDraftLegs(legs)} passengerCount={passengerCount} notes={combineRequests(tags, custom)} />
-        </div>
+        <TripTicket legs={fromDraftLegs(legs)} passengerCount={passengerCount} notes={combineRequests(tags, custom)} />
       )}
 
-      <div id="submit-section" className="space-y-3">
-        <Button id="request-quotes" type="submit" disabled={loading} block>
-          {loading ? 'Requesting quotes…' : viewerRole === null ? 'Continue to account' : 'Request quotes'}
-        </Button>
-        {viewerRole === null && (
-          <p className="text-center text-label text-ink-muted">
-            Next: create an account or sign in so operators can send you quotes.
-          </p>
+      <div id="submit-section" aria-live="polite">
+        {!ready ? null : viewerRole === 'customer' ? (
+          loading ? (
+            <p className="flex items-center justify-center gap-2 rounded-md border border-royal bg-surface-raised px-4 py-3 text-body text-ink">
+              <Send size={16} strokeWidth={1.5} aria-hidden="true" className="text-royal" /> Sending your trip to operators…
+            </p>
+          ) : hold ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-hairline bg-surface-raised px-4 py-3">
+              <span className="text-body text-ink-muted">Paused. Edit anything, then send.</span>
+              <Button id="request-quotes" type="submit" size="sm">Request quotes now</Button>
+            </div>
+          ) : (
+            <div id="auto-request" className="overflow-hidden rounded-md border border-royal bg-surface-raised">
+              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                <span className="inline-flex items-center gap-2 text-body text-ink">
+                  <Send size={16} strokeWidth={1.5} aria-hidden="true" className="text-royal" />
+                  Requesting quotes in a moment. Changes restart the timer.
+                </span>
+                <span className="flex items-center gap-1">
+                  <Button type="button" variant="quiet" size="sm" onClick={() => setHold(true)}>Wait</Button>
+                  <Button id="request-quotes" type="submit" size="sm">Send now</Button>
+                </span>
+              </div>
+              <div aria-hidden="true" className="h-1 bg-surface-sunken">
+                <div key={signature} className="countdown-bar h-full bg-royal" style={{ ['--countdown' as string]: `${AUTO_SEND_MS}ms` }} />
+              </div>
+            </div>
+          )
+        ) : viewerRole === null ? null : (
+          <Notice tone="warning">You are signed in as an operator or admin. Sign in with a traveler account to request quotes.</Notice>
         )}
       </div>
 
-      <NextSteps routeReady={legs.every(legIsComplete)} />
     </form>
+
+    {/* Visitors: the account form appears as soon as the route is set (its own form, so outside the booking form). */}
+    {ready && viewerRole === null && (
+      <AccountStep inline legs={fromDraftLegs(legs)} passengerCount={passengerCount} notes={combineRequests(tags, custom)} />
+    )}
+
+    <NextSteps routeReady={legs.every(legIsComplete)} />
+    </div>
   );
 }

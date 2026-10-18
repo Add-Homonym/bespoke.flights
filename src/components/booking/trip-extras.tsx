@@ -4,7 +4,10 @@ import { useId, useRef, useState } from 'react';
 import { Check, Minus, Pencil, Plus, X } from 'lucide-react';
 import { MAX_CUSTOM_REQUEST_CHARS, MAX_CUSTOM_REQUESTS, REQUEST_TAGS, normalizeCustom, type RequestTagId } from '@/lib/bookings/request-tags';
 
-export const MAX_GUESTS = 19;
+/** Sanity bound only; large groups are split across aircraft by the operator. */
+export const MAX_GUESTS = 999;
+/** Above this, one business jet is unlikely to carry the group. */
+export const ONE_AIRCRAFT_GUESTS = 19;
 
 const stepButton =
   'relative flex size-11 shrink-0 items-center justify-center rounded-pill border border-border-control text-ink ' +
@@ -24,12 +27,13 @@ export function GuestsField({ value, onChange }: { value: number; onChange: (n: 
             type="number"
             inputMode="numeric"
             min={1}
-            max={MAX_GUESTS}
             value={value}
             onChange={e => onChange(clamp(Number(e.target.value)))}
             className="block w-full bg-transparent text-title text-ink tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           />
-          <p className="min-h-[18px] text-[13px] leading-[18px] text-ink-muted">Up to {MAX_GUESTS} on one request</p>
+          <p className="min-h-[18px] text-[13px] leading-[18px] text-ink-muted">
+            {value > ONE_AIRCRAFT_GUESTS ? 'Operators can split a large group across aircraft.' : ''}
+          </p>
         </div>
         <button type="button" className={stepButton} aria-label="Remove a passenger" onClick={() => onChange(clamp(value - 1))} disabled={value <= 1}>
           <Minus size={20} strokeWidth={1.5} aria-hidden="true" />

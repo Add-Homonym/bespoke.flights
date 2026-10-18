@@ -39,7 +39,7 @@ describe('booking draft cookie', () => {
 
   it('sanitizes tampered values', () => {
     const tampered = encodeURIComponent(JSON.stringify({
-      passengerCount: 500,
+      passengerCount: 5000,
       custom: [...Array.from({ length: 20 }, (_, i) => `req ${i} ` + 'x'.repeat(500)), 7, null],
       legs: Array.from({ length: 50 }, () => ({ originCode: 'klaxxx', destCode: 7, departureDate: 'tomorrow', departureTime: '9am' })),
     }));
