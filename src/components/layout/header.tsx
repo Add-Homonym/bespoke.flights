@@ -27,7 +27,7 @@ const links = {
     OPERATORS_LINK,
   ],
   operator: [
-    { href: '/operator/board', label: 'Board' },
+    { href: '/operator/dashboard', label: 'Dashboard' },
     { href: '/operator/inbound', label: 'Inbound' },
     { href: '/operator/requests', label: 'All demand' },
     { href: '/operator/quotes', label: 'My quotes' },

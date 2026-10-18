@@ -83,7 +83,7 @@ export default function OperatorSettingsPage() {
         {message && <StatusBadge variant="confirmed">{message}</StatusBadge>}
       </div>
 
-      <PayoutSettings />
+      <div id="payouts" className="scroll-mt-6"><PayoutSettings /></div>
 
       {/* Contact Method */}
       <Card className="mb-6">

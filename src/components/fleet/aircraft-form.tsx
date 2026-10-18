@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Notice } from '@/components/ui/notice';
 import { RegistrySummary } from '@/components/fleet/registry-summary';
-import type { RegistryRecord } from '@/lib/faa/registry';
+import { suggestedType, type RegistryRecord } from '@/lib/faa/registry';
 import type { AircraftView } from '@/lib/fleet';
 
 export interface AircraftValues {
@@ -30,6 +30,15 @@ export const valuesFrom = (a?: AircraftView): AircraftValues => ({
   manufacturer: a?.manufacturer ?? '',
   model: a?.model ?? '',
 });
+
+const words = (s: string) => s.toUpperCase().split(/[^A-Z0-9]+/).filter(w => w.length > 1);
+
+/** The typed aircraft type shares no word with the registry's manufacturer or model. */
+export function registryMismatch(type: string, r: RegistryRecord): boolean {
+  if (r.status !== 'assigned' || !type.trim() || (!r.manufacturer && !r.model)) return false;
+  const reg = new Set(words(`${r.manufacturer ?? ''} ${r.model ?? ''}`));
+  return !words(type).some(w => reg.has(w));
+}
 
 const num = (s: string) => (s.trim() ? Number(s) : null);
 
@@ -137,6 +146,11 @@ export function AircraftForm({
           </Button>
         </div>
         {lookup.state === 'error' && <Notice tone="danger">{lookup.error}</Notice>}
+        {lookup.state === 'done' && lookup.record && registryMismatch(v.type, lookup.record) && (
+          <Notice tone="warning">
+            The registry lists {lookup.record.nNumber} as a {suggestedType(lookup.record)}, not a {v.type.trim()}. Check the tail number.
+          </Notice>
+        )}
         {lookup.state === 'done' && lookup.record && (
           <div className="rounded-md border border-hairline bg-surface-sunken p-4">
             <RegistrySummary record={lookup.record} />

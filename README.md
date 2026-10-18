@@ -60,7 +60,7 @@ There are three user roles — **customer**, **operator**, and **admin** — eac
    - **Calendar file** (`/trip/<token>/calendar`): one event per leg, at the requested local time, or all-day when no time was given.
    - **Turn off link** stops it working immediately; a new link can be created afterwards. Links also expire 30 days after the last leg.
    Only the operator whose quote was accepted can create, email or revoke links (`trip_shares` table).
-7. **Company board** at `/operator/board`. It is a live view of every charter that concerns the company. It refreshes every 15 seconds without a reload, pausing while the tab is hidden. It has four sections:
+7. **Dashboard** at `/operator/dashboard` (also `/operator`, the operator home after sign-in). Summary boxes link to each section: inbound requests (awaiting / quoted / missed, requests per week), all quotes (by status, win rate), business earned (payouts net of refunds, by month), team (staff on alerts, email/text channels), and aircraft (seats, cover photos, registrations to check). Below them is the **company board** (`/operator/board` redirects here). It is a live view of every charter that concerns the company. It refreshes every 15 seconds without a reload, pausing while the tab is hidden. It has four sections:
    - **Upcoming charters**: booked and paid, with legs, times, passengers, special requests, aircraft, price and lead passenger contact.
    - **New requests to quote**: matched to the company, with no quote yet.
    - **Quoted, awaiting client**.
@@ -73,7 +73,10 @@ There are three user roles — **customer**, **operator**, and **admin** — eac
 
    Alerts go out automatically when a payment completes, when a booking is cancelled (by the customer or a full refund) and when the matching engine sends the company an RFQ. Booking alerts include the private trip sheet link. Each person gets each alert once per channel: redelivered webhooks do not duplicate it, and failed sends are retried on the next trigger (`staff_notifications` table). **Send test** checks a person's setup.
    - **Staff board link**: a private, read-only `/board/<token>` URL of the company board for dispatch screens or staff without an account. It can be replaced or turned off at any time.
-9. **Manage fleet** at `/operator/fleet` — add aircraft with tail number, type, capacity, range, and year.
+9. **Manage fleet** at `/operator/fleet`:
+   - Add, edit and remove aircraft (tail number, type, seats, range, year, manufacturer, model, serial). An aircraft that is on a quote cannot be removed.
+   - **Photos:** up to 8 per aircraft. The browser resizes each to 1600 px (plus a 480 px thumbnail) before upload; bytes are stored in `aircraft_photos` and served from `/api/aircraft-photos/<id>` with immutable caching. The first photo is the cover.
+   - **FAA registry lookup** (US N-numbers): reads the public FAA Aircraft Inquiry page (`src/lib/faa/registry.ts`) and fills blank fields (serial, manufacturer, model, year). The stored record shows registration status and expiry, airworthiness, engines and registered owner, and warns when the registry's aircraft does not match the entered type. Accident and incident history is with the NTSB, not the FAA; the record links to the NTSB CAROL search (the NTSB API needs a developer key).
 10. **Set up payouts** at `/operator/settings` → Payouts. This opens Stripe Connect Express onboarding. Customers cannot pay for an operator's quotes until onboarding is complete.
 
 ## Admin Workflow
@@ -363,7 +366,8 @@ Fifteen tables in Postgres:
 |---|---|
 | `users` | App profile for every account (customer, operator, admin): role, phone, `auth_id` link to Neon Auth, `is_demo`. `password_hash` is used only by the development sign-in. |
 | `operators` | Linked to a user. Company name, certificate, approval status, contact preferences, market/fleet/safety profile for matching. |
-| `aircraft` | Operator fleet inventory. Tail number, type, capacity, range, year. |
+| `aircraft` | Operator fleet inventory. Tail number, type, capacity, range, year, serial/manufacturer/model, last FAA registry record (`faa_record` JSON, `faa_checked_at`). |
+| `aircraft_photos` | Photos per aircraft: JPEG/PNG/WebP bytes and thumbnail (BYTEA), position (0 = cover), dimensions, caption. |
 | `booking_requests` | Customer trip requests. Status lifecycle: open → quoted → booked → completed (or cancelled). |
 | `booking_legs` | Individual flight legs within a request. Origin, destination, date, time. |
 | `quotes` | Operator price submissions. Linked to request + operator + optional aircraft. Status: pending → accepted/rejected/withdrawn. |
