@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Send, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { X } from 'lucide-react';
+import { AutoRequestBar, useAutoRequest } from '@/components/booking/auto-request';
 import { Notice } from '@/components/ui/notice';
 import { Button } from '@/components/ui/button';
 import { AccountStep } from '@/components/booking/account-step';
@@ -43,8 +43,9 @@ function rechain(states: LegState[]): LegState[] {
       : { ...s, leg: { ...s.leg, originCode: states[i - 1].leg.destCode } });
 }
 
-/** Pause between the route being set (or any later change) and the request going out. */
-const AUTO_SEND_MS = 5000;
+/** React keys for leg cards; unique for the page's lifetime. */
+let keySeq = 0;
+const newKey = () => keySeq++;
 
 export function MultiLegForm({
   initialDraft,
@@ -53,12 +54,10 @@ export function MultiLegForm({
   initialDraft: BookingDraft | null;
   viewerRole: 'customer' | 'operator' | 'admin' | null;
 }) {
-  const router = useRouter();
   const start = initialDraft ?? emptyDraft();
-  const nextKey = useRef(0);
   const toState = (leg: LegInput): LegState => {
     const complete = legIsComplete(leg);
-    return { key: nextKey.current++, leg, editing: !complete, saved: complete ? leg : null };
+    return { key: newKey(), leg, editing: !complete, saved: complete ? leg : null };
   };
   const [legStates, setLegStates] = useState<LegState[]>(() => start.legs.map(toState));
   const [removed, setRemoved] = useState<{ index: number; state: LegState } | null>(null);
@@ -67,14 +66,13 @@ export function MultiLegForm({
   const [passengerCount, setPassengerCount] = useState(start.passengerCount);
   const [custom, setCustom] = useState<string[]>(start.custom);
   const [tags, setTags] = useState<RequestTagId[]>(start.tags);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [restored, setRestored] = useState(initialDraft !== null && draftHasContent(initialDraft));
 
   // Remember the itinerary in a cookie on every change, so a reload or a later
   // visit restores it and it survives the sign-up step.
   useEffect(() => {
-    writeDraftCookie({ legs, passengerCount, tags, custom });
+    writeDraftCookie({ legs, passengerCount, tags, custom, variant: 'classic' });
   }, [legs, passengerCount, tags, custom]);
 
   const startOver = () => {
@@ -115,7 +113,7 @@ export function MultiLegForm({
       // A finished leg collapses to its summary as the next one opens.
       const settled = prev.map(s => (s.editing && legIsComplete(s.leg) ? { ...s, editing: false, saved: s.leg } : s));
       const last = settled[settled.length - 1].leg;
-      return [...settled, { key: nextKey.current++, leg: { ...emptyLeg(), originCode: last.destCode }, editing: true, saved: null }];
+      return [...settled, { key: newKey(), leg: { ...emptyLeg(), originCode: last.destCode }, editing: true, saved: null }];
     });
   };
 
@@ -123,7 +121,7 @@ export function MultiLegForm({
   const cancelLeg = (index: number) => {
     if (legStates.length <= 1) {
       setRemoved(null);
-      setLegStates([{ key: nextKey.current++, leg: emptyLeg(), editing: true, saved: null }]);
+      setLegStates([{ key: newKey(), leg: emptyLeg(), editing: true, saved: null }]);
       return;
     }
     setRemoved({ index, state: legStates[index] });
@@ -141,62 +139,15 @@ export function MultiLegForm({
     setRemoved(null);
   };
 
-  const payload = draftToRequest({ legs, passengerCount, tags, custom });
+  const payload = draftToRequest({ legs, passengerCount, tags, custom, variant: 'classic' });
   /** Every leg complete and closed: the trip can go to operators. */
   const ready = legStates.every(st => !st.editing && legIsComplete(st.leg)) && bookingRequestSchema.safeParse(payload).success;
-  /** Changes to any detail restart the countdown. */
-  const signature = JSON.stringify(payload);
-  // A restored draft waits for the traveler instead of sending on page load.
-  const [hold, setHold] = useState(restored);
-  const submitted = useRef(false);
-
-  const submitRequest = async () => {
-    if (submitted.current) return;
-    setError('');
-    if (!ready) {
-      setError('Choose an origin, destination and date for every leg.');
-      return;
-    }
-    submitted.current = true;
-    setLoading(true);
-    try {
-      const res = await fetch('/api/booking-requests', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setError(typeof data.error === 'string' ? data.error : 'Fill in all required fields.');
-        submitted.current = false;
-        setHold(true);
-        return;
-      }
-      const { id } = await res.json();
-      router.push(`/requests/${id}?submitted=1`);
-      router.refresh();
-    } catch {
-      setError('Something went wrong. Try again.');
-      submitted.current = false;
-      setHold(true);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Signed-in travelers: once the route is set, quotes are requested
-  // automatically after a short pause. Any change restarts the pause.
-  const autoSend = viewerRole === 'customer' && ready && !hold && !loading;
-  useEffect(() => {
-    if (!autoSend) return;
-    const t = setTimeout(() => { void submitRequest(); }, AUTO_SEND_MS);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- signature captures every input
-  }, [autoSend, signature]);
+  const auto = useAutoRequest({ payload, ready, viewerRole, startOnHold: restored });
+  const { setHold } = auto;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (viewerRole === 'customer') void submitRequest();
+    void auto.send();
   };
 
   return (
@@ -215,7 +166,7 @@ export function MultiLegForm({
         </div>
       )}
 
-      {error && <div id="booking-error"><Notice tone="danger">{error}</Notice></div>}
+      {(error || auto.error) && <div id="booking-error"><Notice tone="danger">{error || auto.error}</Notice></div>}
 
       {/* Flight legs */}
       <section id="route-section" aria-labelledby="legs-heading" className="space-y-4">
@@ -296,36 +247,7 @@ export function MultiLegForm({
       )}
 
       <div id="submit-section" aria-live="polite">
-        {!ready ? null : viewerRole === 'customer' ? (
-          loading ? (
-            <p className="flex items-center justify-center gap-2 rounded-md border border-royal bg-surface-raised px-4 py-3 text-body text-ink">
-              <Send size={16} strokeWidth={1.5} aria-hidden="true" className="text-royal" /> Sending your trip to operators…
-            </p>
-          ) : hold ? (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-hairline bg-surface-raised px-4 py-3">
-              <span className="text-body text-ink-muted">Paused. Edit anything, then send.</span>
-              <Button id="request-quotes" type="submit" size="sm">Request quotes now</Button>
-            </div>
-          ) : (
-            <div id="auto-request" className="overflow-hidden rounded-md border border-royal bg-surface-raised">
-              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                <span className="inline-flex items-center gap-2 text-body text-ink">
-                  <Send size={16} strokeWidth={1.5} aria-hidden="true" className="text-royal" />
-                  Requesting quotes in a moment. Changes restart the timer.
-                </span>
-                <span className="flex items-center gap-1">
-                  <Button type="button" variant="quiet" size="sm" onClick={() => setHold(true)}>Wait</Button>
-                  <Button id="request-quotes" type="submit" size="sm">Send now</Button>
-                </span>
-              </div>
-              <div aria-hidden="true" className="h-1 bg-surface-sunken">
-                <div key={signature} className="countdown-bar h-full bg-royal" style={{ ['--countdown' as string]: `${AUTO_SEND_MS}ms` }} />
-              </div>
-            </div>
-          )
-        ) : viewerRole === null ? null : (
-          <Notice tone="warning">You are signed in as an operator or admin. Sign in with a traveler account to request quotes.</Notice>
-        )}
+        <AutoRequestBar state={auto} ready={ready} viewerRole={viewerRole} />
       </div>
 
     </form>

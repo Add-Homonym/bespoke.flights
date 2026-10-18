@@ -31,6 +31,8 @@ export const bookingRequestSchema = z.object({
   passengerCount: z.number().int().min(1).max(999),
   notes: z.string().optional(),
   legs: z.array(legSchema).min(1).max(10),
+  /** Booking form the request came from, for comparing the two designs. */
+  formVariant: z.enum(['ticket', 'classic']).optional(),
 });
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;

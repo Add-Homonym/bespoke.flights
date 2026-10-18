@@ -103,3 +103,18 @@ describe('booking draft cookie', () => {
     expect(combineRequests([], ['Champagne.', 'Late arrival;'])).toBe('Champagne; Late arrival');
   });
 });
+
+describe('form variant', () => {
+  it('round-trips through the cookie and into the request', () => {
+    const d = { ...trip, variant: 'ticket' as const };
+    const back = parseDraft(serializeDraft(d))!;
+    expect(back.variant).toBe('ticket');
+    const req = bookingRequestSchema.safeParse(draftToRequest(back));
+    expect(req.success && req.data.formVariant).toBe('ticket');
+  });
+
+  it('drops an unknown variant', () => {
+    const raw = encodeURIComponent(JSON.stringify({ ...trip, variant: 'evil' }));
+    expect(parseDraft(raw)!.variant).toBeUndefined();
+  });
+});

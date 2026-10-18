@@ -347,6 +347,9 @@ CREATE TABLE IF NOT EXISTS aircraft_photos (
 );
 CREATE INDEX IF NOT EXISTS idx_aircraft_photos_aircraft ON aircraft_photos(aircraft_id, position);
 
+-- Which booking form produced the request ('ticket' or 'classic'), to compare them.
+ALTER TABLE booking_requests ADD COLUMN IF NOT EXISTS form_variant TEXT;
+
 -- Operator pricing defaults per aircraft, for the quote worksheet. Private to the operator.
 ALTER TABLE aircraft ADD COLUMN IF NOT EXISTS hourly_rate_cents BIGINT;
 ALTER TABLE aircraft ADD COLUMN IF NOT EXISTS cruise_ktas INTEGER;

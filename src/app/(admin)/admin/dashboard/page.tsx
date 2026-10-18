@@ -20,6 +20,12 @@ export default async function AdminDashboardPage() {
   const discoveredNoEmail = (await db.one<{ count: number }>("SELECT COUNT(*) as count FROM discovered_operators WHERE status = 'no_email'"))!.count;
   const discoveredEmailed = (await db.one<{ count: number }>("SELECT COUNT(*) as count FROM discovered_operators WHERE status = 'emailed'"))!.count;
 
+  // Booking form comparison: requests and bookings per form design.
+  const variants = await db.query<{ variant: string; requests: number; booked: number }>(`
+    SELECT COALESCE(form_variant, 'unrecorded') AS variant, COUNT(*)::int AS requests,
+      COUNT(*) FILTER (WHERE status IN ('booked','completed'))::int AS booked
+    FROM booking_requests GROUP BY 1 ORDER BY 1`);
+
   return (
     <div>
       <h1 className="font-display text-3xl text-ink mb-2">Admin Dashboard</h1>
@@ -45,6 +51,34 @@ export default async function AdminDashboardPage() {
           </Link>
         ))}
       </div>
+
+      <h2 className="font-display text-xl text-ink mb-4">Booking form comparison</h2>
+      <Card className="mb-12">
+        {variants.length === 0 ? (
+          <p className="text-body text-ink-muted">No requests yet.</p>
+        ) : (
+          <table id="form-variants" className="w-full text-left text-body">
+            <thead>
+              <tr className="text-overline text-ink-muted">
+                <th className="pb-2 font-semibold">Form</th>
+                <th className="pb-2 text-right font-semibold">Requests</th>
+                <th className="pb-2 text-right font-semibold">Booked</th>
+                <th className="pb-2 text-right font-semibold">Booking rate</th>
+              </tr>
+            </thead>
+            <tbody>
+              {variants.map(v => (
+                <tr key={v.variant} className="border-t border-hairline">
+                  <td className="py-2 text-ink">{v.variant === 'ticket' ? 'Ticket (/book)' : v.variant === 'classic' ? 'Classic (/book/classic)' : 'Before tracking'}</td>
+                  <td className="py-2 text-right tabular-nums">{v.requests}</td>
+                  <td className="py-2 text-right tabular-nums">{v.booked}</td>
+                  <td className="py-2 text-right tabular-nums">{v.requests ? `${Math.round((v.booked / v.requests) * 100)}%` : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Card>
 
       {/* Discovery Pipeline */}
       <h2 className="font-display text-xl text-ink mb-4">Operator Discovery Pipeline</h2>

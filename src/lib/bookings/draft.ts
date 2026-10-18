@@ -29,7 +29,11 @@ export interface BookingDraft {
   /** Special requests the traveler wrote, one per chip. */
   custom: string[];
   legs: DraftLeg[];
+  /** Booking form in use when the draft was saved. */
+  variant?: FormVariant;
 }
+
+export type FormVariant = 'ticket' | 'classic';
 
 export const emptyLeg = (): DraftLeg => ({ originCode: '', destCode: '', departureDate: '', departureTime: '' });
 export const emptyDraft = (): BookingDraft => ({ passengerCount: 1, tags: [], custom: [], legs: [emptyLeg()] });
@@ -60,6 +64,7 @@ export function parseDraft(raw: string | undefined | null): BookingDraft | null 
       // Drafts saved before custom chips kept one free-text `notes` field.
       custom: Array.isArray(data.custom) ? normalizeCustom(data.custom) : normalizeCustom([str(data.notes, MAX_CUSTOM_REQUEST_CHARS)]),
       legs: legs.length > 0 ? legs : [emptyLeg()],
+      ...(data.variant === 'ticket' || data.variant === 'classic' ? { variant: data.variant } : {}),
     };
   } catch {
     return null;
@@ -75,6 +80,7 @@ export function serializeDraft(draft: BookingDraft): string {
     tags: draft.tags,
     custom,
     legs: draft.legs.slice(0, MAX_LEGS),
+    variant: draft.variant,
   }));
   // Non-ASCII text expands up to 9x when encoded; shorten the longest custom
   // request rather than lose the whole itinerary.
@@ -105,6 +111,7 @@ export function draftToRequest(draft: BookingDraft) {
       departureDate: l.departureDate,
       departureTime: l.departureTime || undefined,
     })),
+    formVariant: draft.variant,
   };
 }
 

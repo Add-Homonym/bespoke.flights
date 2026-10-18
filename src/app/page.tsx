@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
 import { Footer, Header } from '@/components/layout/header';
-import { MultiLegForm } from '@/components/booking/multi-leg-form';
+import { TicketBookingForm } from '@/components/booking/ticket-booking-form';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { DRAFT_COOKIE, parseDraft } from '@/lib/bookings/draft';
@@ -30,7 +30,7 @@ export default async function HomePage() {
         </section>
 
         <section id="plan-trip" aria-label="Plan your trip" className="mx-auto max-w-2xl px-4 pt-8 pb-[var(--space-7)] sm:px-6">
-          <MultiLegForm initialDraft={draft} viewerRole={session?.role ?? null} />
+          <TicketBookingForm initialDraft={draft} viewerRole={session?.role ?? null} />
         </section>
       </main>
 
