@@ -4,6 +4,7 @@ import { getDb } from '@/lib/db';
 import { operatorSettingsSchema } from '@/lib/validations';
 import { parsePolicy } from '@/lib/bookings/cancellation';
 import { draftQuote, parseAutopilot } from '@/lib/quotes/autopilot';
+import { loadLearned } from '@/lib/quotes/learning';
 import type { Operator } from '@/lib/types';
 
 function present(operator: Operator & { cancellation_policy?: string | null }) {
@@ -31,6 +32,7 @@ export async function GET() {
 
   return NextResponse.json({
     ...present(operator),
+    autopilot_learned: await loadLearned(db, operator.id),
     user_email: user.email,
     user_phone: user.phone,
   });
@@ -111,5 +113,5 @@ export async function PATCH(req: Request) {
   }
 
   const updated = (await db.one<Operator>('SELECT * FROM operators WHERE id = ?', [operator.id]))!;
-  return NextResponse.json(present(updated));
+  return NextResponse.json({ ...present(updated), autopilot_learned: await loadLearned(db, operator.id) });
 }

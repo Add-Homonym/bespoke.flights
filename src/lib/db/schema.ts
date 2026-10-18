@@ -370,6 +370,18 @@ CREATE TABLE IF NOT EXISTS quote_drafts (
   UNIQUE(request_id, operator_id)
 );
 
+-- What Autopilot applied from earlier quotes, shown to the reviewer.
+ALTER TABLE quote_drafts ADD COLUMN IF NOT EXISTS notes TEXT;
+
+-- Autopilot learning: weighted averages of how each operator actually prices
+-- (src/lib/quotes/learning.ts). Updated on every submitted or revised quote.
+CREATE TABLE IF NOT EXISTS autopilot_learning (
+  operator_id  INTEGER PRIMARY KEY REFERENCES operators(id),
+  data         TEXT NOT NULL,
+  samples      INTEGER NOT NULL DEFAULT 0,
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Which booking form produced the request ('ticket' or 'classic'), to compare them.
 ALTER TABLE booking_requests ADD COLUMN IF NOT EXISTS form_variant TEXT;
 

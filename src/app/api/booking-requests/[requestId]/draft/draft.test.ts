@@ -64,3 +64,28 @@ describe('Autopilot draft routes', () => {
     expect((await draft.GET(new Request('http://x'), ctx())).status).toBe(404);
   });
 });
+
+describe('learning from review', () => {
+  it('redrafts other open drafts with what was just submitted', async () => {
+    await f.db.run('DELETE FROM autopilot_learning');
+    await f.db.run('UPDATE operators SET autopilot = ? WHERE id = ?', [JSON.stringify({ enabled: true, learn: true, marginPct: 5, fuelSurchargePct: 0, minDailyHours: 0, crewOvernight: 0, landingPerLeg: 0, cateringPerPaxLeg: 0, fetPct: 7.5, segmentFeePerPax: 0, validDays: 7 }), f.operatorA]);
+    const mk = async () => {
+      const id = (await f.db.one<{ id: number }>(`INSERT INTO booking_requests (customer_id, status, passenger_count) VALUES (?, 'open', 2) RETURNING id`, [f.customerId]))!.id;
+      await f.db.run(`INSERT INTO booking_legs (request_id, leg_order, origin_code, dest_code, departure_date) VALUES (?, 1, 'PHNL', 'PHOG', '2027-03-01')`, [id]);
+      return id;
+    };
+    const a = await mk(); const b = await mk();
+    await asOperator(f.operatorA);
+    const ctxFor = (id: number) => ({ params: Promise.resolve({ requestId: String(id) }) });
+    await draft.POST(new Request('http://x'), ctxFor(a));
+    await draft.POST(new Request('http://x'), ctxFor(b));
+    const da = await (await draft.GET(new Request('http://x'), ctxFor(a))).json();
+    expect(da.worksheet.marginPct).toBe(5);
+    // Staffer submits request a with a 20% margin.
+    await quotes.POST(new Request('http://x', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ priceCents: 500_000, worksheet: { ...da.worksheet, marginPct: 20 } }) }), ctxFor(a));
+    const db2 = await (await draft.GET(new Request('http://x'), ctxFor(b))).json();
+    expect(db2.worksheet.marginPct).toBe(20);
+    expect(db2.notes.join(' ')).toMatch(/margin 20%/);
+  });
+});

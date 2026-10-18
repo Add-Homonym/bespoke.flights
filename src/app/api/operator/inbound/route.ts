@@ -68,7 +68,8 @@ export async function GET() {
       legs: legs.get(item.request_id) ?? [],
       draft: d && !item.quote_id ? {
         id: d.id, aircraftId: d.aircraft_id, priceCents: Number(d.price_cents), message: d.message,
-        validUntil: d.valid_until, worksheet: JSON.parse(d.worksheet), flags: JSON.parse(d.flags), createdAt: d.created_at,
+        validUntil: d.valid_until, worksheet: JSON.parse(d.worksheet), flags: JSON.parse(d.flags),
+        notes: JSON.parse(d.notes ?? '[]'), createdAt: d.created_at,
       } : null,
     };
   });

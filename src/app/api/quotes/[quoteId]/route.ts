@@ -7,6 +7,8 @@ import { appBaseUrl } from '@/lib/payments/config';
 import { notifyNewQuote, notifyQuoteDeclined, notifyQuoteWithdrawn } from '@/lib/notify/traveler';
 import { quoteSchema } from '@/lib/validations';
 import { saveWorksheet } from '@/lib/quotes/worksheet-store';
+import { learnFromQuote } from '@/lib/quotes/learning';
+import { refreshDrafts } from '@/lib/quotes/autopilot';
 import type { Quote, BookingRequest, Operator } from '@/lib/types';
 
 /**
@@ -63,7 +65,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ quoteI
     return NextResponse.json({ error: `This request is ${request.status}` }, { status: 409 });
   }
   const { priceCents, message, validUntil, aircraftId, worksheet } = parsed.data;
-  if (worksheet) await saveWorksheet(db, quote.id, operator.id, worksheet);
+  if (worksheet) {
+    await saveWorksheet(db, quote.id, operator.id, worksheet);
+    await learnFromQuote(db, operator.id, { ...worksheet, aircraftId: worksheet.aircraftId ?? aircraftId ?? quote.aircraft_id }, priceCents ?? quote.price_cents);
+    await refreshDrafts(db, operator.id).catch(err => console.error('Autopilot redraft failed:', err));
+  }
   // Saving only the private worksheet is not a revision the traveler hears about.
   if (Object.keys(parsed.data).every(k => k === 'worksheet')) {
     return NextResponse.json((await db.one<Quote>('SELECT * FROM quotes WHERE id = ?', [quote.id]))!);

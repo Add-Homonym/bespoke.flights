@@ -14,12 +14,15 @@ import type { Db } from '@/lib/db';
 import { legDistance } from '@/lib/distance';
 import { findAirport } from '@/lib/airports';
 import type { Aircraft, BookingLeg } from '@/lib/types';
+import { applyLearning, emptyLearned, loadLearned, type Learned } from './learning';
 import {
   computeWorksheet, DEFAULT_CRUISE_KTAS, DEFAULT_FET_PCT, estimateLegHours, nightsAway, type WorksheetInputs,
 } from './worksheet';
 
 export const autopilotSchema = z.object({
   enabled: z.boolean(),
+  /** Use what staff submit to adjust these parameters (learning.ts). */
+  learn: z.boolean().default(true),
   /** ICAO of the home base, for positioning legs. Blank: no positioning. */
   baseAirport: z.string().trim().toUpperCase().max(4).optional().nullable(),
   marginPct: z.number().min(0).max(100),
@@ -42,6 +45,7 @@ export type AutopilotSettings = z.infer<typeof autopilotSchema>;
 
 export const DEFAULT_AUTOPILOT: AutopilotSettings = {
   enabled: false,
+  learn: true,
   baseAirport: null,
   marginPct: 10,
   fuelSurchargePct: 0,
@@ -76,6 +80,8 @@ export interface AutopilotDraft {
   validUntil: string;
   /** Points for the reviewer: assumptions made and anything missing. */
   flags: string[];
+  /** What Autopilot applied from earlier quotes. */
+  notes: string[];
 }
 
 /** Smallest aircraft that seats the group and covers the longest leg; with a rate on file preferred. */
@@ -102,18 +108,30 @@ export function buildAutopilotDraft(input: {
   passengers: number;
   fleet: Plane[];
   settings: AutopilotSettings;
+  /** What Autopilot has learned from this operator's quotes. */
+  learned?: Learned;
   today?: string;
 }): AutopilotDraft {
-  const { legs, passengers, settings: s } = input;
+  const { legs, passengers } = input;
+  const applied = applyLearning(input.settings, input.learned ?? emptyLearned());
+  const s = applied.settings;
+  const notes = [...applied.notes];
   const today = input.today ?? new Date().toISOString().slice(0, 10);
   const longest = Math.max(0, ...legs.map(l => legDistance(l.origin_code, l.dest_code)?.nm ?? 0));
-  const { aircraft, flags } = pickAircraft(input.fleet, passengers, longest);
+  // Aircraft with no rate on file use the rate staff have quoted them at.
+  const fleet = input.fleet.map(a => (!a.hourly_rate_cents && applied.rates[a.id] ? { ...a, hourly_rate_cents: applied.rates[a.id]! * 100 } : a));
+  const { aircraft, flags } = pickAircraft(fleet, passengers, longest);
   const cruise = aircraft?.cruise_ktas || DEFAULT_CRUISE_KTAS;
+  if (aircraft && !input.fleet.find(a => a.id === aircraft.id)?.hourly_rate_cents && applied.rates[aircraft.id]) {
+    notes.push(`Hourly rate $${applied.rates[aircraft.id]!.toLocaleString('en-US')} for ${aircraft.tail_number}, from your earlier quotes.`);
+  }
+  const factor = aircraft ? applied.hoursFactor[aircraft.id] ?? 1 : 1;
+  if (factor !== 1) notes.push(`Leg times ${factor > 1 ? '+' : ''}${Math.round((factor - 1) * 100)}% vs the distance estimate, as in your earlier quotes.`);
 
   const legRows = legs.map(l => {
-    const hours = estimateLegHours(l.origin_code, l.dest_code, cruise);
-    if (hours === null) flags.push(`Distance unknown for ${l.origin_code}–${l.dest_code}; enter its flight time.`);
-    return { origin: l.origin_code, dest: l.dest_code, date: l.departure_date, hours: hours ?? 0 };
+    const est = estimateLegHours(l.origin_code, l.dest_code, cruise);
+    if (est === null) flags.push(`Distance unknown for ${l.origin_code}–${l.dest_code}; enter its flight time.`);
+    return { origin: l.origin_code, dest: l.dest_code, date: l.departure_date, hours: est === null ? 0 : Math.round(est * factor * 10) / 10 };
   });
 
   // Positioning: base to the first departure, and the last arrival back to base.
@@ -152,7 +170,12 @@ export function buildAutopilotDraft(input: {
     flags.push(`${worksheet.overnights} nights away with no crew overnight cost set.`);
   }
 
-  const { totalCents } = computeWorksheet(worksheet);
+  const worksheetTotal = computeWorksheet(worksheet).totalCents;
+  // Staff who regularly move the final price off the worksheet total teach that adjustment.
+  const totalCents = Math.round((worksheetTotal * applied.priceRatio) / 100) * 100;
+  if (applied.priceRatio !== 1 && worksheetTotal > 0) {
+    notes.push(`Price ${applied.priceRatio > 1 ? '+' : ''}${Math.round((applied.priceRatio - 1) * 100)}% on the worksheet total, as your staff usually adjust.`);
+  }
   const firstDate = legs.map(l => l.departure_date).sort()[0] ?? today;
   // Valid for validDays, but not past the day before departure, and never before today.
   const lastUseful = addDays(firstDate, -1);
@@ -163,7 +186,7 @@ export function buildAutopilotDraft(input: {
     ? s.message.replaceAll('{aircraft}', aircraft.type).replaceAll('{seats}', String(aircraft.capacity))
     : s.message || null;
 
-  return { aircraft, worksheet, priceCents: totalCents, message, validUntil, flags };
+  return { aircraft, worksheet, priceCents: totalCents, message, validUntil, flags, notes };
 }
 
 export interface QuoteDraftRow {
@@ -176,6 +199,7 @@ export interface QuoteDraftRow {
   valid_until: string | null;
   worksheet: string;
   flags: string;
+  notes: string | null;
   status: 'draft' | 'submitted' | 'discarded';
   created_at: string;
 }
@@ -200,18 +224,18 @@ export async function draftQuote(db: Db, requestId: number, operatorId: number, 
   const fleet = await db.query<Plane>(
     'SELECT id, type, tail_number, capacity, range_nm, hourly_rate_cents, cruise_ktas FROM aircraft WHERE operator_id = ?', [operatorId]);
 
-  const d = buildAutopilotDraft({ legs, passengers: request.passenger_count, fleet, settings });
+  const d = buildAutopilotDraft({ legs, passengers: request.passenger_count, fleet, settings, learned: await loadLearned(db, operatorId) });
   const row = await db.one<{ id: number }>(`
-    INSERT INTO quote_drafts (request_id, operator_id, aircraft_id, price_cents, message, valid_until, worksheet, flags, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft')
+    INSERT INTO quote_drafts (request_id, operator_id, aircraft_id, price_cents, message, valid_until, worksheet, flags, notes, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft')
     ON CONFLICT (request_id, operator_id) DO UPDATE SET
       aircraft_id = EXCLUDED.aircraft_id, price_cents = EXCLUDED.price_cents, message = EXCLUDED.message,
-      valid_until = EXCLUDED.valid_until, worksheet = EXCLUDED.worksheet, flags = EXCLUDED.flags,
+      valid_until = EXCLUDED.valid_until, worksheet = EXCLUDED.worksheet, flags = EXCLUDED.flags, notes = EXCLUDED.notes,
       status = 'draft', created_at = now()
     WHERE quote_drafts.status <> 'submitted' OR ?
     RETURNING id`,
     [requestId, operatorId, d.aircraft?.id ?? null, d.priceCents, d.message, d.validUntil,
-     JSON.stringify(d.worksheet), JSON.stringify(d.flags), !!opts.force]);
+     JSON.stringify(d.worksheet), JSON.stringify(d.flags), JSON.stringify(d.notes), !!opts.force]);
   return row?.id ?? null;
 }
 
@@ -228,8 +252,18 @@ export async function loadDraft(db: Db, requestId: number, operatorId: number) {
     validUntil: row.valid_until,
     worksheet: JSON.parse(row.worksheet) as WorksheetInputs,
     flags: JSON.parse(row.flags) as string[],
+    notes: JSON.parse(row.notes ?? '[]') as string[],
     createdAt: row.created_at,
   };
 }
 
 export type LoadedDraft = NonNullable<Awaited<ReturnType<typeof loadDraft>>>;
+
+/** Redraft the operator's open drafts, so what was just learned applies to them too. */
+export async function refreshDrafts(db: Db, operatorId: number): Promise<number> {
+  const open = await db.query<{ request_id: number }>(
+    "SELECT request_id FROM quote_drafts WHERE operator_id = ? AND status = 'draft'", [operatorId]);
+  let n = 0;
+  for (const d of open) if (await draftQuote(db, d.request_id, operatorId)) n++;
+  return n;
+}

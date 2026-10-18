@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Minus, Plus } from 'lucide-react';
 import { AirportField } from '@/components/ui/route-field';
 import type { AutopilotSettings } from '@/lib/quotes/autopilot';
+import type { Learned } from '@/lib/quotes/learning';
 
 type NumKey = 'marginPct' | 'fuelSurchargePct' | 'minDailyHours' | 'crewOvernight' | 'landingPerLeg' | 'cateringPerPaxLeg' | 'fetPct' | 'segmentFeePerPax' | 'validDays';
 
@@ -47,8 +48,10 @@ function Module({ label, children, className = '' }: { label: string; children: 
 }
 
 /** One instrument: LCD readout with knob buttons either side. */
-function Instrument({ id, label, unit, prefix, step, value, onChange }: {
+function Instrument({ id, label, unit, prefix, step, value, onChange, learned }: {
   id: string; label: string; unit: string; prefix?: string; step: number; value: number; onChange: (n: number) => void;
+  /** Value Autopilot has learned from submitted quotes, when learning is on. */
+  learned?: number | null;
 }) {
   const nudge = (d: number) => onChange(Math.max(0, Math.round((value + d) * 100) / 100));
   return (
@@ -68,7 +71,10 @@ function Instrument({ id, label, unit, prefix, step, value, onChange }: {
           <Plus size={14} strokeWidth={2} aria-hidden="true" />
         </button>
       </div>
-      <p aria-hidden="true" className="mt-1 text-right font-mono text-[10px] tracking-[0.14em] text-on-night-muted">{unit}</p>
+      <p className="mt-1 flex justify-between gap-2 font-mono text-[10px] tracking-[0.14em] text-on-night-muted">
+        <span className="text-[var(--annun-amber)]">{learned != null ? `LRN ${prefix ?? ''}${Math.round(learned * 100) / 100}` : ''}</span>
+        <span aria-hidden="true">{unit}</span>
+      </p>
     </Module>
   );
 }
@@ -93,10 +99,17 @@ export function AutopilotConsole() {
   const seen = useRef<Set<number> | null>(null);
   const [fresh, setFresh] = useState<Set<number>>(new Set());
   const [updated, setUpdated] = useState<string>('');
+  const [learned, setLearned] = useState<Learned | null>(null);
 
   useEffect(() => {
-    fetch('/api/operator/settings').then(r => r.json()).then(d => setValue(d.autopilot)).catch(() => setFault('SETTINGS UNAVAILABLE'));
+    fetch('/api/operator/settings').then(r => r.json()).then(d => { setValue(d.autopilot); setLearned(d.autopilot_learned); })
+      .catch(() => setFault('SETTINGS UNAVAILABLE'));
   }, []);
+
+  const resetLearning = async () => {
+    const res = await fetch('/api/operator/autopilot/learning', { method: 'DELETE' }).catch(() => null);
+    if (res?.ok) setLearned({ samples: 0, fields: {}, aircraft: {} });
+  };
 
   const poll = useCallback(async () => {
     const res = await fetch('/api/operator/inbound', { cache: 'no-store' }).catch(() => null);
@@ -125,7 +138,9 @@ export function AutopilotConsole() {
     }).catch(() => null);
     setSaving(false);
     if (!res?.ok) { setFault('SAVE FAILED · CHECK VALUES'); return; }
-    setValue((await res.json()).autopilot);
+    const body = await res.json();
+    setValue(body.autopilot);
+    setLearned(body.autopilot_learned);
     setDirty(false);
     void poll(); // engaging drafts waiting requests
   };
@@ -156,6 +171,11 @@ export function AutopilotConsole() {
           <span className="annunciator px-3 py-1.5 text-[11px]" data-lit={!engaged ? 'amber' : 'off'}>MANUAL</span>
           <span className="annunciator px-3 py-1.5 text-[11px]" data-lit={drafts ? 'green' : 'off'}>{drafts} DRAFT{drafts === 1 ? '' : 'S'}</span>
           <span className="annunciator px-3 py-1.5 text-[11px]" data-lit={dirty ? 'amber' : 'off'}>UNSAVED</span>
+          <button type="button" role="switch" aria-checked={value.learn} aria-label="Learn from submitted quotes" disabled={saving}
+            onClick={() => { const next = { ...value, learn: !value.learn }; setValue(next); void save(next); }}
+            className="annunciator min-h-11 px-3 text-[11px] cursor-pointer" data-lit={value.learn ? 'green' : 'off'}>
+            LEARN{value.learn && learned?.samples ? ` · ${learned.samples} QUOTE${learned.samples === 1 ? '' : 'S'}` : ''}
+          </button>
           {fault && <span className="annunciator px-3 py-1.5 text-[11px]" data-lit="amber" role="alert">{fault}</span>}
         </div>
         <p className="w-full font-mono text-[12px] leading-[18px] text-on-night-muted sm:ml-auto sm:w-auto sm:max-w-xs sm:text-right">
@@ -177,7 +197,8 @@ export function AutopilotConsole() {
             </Module>
             {INSTRUMENTS.map(i => (
               <Instrument key={i.key} id={`autopilot-${i.key}`} label={i.label} unit={i.unit} prefix={i.prefix} step={i.step}
-                value={value[i.key]} onChange={n => change({ [i.key]: n } as Partial<AutopilotSettings>)} />
+                value={value[i.key]} onChange={n => change({ [i.key]: n } as Partial<AutopilotSettings>)}
+                learned={value.learn && i.key !== 'validDays' ? learned?.fields[i.key]?.v ?? null : null} />
             ))}
           </div>
 
@@ -187,6 +208,14 @@ export function AutopilotConsole() {
               className="lcd block w-full resize-y px-3 py-2 text-[14px] leading-[20px]" />
             <p className="mt-1 font-mono text-[10px] tracking-[0.12em] text-on-night-muted">{'{AIRCRAFT}'} {'{SEATS}'} FILLED IN · RATE + CRUISE PER AIRCRAFT IN <Link href="/operator/fleet" className="underline underline-offset-2 hover:text-on-night">FLEET</Link></p>
           </Module>
+
+          <p className="mt-3 font-mono text-[11px] leading-[16px] text-on-night-muted">
+            {value.learn
+              ? learned?.samples
+                ? <>LRN = LEARNED FROM {learned.samples} SUBMITTED QUOTE{learned.samples === 1 ? '' : 'S'}. DRAFTS USE LRN VALUES, RATES AND FLIGHT TIMES; SETPOINTS APPLY UNTIL A VALUE IS LEARNED. <button type="button" onClick={resetLearning} className="underline underline-offset-2 hover:text-on-night cursor-pointer">RESET</button></>
+                : 'LEARNING: EACH QUOTE STAFF SUBMIT WITH THE WORKSHEET ADJUSTS THESE VALUES.'
+              : 'LEARNING OFF: DRAFTS USE THE SETPOINTS ONLY.'}
+          </p>
 
           <div className="mt-4 flex justify-end">
             <button type="button" onClick={() => save(value)} disabled={saving || !dirty}

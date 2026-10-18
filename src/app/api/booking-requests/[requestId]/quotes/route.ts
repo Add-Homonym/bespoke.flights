@@ -7,6 +7,8 @@ import { requestAccess } from '@/lib/access';
 import { appBaseUrl } from '@/lib/payments/config';
 import { notifyNewQuote } from '@/lib/notify/traveler';
 import { saveWorksheet } from '@/lib/quotes/worksheet-store';
+import { learnFromQuote } from '@/lib/quotes/learning';
+import { refreshDrafts } from '@/lib/quotes/autopilot';
 import type { Quote, Operator, BookingRequest } from '@/lib/types';
 
 function isUniqueViolation(err: unknown): boolean {
@@ -106,6 +108,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ request
   } catch (err) {
     if (isUniqueViolation(err)) return NextResponse.json({ error: 'You have already quoted this request' }, { status: 409 });
     throw err;
+  }
+
+  // Every submitted worksheet teaches Autopilot how this operator prices.
+  if (worksheet) {
+    await learnFromQuote(db, operator.id, { ...worksheet, aircraftId: worksheet.aircraftId ?? aircraftId ?? null }, priceCents);
+    await refreshDrafts(db, operator.id).catch(err => console.error('Autopilot redraft failed:', err));
   }
 
   await notifyNewQuote(db, quoteId, appBaseUrl(req));

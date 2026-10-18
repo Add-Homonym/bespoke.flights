@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bot, Calculator, ChevronDown, CircleAlert } from 'lucide-react';
+import { Bot, Calculator, ChevronDown, CircleAlert, GraduationCap } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Notice } from '@/components/ui/notice';
@@ -27,6 +27,8 @@ export interface QuoteDraft {
   validUntil: string | null;
   worksheet: WorksheetInputs;
   flags: string[];
+  /** What Autopilot applied from the operator's earlier quotes. */
+  notes?: string[];
 }
 
 export function SubmitQuoteForm({ requestId, aircraft, legs, passengerCount, onSubmitted, draft: initialDraft = null }: {
@@ -140,13 +142,22 @@ export function SubmitQuoteForm({ requestId, aircraft, legs, passengerCount, onS
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="inline-flex items-center gap-2 text-body text-ink">
               <Bot size={16} strokeWidth={1.5} aria-hidden="true" className="text-royal" />
-              Drafted by Autopilot. Review, adjust, then submit.
+              Drafted by Autopilot. Review, adjust, then submit. Your changes teach Autopilot.
             </p>
             <span className="flex gap-1">
               <Button type="button" size="sm" variant="quiet" onClick={redraft} disabled={drafting}>{drafting ? 'Redrafting…' : 'Redraft'}</Button>
               <Button type="button" size="sm" variant="quiet" onClick={discard}>Discard</Button>
             </span>
           </div>
+          {(draft.notes?.length ?? 0) > 0 && (
+            <ul className="space-y-1">
+              {draft.notes!.map((n, i) => (
+                <li key={i} className="flex items-start gap-2 text-label text-ink-muted">
+                  <GraduationCap size={14} strokeWidth={1.5} aria-hidden="true" className="mt-0.5 shrink-0 text-royal" /> {n}
+                </li>
+              ))}
+            </ul>
+          )}
           {draft.flags.length > 0 && (
             <ul className="space-y-1">
               {draft.flags.map((f, i) => (
