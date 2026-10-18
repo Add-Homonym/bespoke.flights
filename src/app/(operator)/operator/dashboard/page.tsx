@@ -2,7 +2,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import {
   Armchair, ArrowRight, BadgeCheck, Banknote, Camera, CircleAlert, CircleCheck, FileWarning, Handshake, Inbox, Mail,
-  MessageSquare, Plane, Send, Settings, SlidersHorizontal, Trophy, Users,
+  MessageSquare, Plane, Send, Settings, SlidersHorizontal, Trophy, Users, Bot,
 } from 'lucide-react';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
@@ -90,6 +90,7 @@ export default async function OperatorDashboardPage() {
           <Stat icon={Send} label="Quotes submitted" value={deals.submitted} />
           <Stat icon={BadgeCheck} label="Quotes accepted" value={deals.accepted} />
           <Stat icon={Trophy} label="Total value won" value={formatMoney(deals.wonCents)} tone={deals.wonCents ? 'confirmed' : 'ink'} />
+          {deals.drafts > 0 && <Stat icon={Bot} label="Autopilot drafts to review" value={deals.drafts} tone="danger" />}
         </Tile>
 
         <Tile id="tile-fleet" title="Fleet" icon={Plane} href="/operator/fleet" action="Fleet management">

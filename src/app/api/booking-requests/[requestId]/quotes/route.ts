@@ -96,6 +96,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ request
     // Private working for the price; never returned to the traveler.
     if (worksheet) await saveWorksheet(tx, id, operator.id, worksheet);
 
+    // An Autopilot draft for this request has now been reviewed and sent.
+    await tx.run(
+      "UPDATE quote_drafts SET status = 'submitted', quote_id = ?, reviewed_by = ?, reviewed_at = now() WHERE request_id = ? AND operator_id = ? AND status = 'draft'",
+      [id, session.userId, request.id, operator.id]);
+
     return id;
     });
   } catch (err) {

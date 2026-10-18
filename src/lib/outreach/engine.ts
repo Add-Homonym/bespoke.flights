@@ -5,6 +5,7 @@ import { rfqNotificationEmail, rfqSmsBody } from '@/lib/email/templates';
 import { sendSms } from '@/lib/notify/sms';
 import { alertStaff } from '@/lib/staff/alerts';
 import { appBaseUrl } from '@/lib/payments/config';
+import { draftQuote } from '@/lib/quotes/autopilot';
 
 // Route distance estimates for range filtering (nm)
 const ROUTE_DISTANCES: Record<string, number> = {
@@ -337,7 +338,10 @@ export async function dispatchOutreach(
         }
       }).catch(err => {
         console.error(`RFQ delivery error for operator ${op.id}:`, err);
-      }).then(() => alertStaff(db, { kind: 'new_request', requestId, operatorId: op.id }, baseUrl).then(() => {}))
+      })
+        // Autopilot operators get a draft quote ready for review.
+        .then(() => draftQuote(db, requestId, op.id).catch(err => { console.error(`Autopilot draft failed for operator ${op.id}:`, err); }))
+        .then(() => alertStaff(db, { kind: 'new_request', requestId, operatorId: op.id }, baseUrl).then(() => {}))
     );
   }
 

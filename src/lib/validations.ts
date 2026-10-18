@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { worksheetSchema } from '@/lib/quotes/worksheet';
+import { autopilotSchema } from '@/lib/quotes/autopilot';
 
 export const registerSchema = z.object({
   email: z.string().email(),
@@ -92,6 +93,7 @@ export const operatorSettingsSchema = z.object({
     message: 'The partial refund window must end before the full refund window',
     path: ['partial_refund_hours'],
   }).optional().nullable(),
+  autopilot: autopilotSchema.optional(),
 }).strict();
 
 export const discoveryPatchSchema = z.object({

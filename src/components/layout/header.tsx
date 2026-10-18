@@ -32,6 +32,7 @@ const links = {
     { href: '/operator/requests', label: 'All demand' },
     { href: '/operator/quotes', label: 'My quotes' },
     { href: '/operator/fleet', label: 'Fleet' },
+    { href: '/operator/autopilot', label: 'Autopilot' },
     { href: '/operator/team', label: 'Team' },
     { href: '/operator/settings', label: 'Settings' },
   ],

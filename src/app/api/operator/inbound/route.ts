@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { legsByRequest } from '@/lib/db/queries';
+import { parseAutopilot, type QuoteDraftRow } from '@/lib/quotes/autopilot';
 import type { Operator } from '@/lib/types';
 
 export async function GET() {
@@ -57,10 +58,20 @@ export async function GET() {
 
   // Attach legs to each
   const legs = await legsByRequest(db, inbound.map(i => i.request_id));
-  const result = inbound.map(item => ({
-    ...item,
-    legs: legs.get(item.request_id) ?? [],
-  }));
+  // Autopilot drafts waiting for review.
+  const drafts = new Map((await db.query<QuoteDraftRow>(
+    "SELECT * FROM quote_drafts WHERE operator_id = ? AND status = 'draft'", [operator.id])).map(d => [d.request_id, d]));
+  const result = inbound.map(item => {
+    const d = drafts.get(item.request_id);
+    return {
+      ...item,
+      legs: legs.get(item.request_id) ?? [],
+      draft: d && !item.quote_id ? {
+        id: d.id, aircraftId: d.aircraft_id, priceCents: Number(d.price_cents), message: d.message,
+        validUntil: d.valid_until, worksheet: JSON.parse(d.worksheet), flags: JSON.parse(d.flags), createdAt: d.created_at,
+      } : null,
+    };
+  });
 
-  return NextResponse.json(result);
+  return NextResponse.json(result, { headers: { 'X-Autopilot': parseAutopilot(operator.autopilot).enabled ? 'on' : 'off' } });
 }

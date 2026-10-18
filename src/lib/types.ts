@@ -31,6 +31,8 @@ export interface Operator {
   stripe_account_id: string | null;
   stripe_charges_enabled: number;
   stripe_payouts_enabled: number;
+  /** Autopilot settings JSON (src/lib/quotes/autopilot.ts). */
+  autopilot?: string | null;
   stripe_details_submitted: number;
   platform_fee_bps: number | null;  // per-operator override of PLATFORM_FEE_BPS
   cancellation_policy: string | null;  // JSON, see src/lib/bookings/cancellation.ts

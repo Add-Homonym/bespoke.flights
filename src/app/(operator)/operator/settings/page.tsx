@@ -5,6 +5,8 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { PayoutSettings } from '@/components/operator/payout-settings';
+import Link from 'next/link';
+import { Bot } from 'lucide-react';
 import { MARKET_LABELS, FLEET_TYPE_LABELS, SAFETY_RATINGS } from '@/lib/types';
 import type { MarketKey } from '@/lib/types';
 
@@ -82,6 +84,12 @@ export default function OperatorSettingsPage() {
         </div>
         {message && <StatusBadge variant="confirmed">{message}</StatusBadge>}
       </div>
+
+      <Link href="/operator/autopilot" className="mb-6 flex min-h-11 items-center gap-3 rounded-lg border border-hairline bg-surface-raised px-6 py-4 text-body text-ink shadow-raised transition-colors duration-200 hover:border-border-control">
+        <Bot size={20} strokeWidth={1.5} aria-hidden="true" className="text-royal" />
+        <span>Autopilot: drafted quotes from your pricing parameters</span>
+        <span className="ml-auto text-label text-royal">Open console</span>
+      </Link>
 
       <div id="payouts" className="scroll-mt-6"><PayoutSettings /></div>
 

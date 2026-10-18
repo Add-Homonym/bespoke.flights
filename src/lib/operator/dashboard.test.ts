@@ -41,7 +41,7 @@ beforeAll(async () => {
 describe('buildDashboard', () => {
   it('summarizes deals', async () => {
     const d = await buildDashboard(f.db, await op(f.operatorA), now);
-    expect(d.deals).toEqual({ inbound: 3, awaiting: 1, submitted: 3, accepted: 2, wonCents: 10_000_000 });
+    expect(d.deals).toEqual({ inbound: 3, awaiting: 1, submitted: 3, accepted: 2, wonCents: 10_000_000, drafts: 0 });
   });
 
   it('summarizes fleet, team and settings', async () => {

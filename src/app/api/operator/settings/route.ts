@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { operatorSettingsSchema } from '@/lib/validations';
 import { parsePolicy } from '@/lib/bookings/cancellation';
+import { draftQuote, parseAutopilot } from '@/lib/quotes/autopilot';
 import type { Operator } from '@/lib/types';
 
 function present(operator: Operator & { cancellation_policy?: string | null }) {
@@ -12,6 +13,7 @@ function present(operator: Operator & { cancellation_policy?: string | null }) {
     markets: operator.markets ? JSON.parse(operator.markets) : [],
     cancellation_policy: parsePolicy(operator.cancellation_policy),
     cancellation_policy_custom: !!operator.cancellation_policy,
+    autopilot: parseAutopilot(operator.autopilot),
   };
 }
 
@@ -62,6 +64,7 @@ export async function PATCH(req: Request) {
     certificate,
     notes,
     cancellation_policy,
+    autopilot,
   } = parsed.data;
 
   await db.run(`
@@ -77,7 +80,8 @@ export async function PATCH(req: Request) {
       transoceanic = COALESCE(?, transoceanic),
       certificate = COALESCE(?, certificate),
       notes = COALESCE(?, notes),
-      cancellation_policy = COALESCE(?, cancellation_policy)
+      cancellation_policy = COALESCE(?, cancellation_policy),
+      autopilot = COALESCE(?, autopilot)
     WHERE id = ?
   `, [
     contact_method || null,
@@ -92,8 +96,19 @@ export async function PATCH(req: Request) {
     certificate || null,
     notes || null,
     cancellation_policy ? JSON.stringify(cancellation_policy) : null,
+    autopilot ? JSON.stringify(autopilot) : null,
     operator.id,
   ]);
+
+  // Turning Autopilot on drafts quotes for requests already waiting.
+  if (autopilot?.enabled && !parseAutopilot(operator.autopilot).enabled) {
+    const waiting = await db.query<{ request_id: number }>(`
+      SELECT ol.request_id FROM outreach_log ol JOIN booking_requests br ON br.id = ol.request_id
+      WHERE ol.operator_id = ? AND br.status IN ('open','quoted')
+        AND NOT EXISTS (SELECT 1 FROM quotes q WHERE q.request_id = ol.request_id AND q.operator_id = ol.operator_id AND q.status IN ('pending','accepted'))
+      ORDER BY ol.sent_at DESC LIMIT 25`, [operator.id]);
+    for (const w of waiting) await draftQuote(db, w.request_id, operator.id);
+  }
 
   const updated = (await db.one<Operator>('SELECT * FROM operators WHERE id = ?', [operator.id]))!;
   return NextResponse.json(present(updated));

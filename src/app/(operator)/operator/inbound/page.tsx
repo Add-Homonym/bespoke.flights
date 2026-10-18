@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
-import { SubmitQuoteForm } from '@/components/booking/submit-quote-form';
+import { SubmitQuoteForm, type QuoteDraft } from '@/components/booking/submit-quote-form';
+import { Bot } from 'lucide-react';
 import type { BookingLeg, Aircraft } from '@/lib/types';
 
 interface InboundRFQ {
@@ -25,6 +26,8 @@ interface InboundRFQ {
   quote_price: number | null;
   quote_status: string | null;
   legs: BookingLeg[];
+  /** Autopilot draft waiting for review. */
+  draft: QuoteDraft | null;
 }
 
 export default function OperatorInboundPage() {
@@ -42,6 +45,12 @@ export default function OperatorInboundPage() {
       setRfqs(rfqData);
       setAircraft(fleetData);
       setLoading(false);
+      // ?review=<requestId> (from the Autopilot console) opens that request's form.
+      const review = Number(new URLSearchParams(window.location.search).get('review'));
+      if (review) {
+        setExpandedId(review);
+        setTimeout(() => document.getElementById(`rfq-${review}`)?.scrollIntoView({ block: 'start' }), 50);
+      }
     });
   }, []);
 
@@ -156,7 +165,7 @@ function RFQCard({
   };
 
   return (
-    <Card className={`${!hasQuote ? 'border-brass' : ''}`}>
+    <Card id={`rfq-${rfq.request_id}`} className={`scroll-mt-6 ${!hasQuote ? 'border-brass' : ''}`}>
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <div className="flex items-center gap-3 mb-1">
@@ -183,9 +192,16 @@ function RFQCard({
               </StatusBadge>
             </div>
           ) : (
-            <Button onClick={onToggle} size="sm">
-              {expanded ? 'Cancel' : 'Quote Now'}
-            </Button>
+            <div className="flex items-center gap-3">
+              {rfq.draft && !expanded && (
+                <span className="inline-flex items-center gap-1.5 text-label text-royal">
+                  <Bot size={14} strokeWidth={1.5} aria-hidden="true" /> Draft ${Math.round(rfq.draft.priceCents / 100).toLocaleString()}
+                </span>
+              )}
+              <Button onClick={onToggle} size="sm">
+                {expanded ? 'Cancel' : rfq.draft ? 'Review draft' : 'Quote Now'}
+              </Button>
+            </div>
           )}
           <button
             onClick={onViewDetails}
@@ -209,7 +225,7 @@ function RFQCard({
       {expanded && !hasQuote && (
         <div className="mt-5 border-t border-hairline pt-5">
           <SubmitQuoteForm requestId={rfq.request_id} aircraft={aircraft} legs={legs}
-            passengerCount={rfq.passenger_count} onSubmitted={onSubmitted} />
+            passengerCount={rfq.passenger_count} onSubmitted={onSubmitted} draft={rfq.draft} />
         </div>
       )}
     </Card>

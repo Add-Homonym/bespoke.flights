@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Minus, Plane, Plus, X } from 'lucide-react';
+import { Minus, Pencil, Plane, Plus, X } from 'lucide-react';
 import { AirportField } from '@/components/ui/route-field';
 import { Notice } from '@/components/ui/notice';
 import { AccountStep } from '@/components/booking/account-step';
@@ -34,7 +34,54 @@ function Pending({ width, label }: { width: string; label: string }) {
 const fieldInput = 'block w-full bg-transparent font-mono uppercase text-ink placeholder:normal-case placeholder:font-sans placeholder:text-ink-subtle';
 
 /** One leg as a paper ticket with the fields printed into it. */
-function LegTicket({ index, count, leg, passengers, onChange, onPassengers, onRemove }: {
+/**
+ * Special requests on the ticket: a printed line with the current requests,
+ * and a pop-up with the chips to add or change them.
+ */
+function RequestsPopup({ tags, custom, onTags, onCustom }: {
+  tags: RequestTagId[]; custom: string[]; onTags: (t: RequestTagId[]) => void; onCustom: (c: string[]) => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const summary = combineRequests(tags, custom);
+  const count = tags.length + custom.length;
+  return (
+    <div className="border-t border-dashed border-hairline pt-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-overline text-ink-muted">Special requests</p>
+          <p className="mt-1 text-[14px] leading-[20px] text-ink">{summary || <span className="text-ink-subtle">None</span>}</p>
+        </div>
+        <button id="requests-open" type="button" onClick={() => dialog.current?.showModal()} aria-haspopup="dialog"
+          className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-pill border border-border-control px-4 text-label text-ink transition-colors duration-200 ease-out hover:border-royal hover:text-royal cursor-pointer">
+          {count ? <Pencil size={14} strokeWidth={1.5} aria-hidden="true" /> : <Plus size={14} strokeWidth={1.5} aria-hidden="true" />}
+          {count ? 'Edit' : 'Add'}
+        </button>
+      </div>
+      <dialog ref={dialog} id="requests-dialog" aria-labelledby="requests-dialog-title"
+        onClick={e => { if (e.target === dialog.current) dialog.current?.close(); }}
+        className="requests-dialog ticket m-auto w-[min(36rem,calc(100vw-2rem))] rounded-lg border border-hairline p-0 text-ink shadow-float backdrop:bg-black/40">
+        <div className="space-y-4 p-5 sm:p-6">
+          <div className="flex items-center justify-between gap-3 border-b border-hairline pb-3">
+            <h2 id="requests-dialog-title" className="text-overline text-royal">Special requests · optional</h2>
+            <button type="button" onClick={() => dialog.current?.close()} aria-label="Close"
+              className="-my-2 inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-ink-muted hover:bg-surface-sunken hover:text-ink cursor-pointer">
+              <X size={18} strokeWidth={1.5} aria-hidden="true" />
+            </button>
+          </div>
+          <RequestsField tags={tags} onTagsChange={onTags} custom={custom} onCustomChange={onCustom} />
+          <div className="flex justify-end">
+            <button type="button" onClick={() => dialog.current?.close()}
+              className="inline-flex h-10 items-center rounded-md bg-royal px-5 text-[13px] font-semibold text-on-royal hover:opacity-90 cursor-pointer">Done</button>
+          </div>
+        </div>
+      </dialog>
+    </div>
+  );
+}
+
+function LegTicket({ index, count, leg, passengers, onChange, onPassengers, onRemove, extra }: {
+  /** Trip-wide fields printed on the first ticket. */
+  extra?: React.ReactNode;
   index: number;
   count: number;
   leg: DraftLeg;
@@ -129,6 +176,7 @@ function LegTicket({ index, count, leg, passengers, onChange, onPassengers, onRe
           <p className="text-label tabular-nums text-ink-muted" aria-live="polite">
             {d ? <><span className="text-ink">{formatNm(d)}</span> · {formatLandUnits(d)}</> : ' '}
           </p>
+          {extra}
         </div>
 
         <aside aria-label={`Leg ${n} stub`} className="ticket-perf grid shrink-0 grid-cols-[1fr_auto] items-end gap-4 p-5 sm:flex sm:w-48 sm:flex-col sm:items-stretch sm:justify-between sm:p-6">
@@ -210,7 +258,8 @@ export function TicketBookingForm({ initialDraft, viewerRole }: { initialDraft: 
           {legs.map((leg, i) => (
             <li key={i}>
               <LegTicket index={i} count={legs.length} leg={leg} passengers={passengerCount}
-                onChange={p => patchLeg(i, p)} onPassengers={setPassengerCount} onRemove={() => removeLeg(i)} />
+                onChange={p => patchLeg(i, p)} onPassengers={setPassengerCount} onRemove={() => removeLeg(i)}
+                extra={i === 0 ? <RequestsPopup tags={tags} custom={custom} onTags={setTags} onCustom={setCustom} /> : undefined} />
             </li>
           ))}
         </ol>
@@ -221,11 +270,6 @@ export function TicketBookingForm({ initialDraft, viewerRole }: { initialDraft: 
             <Plus size={18} strokeWidth={1.5} aria-hidden="true" /> Add a leg
           </button>
         )}
-
-        <section id="requests-section" aria-labelledby="requests-heading" className="rounded-lg border border-hairline bg-surface-sunken p-4">
-          <h2 id="requests-heading" className="mb-3 text-overline text-ink-muted">Special requests · optional</h2>
-          <RequestsField tags={tags} onTagsChange={setTags} custom={custom} onCustomChange={setCustom} />
-        </section>
 
         <div id="submit-section" aria-live="polite">
           <AutoRequestBar state={auto} ready={ready} viewerRole={viewerRole} />

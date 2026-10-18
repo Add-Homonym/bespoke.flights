@@ -15,6 +15,8 @@ export interface Dashboard {
     accepted: number;
     /** Sum of accepted quote prices. */
     wonCents: number;
+    /** Autopilot drafts waiting for a staffer. */
+    drafts: number;
   };
   fleet: {
     count: number;
@@ -37,7 +39,7 @@ export interface Dashboard {
 
 export async function buildDashboard(db: Db, operator: Operator, now = new Date()): Promise<Dashboard> {
   const id = operator.id;
-  const [inbound, quotes, fleet, team] = await Promise.all([
+  const [inbound, quotes, fleet, team, drafts] = await Promise.all([
     db.one<{ inbound: number; awaiting: number }>(`
       SELECT COUNT(*)::int AS inbound,
         COUNT(*) FILTER (WHERE br.status IN ('open','quoted')
@@ -62,12 +64,14 @@ export async function buildDashboard(db: Db, operator: Operator, now = new Date(
         COUNT(*) FILTER (WHERE active = 1 AND notify_email = 1 AND email IS NOT NULL)::int AS email,
         COUNT(*) FILTER (WHERE active = 1 AND notify_sms = 1 AND phone IS NOT NULL)::int AS sms
       FROM operator_staff WHERE operator_id = ?`, [id]),
+    db.one<{ n: number }>(`SELECT COUNT(*)::int AS n FROM quote_drafts d JOIN booking_requests br ON br.id = d.request_id
+      WHERE d.operator_id = ? AND d.status = 'draft' AND br.status IN ('open','quoted')`, [id]),
   ]);
 
   const list = (json: string | null) => { try { return (JSON.parse(json ?? '[]') as unknown[]).length > 0; } catch { return false; } };
 
   return {
-    deals: { ...inbound!, submitted: quotes!.submitted, accepted: quotes!.accepted, wonCents: Number(quotes!.won) },
+    deals: { ...inbound!, submitted: quotes!.submitted, accepted: quotes!.accepted, wonCents: Number(quotes!.won), drafts: drafts!.n },
     fleet: { count: fleet!.count, seats: fleet!.seats, withoutPhotos: fleet!.without_photos, registryFlags: fleet!.flags },
     team: { active: team!.active, emailAlerts: team!.email, smsAlerts: team!.sms },
     settings: {
