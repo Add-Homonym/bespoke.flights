@@ -45,7 +45,24 @@ export interface Aircraft {
   capacity: number;
   range_nm: number | null;
   year: number | null;
+  serial_number: string | null;
+  manufacturer: string | null;
+  model: string | null;
+  /** JSON RegistryRecord from the last FAA lookup. */
+  faa_record: string | null;
+  faa_checked_at: string | null;
+  updated_at: string | null;
   created_at: string;
+}
+
+export interface AircraftPhotoMeta {
+  id: number;
+  aircraft_id: number;
+  position: number;
+  content_type: string;
+  width: number | null;
+  height: number | null;
+  caption: string | null;
 }
 
 export interface BookingRequest {

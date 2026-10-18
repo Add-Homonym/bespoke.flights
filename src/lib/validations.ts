@@ -50,15 +50,20 @@ export const profileSchema = z.object({
   phone: z.string().min(7).optional(),
 });
 
+const thisYear = new Date().getFullYear();
+
 export const aircraftSchema = z.object({
-  tailNumber: z.string().min(1),
-  type: z.string().min(1),
-  capacity: z.number().int().min(1),
-  rangeNm: z.number().int().optional(),
-  year: z.number().int().optional(),
+  tailNumber: z.string().trim().min(2).max(10),
+  type: z.string().trim().min(1).max(80),
+  capacity: z.number().int().min(1).max(100),
+  rangeNm: z.number().int().min(0).max(10_000).optional().nullable(),
+  year: z.number().int().min(1940).max(thisYear + 1).optional().nullable(),
+  serialNumber: z.string().trim().max(40).optional().nullable(),
+  manufacturer: z.string().trim().max(80).optional().nullable(),
+  model: z.string().trim().max(80).optional().nullable(),
 });
 
-
+export const aircraftPatchSchema = aircraftSchema.partial().strict();
 
 export const operatorSettingsSchema = z.object({
   contact_method: z.enum(['email', 'text', 'both']).optional(),

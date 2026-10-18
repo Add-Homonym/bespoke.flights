@@ -27,6 +27,10 @@ export const LIMITS = {
   discoveryRun: { limit: 3, windowSeconds: 60 * 60 },
   /** Messages per user. */
   message: { limit: 60, windowSeconds: 60 * 60 },
+  /** FAA registry lookups per operator user (each is a request to registry.faa.gov). */
+  faaLookup: { limit: 30, windowSeconds: 60 * 60 },
+  /** Aircraft photo uploads per operator user. */
+  photoUpload: { limit: 60, windowSeconds: 60 * 60 },
 } satisfies Record<string, RateLimit>;
 
 export interface RateLimitResult {
