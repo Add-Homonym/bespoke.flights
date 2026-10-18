@@ -3,6 +3,7 @@
 import { useId, useState } from 'react';
 import { ArrowUpDown } from 'lucide-react';
 import { findAirport, searchAirports } from '@/lib/airports';
+import { AirportIcon } from '@/components/ui/AirportBadge';
 
 interface AirportFieldProps {
   label: string;
@@ -80,8 +81,13 @@ function AirportField({ label, value, onChange, readOnly, required }: AirportFie
         onKeyDown={onKeyDown}
         className={`block w-full bg-transparent text-title text-ink placeholder:text-ink-subtle ${readOnly ? 'opacity-70' : ''}`}
       />
-      <p className="min-h-[18px] text-[13px] leading-[18px] text-ink-muted">
-        {resolved ? `${resolved.iata} · ${resolved.name}` : ''}
+      <p className="flex min-h-[24px] items-start gap-2 text-[13px] leading-[18px] text-ink-muted">
+        {resolved && (
+          <>
+            <AirportIcon iata={resolved.iata} size={24} />
+            <span className="min-w-0">{resolved.iata} · {resolved.name}</span>
+          </>
+        )}
       </p>
 
       {expanded && (
@@ -102,10 +108,11 @@ function AirportField({ label, value, onChange, readOnly, required }: AirportFie
               onMouseEnter={() => setHighlight(i)}
               className={`flex min-h-11 cursor-pointer items-center gap-3 px-4 py-2 ${i === highlight ? 'bg-surface-sunken' : ''}`}
             >
+              <AirportIcon iata={airport.iata} size={32} />
               <span className="w-12 shrink-0 text-label text-ink tabular-nums">{airport.iata}</span>
               <span className="min-w-0">
-                <span className="block truncate text-body text-ink">{airport.name}</span>
-                <span className="block truncate text-label text-ink-muted">{airport.city}, {airport.country}</span>
+                <span className="block text-body text-ink">{airport.name}</span>
+                <span className="block text-label text-ink-muted">{airport.city}, {airport.country}</span>
               </span>
             </li>
           ))}

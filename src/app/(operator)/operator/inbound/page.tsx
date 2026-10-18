@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { RouteBadges } from '@/components/ui/AirportBadge';
 import type { BookingLeg, Aircraft } from '@/lib/types';
 
 interface InboundRFQ {
@@ -177,7 +178,11 @@ function RFQCard({
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <div className="flex items-center gap-3 mb-1">
-            <span className="text-ink font-mono tracking-wide text-lg">{route}</span>
+            {legs.length > 0 ? (
+              <RouteBadges from={legs[0].origin_code} to={legs[legs.length - 1].dest_code} />
+            ) : (
+              <span className="text-ink font-mono tracking-wide text-lg">{route}</span>
+            )}
             <span className="text-ink-subtle text-xs bg-surface-raised rounded px-2 py-0.5">
               Score: {rfq.match_score}
             </span>
