@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { AccountStep } from '@/components/booking/account-step';
 import { LegCard, legIsComplete } from '@/components/booking/leg-card';
+import { NextSteps } from '@/components/booking/next-steps';
 import { formatLandUnits, formatNm, tripDistance } from '@/lib/distance';
 import { TripDetails } from '@/components/booking/trip-details';
 import { fromDraftLegs } from '@/lib/trip-format';
@@ -291,6 +292,8 @@ export function MultiLegForm({
           </p>
         )}
       </div>
+
+      <NextSteps routeReady={legs.every(legIsComplete)} />
     </form>
   );
 }

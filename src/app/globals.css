@@ -220,6 +220,21 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Native date/time pickers follow the theme through color-scheme. */
 
+/* Next steps: quotes being prepared. Rows fill in turn, then the best one is marked.
+   The last keyframe is the resting state, so reduced motion shows filled rows. */
+@keyframes quote-fill {
+  0% { width: 0; opacity: 0.4; }
+  45% { width: 100%; opacity: 1; }
+  100% { width: 100%; opacity: 1; }
+}
+@keyframes quote-best {
+  0%, 60% { transform: scale(0); opacity: 0; }
+  75% { transform: scale(1.4); opacity: 1; }
+  85%, 100% { transform: scale(1); opacity: 1; }
+}
+.quote-fill { width: 100%; animation: quote-fill 3s ease-out infinite both; }
+.quote-best { animation: quote-best 3s ease-out infinite both; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

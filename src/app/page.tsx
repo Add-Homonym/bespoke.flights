@@ -1,5 +1,4 @@
 import { cookies } from 'next/headers';
-import { CalendarCheck, FileText, Plane } from 'lucide-react';
 import { Header } from '@/components/layout/header';
 import { MultiLegForm } from '@/components/booking/multi-leg-form';
 import { ButtonLink } from '@/components/ui/button';
@@ -7,12 +6,6 @@ import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { DRAFT_COOKIE, parseDraft } from '@/lib/bookings/draft';
 import { Logo } from '@/components/ui/logo';
-
-const steps = [
-  { icon: Plane, title: 'Build your itinerary', desc: 'Add every leg of the trip in one request: A to B, B to C, and beyond.' },
-  { icon: FileText, title: 'Compare quotes', desc: 'Certified charter operators quote your trip. Each price is all-in, with the operator named.' },
-  { icon: CalendarCheck, title: 'Book and pay on screen', desc: 'Book the jet you choose, pay in the app, and keep your receipt with the trip.' },
-];
 
 const operatorPoints = [
   'See booking demand as it arrives',
@@ -47,20 +40,6 @@ export default async function HomePage() {
 
         <section id="plan-trip" aria-label="Plan your trip" className="mx-auto max-w-2xl px-4 pt-8 pb-[var(--space-7)] sm:px-6">
           <MultiLegForm initialDraft={draft} viewerRole={session?.role ?? null} />
-        </section>
-
-        {/* How it works */}
-        <section id="how-it-works" className="mx-auto max-w-3xl px-4 py-[var(--space-7)] sm:px-6">
-          <h2 className="text-display mb-8 text-ink">How it works</h2>
-          <ol className="grid gap-4 md:grid-cols-3">
-            {steps.map(({ icon: Icon, title, desc }) => (
-              <li key={title} className="rounded-lg border border-hairline bg-surface-raised p-6 shadow-raised">
-                <Icon size={24} strokeWidth={1.5} aria-hidden="true" className="text-ink" />
-                <h3 className="mt-4 text-heading text-ink">{title}</h3>
-                <p className="mt-2 text-body text-ink-muted">{desc}</p>
-              </li>
-            ))}
-          </ol>
         </section>
 
         {/* For operators */}
