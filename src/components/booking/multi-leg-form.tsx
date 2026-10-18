@@ -8,6 +8,7 @@ import { AccountStep } from '@/components/booking/account-step';
 import { LegCard, legIsComplete } from '@/components/booking/leg-card';
 import { NextSteps } from '@/components/booking/next-steps';
 import { GuestsField, RequestsField } from '@/components/booking/trip-extras';
+import { combineRequests, type RequestTagId } from '@/lib/bookings/request-tags';
 import { formatLandUnits, formatNm, tripDistance } from '@/lib/distance';
 import { TripDetails } from '@/components/booking/trip-details';
 import { fromDraftLegs } from '@/lib/trip-format';
@@ -61,6 +62,7 @@ export function MultiLegForm({
   const distance = useMemo(() => tripDistance(legs), [legs]);
   const [passengerCount, setPassengerCount] = useState(start.passengerCount);
   const [notes, setNotes] = useState(start.notes);
+  const [tags, setTags] = useState<RequestTagId[]>(start.tags);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [needsAccount, setNeedsAccount] = useState(false);
@@ -69,8 +71,8 @@ export function MultiLegForm({
   // Remember the itinerary in a cookie on every change, so a reload or a later
   // visit restores it and it survives the sign-up step.
   useEffect(() => {
-    writeDraftCookie({ legs, passengerCount, notes });
-  }, [legs, passengerCount, notes]);
+    writeDraftCookie({ legs, passengerCount, notes, tags });
+  }, [legs, passengerCount, notes, tags]);
 
   const startOver = () => {
     const fresh = emptyDraft();
@@ -78,6 +80,7 @@ export function MultiLegForm({
     setRemoved(null);
     setPassengerCount(fresh.passengerCount);
     setNotes(fresh.notes);
+    setTags(fresh.tags);
     setNeedsAccount(false);
     setError('');
     setRestored(false);
@@ -139,7 +142,7 @@ export function MultiLegForm({
     e.preventDefault();
     setError('');
 
-    const payload = draftToRequest({ legs, passengerCount, notes });
+    const payload = draftToRequest({ legs, passengerCount, notes, tags });
     if (!bookingRequestSchema.safeParse(payload).success || !legs.every(legIsComplete)) {
       setError('Choose an origin, destination and date for every leg.');
       return;
@@ -186,7 +189,7 @@ export function MultiLegForm({
       <AccountStep
         legs={fromDraftLegs(legs)}
         passengerCount={passengerCount}
-        notes={notes}
+        notes={combineRequests(tags, notes)}
         onBack={() => setNeedsAccount(false)}
       />
     );
@@ -272,14 +275,14 @@ export function MultiLegForm({
           <span className="text-label text-ink-muted">Optional</span>
         </div>
         <div id="requests-card" className="form-part rounded-lg border border-hairline bg-surface-sunken p-4">
-          <RequestsField value={notes} onChange={setNotes} />
+          <RequestsField value={notes} onChange={setNotes} tags={tags} onTagsChange={setTags} />
         </div>
       </section>
 
       {/* Trip summary: every detail entered so far */}
-      {draftHasContent({ legs, passengerCount, notes }) && (
+      {draftHasContent({ legs, passengerCount, notes, tags }) && (
         <div id="trip-summary" className="rounded-lg border border-hairline bg-surface-raised px-6 py-4 shadow-raised">
-          <TripDetails title="Trip summary" legs={fromDraftLegs(legs)} passengerCount={passengerCount} notes={notes} />
+          <TripDetails title="Trip summary" legs={fromDraftLegs(legs)} passengerCount={passengerCount} notes={combineRequests(tags, notes)} />
         </div>
       )}
 

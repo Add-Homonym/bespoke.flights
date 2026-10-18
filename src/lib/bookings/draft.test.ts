@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { parseDraft, serializeDraft, draftHasContent, draftToRequest, emptyDraft } from './draft';
 import { bookingRequestSchema } from '@/lib/validations';
+import { REQUEST_TAGS, combineRequests, type RequestTagId } from './request-tags';
 
 const trip = {
   passengerCount: 4,
   notes: 'Dog on board; "quotes" & semicolons; ok',
+  tags: ['pets', 'surfboards'] as RequestTagId[],
   legs: [
     { originCode: 'KLAX', destCode: 'PHNL', departureDate: '2026-12-01', departureTime: '09:30' },
     { originCode: 'PHNL', destCode: 'KLAX', departureDate: '2026-12-08', departureTime: '' },
@@ -52,6 +54,7 @@ describe('booking draft cookie', () => {
     const big = {
       passengerCount: 19,
       notes: 'é'.repeat(500),
+      tags: REQUEST_TAGS.map(t => t.id) as RequestTagId[],
       legs: Array.from({ length: 10 }, () => ({ originCode: 'KLAX', destCode: 'PHNL', departureDate: '2026-12-01', departureTime: '09:30' })),
     };
     const value = serializeDraft(big);
@@ -65,5 +68,22 @@ describe('booking draft cookie', () => {
   it('knows an untouched form has nothing worth saving', () => {
     expect(draftHasContent(emptyDraft())).toBe(false);
     expect(draftHasContent(trip)).toBe(true);
+  });
+
+  it('folds tags into the notes sent with the request', () => {
+    expect(draftToRequest(trip).notes).toBe('Pets, Surfboards. Dog on board; "quotes" & semicolons; ok');
+    expect(draftToRequest({ ...trip, notes: '' }).notes).toBe('Pets, Surfboards');
+    expect(draftToRequest({ ...trip, tags: [], notes: '' }).notes).toBeUndefined();
+  });
+
+  it('keeps known tags only, once each, in list order', () => {
+    const value = encodeURIComponent(JSON.stringify({ ...trip, tags: ['wifi', 'bogus', 'pets', 'pets', 3] }));
+    expect(parseDraft(value)!.tags).toEqual(['pets', 'wifi']);
+    expect(parseDraft(encodeURIComponent(JSON.stringify({ ...trip, tags: undefined })))!.tags).toEqual([]);
+  });
+
+  it('counts tags alone as content worth saving', () => {
+    expect(draftHasContent({ ...emptyDraft(), tags: ['ground'] })).toBe(true);
+    expect(combineRequests(['ground', 'medical'], '  ')).toBe('Ground transportation, Medical devices');
   });
 });

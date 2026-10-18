@@ -9,6 +9,8 @@
  * details, never credentials.
  */
 
+import { combineRequests, normalizeTags, type RequestTagId } from './request-tags';
+
 export const DRAFT_COOKIE = 'bf_booking_draft';
 export const DRAFT_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
 const MAX_LEGS = 10;
@@ -24,11 +26,13 @@ export interface DraftLeg {
 export interface BookingDraft {
   passengerCount: number;
   notes: string;
+  /** Quick-add special request tags (see request-tags.ts). */
+  tags: RequestTagId[];
   legs: DraftLeg[];
 }
 
 export const emptyLeg = (): DraftLeg => ({ originCode: '', destCode: '', departureDate: '', departureTime: '' });
-export const emptyDraft = (): BookingDraft => ({ passengerCount: 1, notes: '', legs: [emptyLeg()] });
+export const emptyDraft = (): BookingDraft => ({ passengerCount: 1, notes: '', tags: [], legs: [emptyLeg()] });
 
 const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '');
 
@@ -53,6 +57,7 @@ export function parseDraft(raw: string | undefined | null): BookingDraft | null 
     return {
       passengerCount: Number.isInteger(pax) && pax >= 1 && pax <= 19 ? pax : 1,
       notes: str(data.notes, MAX_NOTES),
+      tags: normalizeTags(data.tags),
       legs: legs.length > 0 ? legs : [emptyLeg()],
     };
   } catch {
@@ -67,6 +72,7 @@ export function serializeDraft(draft: BookingDraft): string {
   const encode = (notes: string) => encodeURIComponent(JSON.stringify({
     passengerCount: draft.passengerCount,
     notes,
+    tags: draft.tags,
     legs: draft.legs.slice(0, MAX_LEGS),
   }));
   // Non-ASCII notes expand up to 9x when encoded; shorten them rather than
@@ -82,7 +88,7 @@ export function serializeDraft(draft: BookingDraft): string {
 
 /** True when the draft has any user input worth keeping. */
 export function draftHasContent(draft: BookingDraft): boolean {
-  return draft.notes !== '' || draft.passengerCount !== 1 ||
+  return draft.notes !== '' || draft.tags.length > 0 || draft.passengerCount !== 1 ||
     draft.legs.some(l => l.originCode || l.destCode || l.departureDate || l.departureTime);
 }
 
@@ -90,7 +96,7 @@ export function draftHasContent(draft: BookingDraft): boolean {
 export function draftToRequest(draft: BookingDraft) {
   return {
     passengerCount: draft.passengerCount,
-    notes: draft.notes || undefined,
+    notes: combineRequests(draft.tags, draft.notes) || undefined,
     legs: draft.legs.map(l => ({
       originCode: l.originCode.toUpperCase(),
       destCode: l.destCode.toUpperCase(),
