@@ -77,7 +77,7 @@ export function StripeSetup() {
             : hasKey ? (s.error ?? 'Not reachable') : 'Needs the key.'}
         </Step>
         <Step state={s.connect ? 'ok' : s.connect === false ? 'warn' : 'todo'} title="Connect enabled (operator payouts)">
-          {s.connect ? 'Operators can link payout accounts.' : s.connect === false ? 'Turn on Connect in the Stripe dashboard (Connect → Get started), with Express accounts.' : 'Needs the key.'}
+          {s.connect ? 'Operators can link payout accounts.' : s.connect === false ? 'Turn on Connect in the Stripe dashboard (Connect → Get started), with Express accounts.' : hasKey ? 'Needs a working key.' : 'Needs the key.'}
         </Step>
         <Step state={s.appUrl ? 'ok' : 'todo'} title="Public URL">
           {s.appUrl ?? 'Set APP_URL on Vercel.'}
