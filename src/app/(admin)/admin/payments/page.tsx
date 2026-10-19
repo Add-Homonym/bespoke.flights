@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Table, Thead, Th, Td, Tr } from '@/components/ui/table';
 import { RefundButton } from '@/components/admin/refund-button';
+import { StripeSetup } from '@/components/admin/stripe-setup';
 import { formatMoney, getPaymentsMode, platformFeeBps } from '@/lib/payments/config';
 import type { Payment } from '@/lib/types';
 
@@ -64,6 +65,8 @@ export default async function AdminPaymentsPage() {
           {mode === 'stripe' ? 'Stripe' : mode === 'stub' ? 'Test mode: simulated' : 'Payments disabled'}
         </StatusBadge>
       </div>
+
+      {mode !== 'stub' && <div className="mb-10"><StripeSetup /></div>}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
         {stats.map(s => (

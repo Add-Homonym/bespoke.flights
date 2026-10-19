@@ -382,6 +382,14 @@ CREATE TABLE IF NOT EXISTS autopilot_learning (
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Platform settings set from the admin UI (e.g. Stripe webhook signing secrets
+-- created by the Stripe setup button). Server-side only.
+CREATE TABLE IF NOT EXISTS platform_settings (
+  key         TEXT PRIMARY KEY,
+  value       TEXT NOT NULL,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Which booking form produced the request ('ticket' or 'classic'), to compare them.
 ALTER TABLE booking_requests ADD COLUMN IF NOT EXISTS form_variant TEXT;
 
