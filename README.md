@@ -266,10 +266,11 @@ To go live: remove `APP_TEST_MODE`, set the Stripe variables, and delete the dem
 
 ### Stripe setup
 
-1. Enable **Connect** (Express accounts) on the Stripe account.
-2. Add a webhook endpoint at `https://<host>/api/webhooks/stripe` for **your account** events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `checkout.session.expired`, `charge.refunded`, `charge.dispute.created`, `charge.dispute.updated`, `charge.dispute.closed`. Put its signing secret in `STRIPE_WEBHOOK_SECRET`.
-3. Add a second endpoint at the same URL for **connected account** events: `account.updated`. Put its signing secret in `STRIPE_CONNECT_WEBHOOK_SECRET`.
-4. Local testing: `stripe listen --forward-to localhost:3000/api/webhooks/stripe`.
+1. Put the secret key in `STRIPE_SECRET_KEY` on the Vercel project (Production), or connect the Stripe integration to the project so it adds it. Redeploy.
+2. Enable **Connect** (Express accounts) on the Stripe account, so operators can link payout accounts.
+3. Open **Admin → Payments**. The **Stripe setup** checklist checks the key (test or live), the account (charges, payouts), Connect, `APP_URL`, and webhooks. **Create webhooks** registers both endpoints at `<APP_URL>/api/webhooks/stripe` (payment events on the platform account; `account.updated` on connected accounts) and stores their signing secrets in `platform_settings`, so nothing is copied by hand (`src/lib/payments/stripe-setup.ts`). Recreating replaces endpoints at the same URL.
+4. `STRIPE_WEBHOOK_SECRET` / `STRIPE_CONNECT_WEBHOOK_SECRET` still work and take precedence.
+5. Local testing: `stripe listen --forward-to localhost:3000/api/webhooks/stripe` with its secret in `STRIPE_WEBHOOK_SECRET`.
 
 ---
 

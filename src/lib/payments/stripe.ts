@@ -16,9 +16,3 @@ export function getStripe(): Stripe {
 export function setStripeClient(stripe: Stripe | null) {
   client = stripe;
 }
-
-/** Webhook signing secrets: platform endpoint and (optionally) the Connect endpoint. */
-export function webhookSecrets(): string[] {
-  return [process.env.STRIPE_WEBHOOK_SECRET, process.env.STRIPE_CONNECT_WEBHOOK_SECRET]
-    .filter((s): s is string => !!s);
-}
