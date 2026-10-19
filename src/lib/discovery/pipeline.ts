@@ -134,13 +134,16 @@ async function sendInviteEmails(
  * Get which states were last scraped (from the most recent discovery run).
  */
 async function getLastScrapedStates(db: Db): Promise<string[]> {
-  // Look at the most recently discovered operators to infer which states were last done
+  // Rows from one batch share a transaction timestamp, so the latest batch is
+  // every state whose newest row ties for the overall newest discovered_at.
   const recent = await db.query<{ state: string }>(`
     SELECT state FROM discovered_operators
     WHERE source = 'faa_registry' AND state IS NOT NULL
     GROUP BY state
-    ORDER BY MAX(discovered_at) DESC
-    LIMIT 10
+    HAVING MAX(discovered_at) = (
+      SELECT MAX(discovered_at) FROM discovered_operators
+      WHERE source = 'faa_registry' AND state IS NOT NULL
+    )
   `);
 
   return recent.map(r => r.state);

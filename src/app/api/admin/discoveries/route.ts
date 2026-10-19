@@ -57,12 +57,12 @@ export async function GET(req: Request) {
   const stats = await db.one(`
     SELECT
       COUNT(*) as total,
-      SUM(CASE WHEN status = 'new' THEN 1 ELSE 0 END) as new_count,
-      SUM(CASE WHEN status = 'no_email' THEN 1 ELSE 0 END) as no_email_count,
-      SUM(CASE WHEN status = 'emailed' THEN 1 ELSE 0 END) as emailed_count,
-      SUM(CASE WHEN status = 'registered' THEN 1 ELSE 0 END) as registered_count,
-      SUM(CASE WHEN status = 'opted_out' THEN 1 ELSE 0 END) as opted_out_count,
-      SUM(CASE WHEN status = 'bounced' THEN 1 ELSE 0 END) as bounced_count
+      COALESCE(SUM(CASE WHEN status = 'new' THEN 1 ELSE 0 END), 0) as new_count,
+      COALESCE(SUM(CASE WHEN status = 'no_email' THEN 1 ELSE 0 END), 0) as no_email_count,
+      COALESCE(SUM(CASE WHEN status = 'emailed' THEN 1 ELSE 0 END), 0) as emailed_count,
+      COALESCE(SUM(CASE WHEN status = 'registered' THEN 1 ELSE 0 END), 0) as registered_count,
+      COALESCE(SUM(CASE WHEN status = 'opted_out' THEN 1 ELSE 0 END), 0) as opted_out_count,
+      COALESCE(SUM(CASE WHEN status = 'bounced' THEN 1 ELSE 0 END), 0) as bounced_count
     FROM discovered_operators
   `);
 
