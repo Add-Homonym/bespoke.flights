@@ -151,7 +151,7 @@ function fromForm(form: Form): { patch: Partial<BusinessModel>; errors: Partial<
   return { patch: patch as Partial<BusinessModel>, errors };
 }
 
-export function BusinessModelForm({ initial, applied }: { initial: BusinessModel; applied: Key[] }) {
+export function BusinessModelForm({ initial, applied, onSaved }: { initial: BusinessModel; applied: Key[]; onSaved?: (model: BusinessModel) => void }) {
   const [form, setForm] = useState<Form>(() => toForm(initial));
   const [saved, setSaved] = useState<Form>(() => toForm(initial));
   const [errors, setErrors] = useState<Partial<Record<Key, string>>>({});
@@ -188,11 +188,13 @@ export function BusinessModelForm({ initial, applied }: { initial: BusinessModel
       setStatus('error');
       return;
     }
-    const next = toForm(await res.json());
+    const model: BusinessModel = await res.json();
+    const next = toForm(model);
     setForm(next);
     setSaved(next);
     setStatus('saved');
     setMessage('Settings saved. New checkouts use these values.');
+    onSaved?.(model);
   };
 
   const reset = () => { setForm(saved); setErrors({}); setStatus('idle'); };

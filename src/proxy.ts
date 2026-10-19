@@ -7,7 +7,7 @@ export async function proxy(req: NextRequest) {
 
   // Public routes that don't need a session. Stripe webhooks authenticate by
   // signature; cron routes by CRON_SECRET (or an admin session, checked in the handler).
-  const publicPaths = ['/', '/login', '/register', '/book', '/trip', '/board', '/api/board', '/api/auth', '/api/webhooks', '/api/cron', '/api/aircraft-photos'];
+  const publicPaths = ['/', '/login', '/register', '/book', '/operators', '/trip', '/board', '/api/board', '/api/auth', '/api/webhooks', '/api/cron', '/api/aircraft-photos'];
   if (publicPaths.some(p => pathname === p || pathname.startsWith(p + '/'))) {
     return NextResponse.next();
   }

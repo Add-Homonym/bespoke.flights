@@ -13,7 +13,7 @@ const navLink =
   'inline-flex min-h-11 items-center text-label text-ink-muted transition-colors duration-200 ease-out hover:text-ink';
 
 /** Where operators learn about the platform and sign up. */
-const OPERATORS_LINK = { href: '/register?role=operator', label: 'Operators' };
+const OPERATORS_LINK = { href: '/operators/terms', label: 'Operators' };
 
 const links = {
   guest: [
@@ -35,6 +35,7 @@ const links = {
     { href: '/operator/autopilot', label: 'Autopilot' },
     { href: '/operator/team', label: 'Team' },
     { href: '/operator/settings', label: 'Settings' },
+    { href: '/operators/terms', label: 'Terms' },
   ],
   admin: [
     { href: '/admin/dashboard', label: 'Dashboard' },
