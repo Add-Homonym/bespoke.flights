@@ -84,8 +84,8 @@ There are three user roles — **customer**, **operator**, and **admin** — eac
 ## Admin Workflow
 
 1. **Dashboard** at `/admin/dashboard` — system-wide stats (users, operators, requests, quotes, bookings) plus the operator discovery pipeline summary.
-2. **Approve operators** at `/admin/operators` — review pending registrations, approve or suspend.
-3. **Manage users** at `/admin/users`.
+2. **Operators** at `/admin/operators` — approve or suspend, **Add operator** (company, contact, sign-in email, certificate, status), and edit any operator's company profile: name, status, certificate, request contact, safety rating, markets, aircraft categories, range, platform fee override, notes.
+3. **Users** at `/admin/users` — search and filter by role, **Add user** (any role; an operator needs a company name), and edit name, phone and role. An admin cannot change their own role, and the last admin cannot be demoted. Making someone an operator creates their company profile; a former operator keeps theirs. Role changes apply on the user's next request (the role is read from the database each time). New accounts get a temporary password shown to the admin once; in production the first sign-in with it moves the account to Neon Auth. Routes: `POST /api/admin/users`, `PATCH /api/admin/users/[id]`, `POST /api/admin/operators`, `PATCH /api/admin/operators/[id]`.
 4. **View all requests** at `/admin/requests`.
 5. **Operator discovery** at `/admin/discoveries` — manage FAA-discovered operators (details below).
 6. **Payments** at `/admin/payments` — gross bookings, net platform fees, refunds, disputes; issue full or partial refunds.

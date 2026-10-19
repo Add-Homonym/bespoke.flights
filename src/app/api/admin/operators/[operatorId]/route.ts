@@ -1,22 +1,30 @@
 import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { toId } from '@/lib/db/queries';
-import { operatorStatusSchema } from '@/lib/validations';
+import { adminOperatorPatchSchema } from '@/lib/validations';
+import { requireAdmin } from '@/lib/admin/guard';
+import type { Operator } from '@/lib/types';
 
+const JSON_FIELDS = new Set(['fleet_types', 'markets']);
+
+/** Edit an operator: status and any company profile field. */
 export async function PATCH(req: Request, { params }: { params: Promise<{ operatorId: string }> }) {
-  const session = await getSession();
-  if (!session || session.role !== 'admin') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const me = await requireAdmin();
+  if ('error' in me) return me.error;
 
-  const { operatorId } = await params;
-  const parsed = operatorStatusSchema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
-  const { status } = parsed.data;
+  const parsed = adminOperatorPatchSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
 
   const db = getDb();
-  await db.run('UPDATE operators SET status = ? WHERE id = ?', [status, toId(operatorId)]);
+  const id = toId((await params).operatorId);
+  if (!(await db.one('SELECT id FROM operators WHERE id = ?', [id]))) return NextResponse.json({ error: 'Operator not found' }, { status: 404 });
 
-  return NextResponse.json({ success: true });
+  const entries = Object.entries(parsed.data).filter(([, v]) => v !== undefined);
+  if (entries.length === 0) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
+  // Column names come from the schema's keys, never from the request.
+  const sets = entries.map(([k]) => `${k} = ?`);
+  const values = entries.map(([k, v]) => (JSON_FIELDS.has(k) ? JSON.stringify(v) : v === '' ? null : v));
+  await db.run(`UPDATE operators SET ${sets.join(', ')} WHERE id = ?`, [...values, id]);
+
+  return NextResponse.json(await db.one<Operator>('SELECT * FROM operators WHERE id = ?', [id]));
 }
