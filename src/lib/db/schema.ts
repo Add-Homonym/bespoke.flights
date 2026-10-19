@@ -266,6 +266,10 @@ CREATE TABLE IF NOT EXISTS rate_limits (
 -- Operator cancellation policy, JSON: {"full_refund_hours":72,"partial_refund_hours":24,"partial_refund_bps":5000}.
 -- NULL means the platform default.
 ALTER TABLE operators ADD COLUMN IF NOT EXISTS cancellation_policy TEXT;
+-- Business model (src/lib/business-model.ts): pricing tier and launch-partner flag.
+ALTER TABLE operators ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'standard';
+ALTER TABLE operators ADD COLUMN IF NOT EXISTS launch_partner INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE quotes ADD COLUMN IF NOT EXISTS is_empty_leg INTEGER NOT NULL DEFAULT 0;
 
 -- Change requests on a booked trip. The traveler proposes new legs, passenger
 -- count or notes. The winning operator accepts (optionally at a new all-in

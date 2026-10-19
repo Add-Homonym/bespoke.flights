@@ -48,11 +48,12 @@ export interface FeeBreakdown {
 }
 
 /** Split a charge into platform fee and operator payout. Fee rounds half up to the cent. */
-export function computeFees(amountCents: number, bps: number): FeeBreakdown {
+export function computeFees(amountCents: number, bps: number, extraPlatformCents = 0): FeeBreakdown {
   if (!Number.isInteger(amountCents) || amountCents <= 0) {
     throw new Error('amountCents must be a positive integer');
   }
-  const platformFeeCents = Math.round((amountCents * clampBps(bps)) / 10_000);
+  const extra = Math.max(0, Math.round(extraPlatformCents));
+  const platformFeeCents = Math.min(amountCents, Math.round((amountCents * clampBps(bps)) / 10_000) + extra);
   return {
     amountCents,
     platformFeeCents,

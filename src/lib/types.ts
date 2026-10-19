@@ -34,7 +34,9 @@ export interface Operator {
   /** Autopilot settings JSON (src/lib/quotes/autopilot.ts). */
   autopilot?: string | null;
   stripe_details_submitted: number;
-  platform_fee_bps: number | null;  // per-operator override of PLATFORM_FEE_BPS
+  platform_fee_bps: number | null;  // per-operator override of the default commission
+  plan: 'standard' | 'subscriber';  // business model tier (src/lib/business-model.ts)
+  launch_partner: number;           // 1 = eligible for the launch promo commission
   cancellation_policy: string | null;  // JSON, see src/lib/bookings/cancellation.ts
   created_at: string;
 }
@@ -102,6 +104,7 @@ export interface Quote {
   message: string | null;
   status: 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'expired';
   valid_until: string | null;
+  is_empty_leg: number;  // 1 = repositioning flight, charged the empty-leg commission
   previous_price_cents: number | null;
   revised_at: string | null;
   created_at: string;

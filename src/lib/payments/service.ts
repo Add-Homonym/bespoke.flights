@@ -16,11 +16,11 @@
 
 import type { Db } from '@/lib/db';
 import type Stripe from 'stripe';
+import { estimatedProcessingCents, getBusinessModel, resolveCommission } from '@/lib/business-model';
 import { getStripe } from './stripe';
 import {
   getPaymentsMode,
   appBaseUrl,
-  platformFeeBps,
   computeFees,
   MIN_CHARGE_CENTS,
   CHECKOUT_TTL_SECONDS,
@@ -102,7 +102,9 @@ export async function createCheckout(
   // Close any other open checkout for this request so only one can be paid.
   await supersedePendingPayments(db, request.id);
 
-  const fees = computeFees(quote.price_cents, platformFeeBps(operator.platform_fee_bps));
+  const model = await getBusinessModel(db);
+  const commission = await resolveCommission(db, model, operator, { emptyLeg: !!quote.is_empty_leg });
+  const fees = computeFees(quote.price_cents, commission.bps, estimatedProcessingCents(model, quote.price_cents));
   const provider = mode === 'stripe' ? 'stripe' : 'stub';
 
   const paymentId = (await db.one<{ id: number }>(`

@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
+import { getBusinessModel } from '@/lib/business-model';
 import { Card } from '@/components/ui/card';
 import { Notice } from '@/components/ui/notice';
 import { QuoteCard } from '@/components/ui/quote-card';
@@ -51,8 +52,9 @@ export default async function RequestDetailPage({
     FROM quotes q
     JOIN operators o ON o.id = q.operator_id
     LEFT JOIN aircraft a ON a.id = q.aircraft_id
+    LEFT JOIN outreach_log ol ON ol.request_id = q.request_id AND ol.operator_id = q.operator_id
     WHERE q.request_id = ?
-    ORDER BY q.price_cents ASC
+    ORDER BY ${(await getBusinessModel(db)).rankQuotesBy === 'score' ? 'COALESCE(ol.match_score, 0) DESC, q.price_cents ASC' : 'q.price_cents ASC'}
   `, [request.id]);
 
   // Most relevant payment: settled or in flight first, then the latest failure.
