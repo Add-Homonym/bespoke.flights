@@ -4,10 +4,13 @@ import { registerSchema } from '@/lib/validations';
 import { registerUser } from '@/lib/auth';
 import { claimBookingDraft } from '@/lib/bookings/create';
 import { appBaseUrl } from '@/lib/payments/config';
+import { clientIp, rateLimited } from '@/lib/rate-limit';
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    const limited = await rateLimited('auth', clientIp(req));
+    if (limited) return limited;
+    const body = await req.json().catch(() => null);
     const parsed = registerSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });

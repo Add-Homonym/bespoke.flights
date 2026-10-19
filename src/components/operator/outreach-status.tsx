@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/ui/status-badge';
 
 interface OutreachEntry {
   id: number;
@@ -18,12 +18,12 @@ interface OutreachEntry {
   quote_status: string | null;
 }
 
-const statusBadge: Record<string, 'default' | 'success' | 'warning' | 'gold'> = {
-  queued: 'default',
+const statusBadge: Record<string, 'neutral' | 'confirmed' | 'warning' | 'neutral'> = {
+  queued: 'neutral',
   sent: 'warning',
   delivered: 'warning',
-  responded: 'success',
-  failed: 'default',
+  responded: 'confirmed',
+  failed: 'neutral',
 };
 
 export function OutreachStatus({ requestId }: { requestId: number }) {
@@ -67,9 +67,9 @@ export function OutreachStatus({ requestId }: { requestId: number }) {
             <div className="flex items-center gap-3">
               <span className="text-ink-subtle text-xs">Score: {entry.match_score}</span>
               {entry.quote_id ? (
-                <Badge variant="success">Quoted ${((entry.quote_price || 0) / 100).toLocaleString()}</Badge>
+                <StatusBadge variant="confirmed">Quoted ${((entry.quote_price || 0) / 100).toLocaleString()}</StatusBadge>
               ) : (
-                <Badge variant={statusBadge[entry.status] || 'default'}>{entry.status}</Badge>
+                <StatusBadge variant={statusBadge[entry.status] || 'neutral'}>{entry.status}</StatusBadge>
               )}
             </div>
           </div>

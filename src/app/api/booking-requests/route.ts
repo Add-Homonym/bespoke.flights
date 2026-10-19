@@ -7,6 +7,7 @@ import { createBookingRequest } from '@/lib/bookings/create';
 import { appBaseUrl } from '@/lib/payments/config';
 import { DRAFT_COOKIE } from '@/lib/bookings/draft';
 import { legsByRequest } from '@/lib/db/queries';
+import { rateLimited } from '@/lib/rate-limit';
 import type { BookingRequest } from '@/lib/types';
 
 export async function POST(req: Request) {
@@ -14,11 +15,14 @@ export async function POST(req: Request) {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   if (session.role !== 'customer') return NextResponse.json({ error: 'Only customers can create requests' }, { status: 403 });
 
-  const body = await req.json();
+  const body = await req.json().catch(() => null);
   const parsed = bookingRequestSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
   }
+
+  const limited = await rateLimited('bookingCreate', session.userId);
+  if (limited) return limited;
 
   const { id, outreach } = await createBookingRequest(getDb(), session.userId, parsed.data, appBaseUrl(req));
 

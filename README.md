@@ -20,11 +20,20 @@ Traveler submits request → Matching engine scores operators → RFQs dispatche
 
 There are three user roles — **customer**, **operator**, and **admin** — each with their own authenticated views and workflows.
 
+### Who can see what
+
+- A customer sees only their own requests, every quote on them, and which operators were invited (without the operators' contact details).
+- An operator sees requests that are open to quotes, or that it was invited to or has quoted; only its own quote on each; and the customer's contact details only after its quote has been paid for.
+- Admins see everything. The rules live in `src/lib/access.ts` and are covered by `src/app/api/authz.test.ts`.
+- Cancelling an unpaid request is for its customer (or an admin). A paid booking is cancelled through the refund flow so money moves with the status.
+- Rate limits (`src/lib/rate-limit.ts`, stored in the `rate_limits` table so they hold across serverless instances): sign-in/sign-up 10 per 15 min per IP; new booking requests 5 per hour per user; trip-sheet emails and staff test alerts 10 per hour; manual discovery runs 3 per hour. Exceeding one returns 429 with `Retry-After`.
+
 ---
 
 ## Customer Workflow
 
-1. **Build an itinerary** at `/book`. "Start Booking" on the home page goes straight here; no account is needed. Add origin, destination, date and time for each leg; multi-leg trips (A → B → C → A) are supported. The itinerary is saved in the `bf_booking_draft` cookie on every change (30 days, `SameSite=Lax`), so reloading or returning later restores it.
+0. **Two booking forms.** The home page and `/book` use the **ticket form**: each leg is a paper ticket with From, To, date, departure time and guests printed into it; **Add a leg** issues another ticket starting where the last one lands (`src/components/booking/ticket-booking-form.tsx`). The step-by-step **classic form** is at `/book/classic` and is described below. Each request records which form produced it (`booking_requests.form_variant`); the admin dashboard compares requests and bookings per form. Once every leg is complete, a signed-in traveler's request goes out automatically after 5 seconds (any change restarts the timer; **Wait** pauses, **Send now** skips it; a restored draft waits). A visitor sees the account form as soon as the route is complete. There is no passenger cap; operators split large groups across aircraft.
+1. **Build an itinerary** at `/book/classic`. "Start Booking" on the home page goes straight here; no account is needed. Add origin, destination, date and time for each leg; multi-leg trips (A → B → C → A) are supported. Each leg shows its great-circle distance (nm, mi, km) once both airports are known, and the route header totals the trip. **Set leg** collapses a finished leg to a summary with **Edit** and **Cancel leg** (undoable); **Add a leg** sits at the bottom right of the last leg. Airport coordinates come from OurAirports (`src/lib/airports.ts`); the math is in `src/lib/distance.ts`. Special requests are chips: preset tags (pets, surfboards, ground transportation, medical devices and more) and up to six of the traveler's own, added with **Add your own** and edited or removed in place (`src/lib/bookings/request-tags.ts`). Both are kept in the draft and folded into the request's notes on submit, so operators see them wherever special requests appear. The itinerary is saved in the `bf_booking_draft` cookie on every change (30 days, `SameSite=Lax`), so reloading or returning later restores it.
 2. **Sign up or sign in at submit.** A visitor without a session gets an inline account step on `/book`. After registering or signing in, the server turns the saved itinerary into a booking request, clears the cookie, and opens the new request. Signing in through `/login` or `/register` with a saved itinerary does the same. Signed-in travelers submit directly.
 
    Wherever a trip that is being booked appears (the booking form's live summary, the account step, request lists and pages for travelers, operators and admins, the Stripe Checkout line item, and the booking emails), it shows every detail: route, each leg's date and time ("Any time" if none was given), passengers, and special requests ("None" if empty). The shared `TripDetails` component and `src/lib/trip-format.ts` produce this.
@@ -44,7 +53,7 @@ There are three user roles — **customer**, **operator**, and **admin** — eac
    - Hawaii-capable and transoceanic flags
    - FAA certificate number
 3. **Receive inbound RFQs** at `/operator/inbound`. These are charter requests automatically matched to the operator's profile by the matching engine. Each card shows the route, pax count, dates, match score, and time since receipt.
-4. **Submit a quote** inline — price, aircraft (from fleet inventory), valid-until date, and an optional message. One click creates the quote and marks the outreach log as responded.
+4. **Submit a quote** inline — price, aircraft (from fleet inventory), valid-until date, and an optional message. **Work out the price** opens a worksheet (`src/lib/quotes/worksheet.ts`): leg hours estimated from distance and the aircraft's cruise speed, hourly rate, positioning, daily minimum, fuel surcharge, crew overnights, landing/handling, catering, other costs, margin, federal excise tax (7.5% default) and per-passenger segment fees; **Use as the price** fills the price. The worksheet is saved in `quote_worksheets`, readable only by the quoting operator (`GET /api/quotes/[id]/worksheet`), and can be edited when revising. Travelers and admins never see it. One click creates the quote and marks the outreach log as responded.
 5. **Browse all demand** at `/operator/requests` to see every open request on the platform, not just auto-matched ones.
 6. **Share a booking with the team.** Once a booking is paid, the winning operator's request page shows **Share with your team**:
    - **Private link** to a read-only trip sheet at `/trip/<token>`. No login is needed to view it. It shows legs with dates and times, aircraft, passengers, special requests, and the lead passenger's name, phone and email. It prints cleanly and is not indexed by search engines.
@@ -52,7 +61,7 @@ There are three user roles — **customer**, **operator**, and **admin** — eac
    - **Calendar file** (`/trip/<token>/calendar`): one event per leg, at the requested local time, or all-day when no time was given.
    - **Turn off link** stops it working immediately; a new link can be created afterwards. Links also expire 30 days after the last leg.
    Only the operator whose quote was accepted can create, email or revoke links (`trip_shares` table).
-7. **Company board** at `/operator/board`. It is a live view of every charter that concerns the company. It refreshes every 15 seconds without a reload, pausing while the tab is hidden. It has four sections:
+7. **Dashboard** at `/operator/dashboard` (also `/operator`, the operator home after sign-in). Summary boxes link to each section: inbound requests (awaiting / quoted / missed, requests per week), all quotes (by status, win rate), business earned (payouts net of refunds, by month), team (staff on alerts, email/text channels), and aircraft (seats, cover photos, registrations to check). Below them is the **company board** (`/operator/board` redirects here). It is a live view of every charter that concerns the company. It refreshes every 15 seconds without a reload, pausing while the tab is hidden. It has four sections:
    - **Upcoming charters**: booked and paid, with legs, times, passengers, special requests, aircraft, price and lead passenger contact.
    - **New requests to quote**: matched to the company, with no quote yet.
    - **Quoted, awaiting client**.
@@ -65,7 +74,11 @@ There are three user roles — **customer**, **operator**, and **admin** — eac
 
    Alerts go out automatically when a payment completes, when a booking is cancelled (by the customer or a full refund) and when the matching engine sends the company an RFQ. Booking alerts include the private trip sheet link. Each person gets each alert once per channel: redelivered webhooks do not duplicate it, and failed sends are retried on the next trigger (`staff_notifications` table). **Send test** checks a person's setup.
    - **Staff board link**: a private, read-only `/board/<token>` URL of the company board for dispatch screens or staff without an account. It can be replaced or turned off at any time.
-9. **Manage fleet** at `/operator/fleet` — add aircraft with tail number, type, capacity, range, and year.
+8b. **Autopilot** at `/operator/autopilot`, a cockpit-style console. When engaged, every request matched to the operator gets a drafted quote (`src/lib/quotes/autopilot.ts`): the smallest aircraft that seats the group and covers the longest leg, leg hours from distance and cruise speed, positioning from and back to the home base, then the operator's margin, fuel surcharge, daily minimum, crew overnights, landing per leg, catering per guest per leg, excise tax and segment fees through the quote worksheet. Drafts are stored in `quote_drafts` with notes for the reviewer (no rate on file, group larger than the fleet, range short of a leg) and are never visible to travelers. The console streams incoming requests every 8 seconds with each one's draft or quote; **Review** opens the inbound form prefilled, where a staffer adjusts and presses **Approve and submit quote**. Requests can also be drafted on demand with **Draft with Autopilot**. Engaging Autopilot drafts the requests already waiting. Routes: `GET/POST/DELETE /api/booking-requests/[id]/draft`. **Learning** (`src/lib/quotes/learning.ts`, on by default, LEARN switch on the console): every quote submitted or revised with the worksheet updates weighted averages of the operator's margin, fuel surcharge, daily minimum, crew overnight, landing per leg, catering per guest per leg, tax and segment fee; per aircraft, the hourly rate and how entered flight times compare with the distance estimate; and how far staff move the final price from the worksheet total. Drafts use learned values once they exist (shown as LRN on each instrument and listed on the draft), an aircraft with no rate on file takes the rate staff used, and open drafts are redrafted after each submission. Stored in `autopilot_learning`; RESET on the console (`DELETE /api/operator/autopilot/learning`) returns to the setpoints.
+9. **Manage fleet** at `/operator/fleet`:
+   - Add, edit and remove aircraft (tail number, type, seats, range, year, manufacturer, model, serial). An aircraft that is on a quote cannot be removed.
+   - **Photos:** up to 8 per aircraft. The browser resizes each to 1600 px (plus a 480 px thumbnail) before upload; bytes are stored in `aircraft_photos` and served from `/api/aircraft-photos/<id>` with immutable caching. The first photo is the cover.
+   - **FAA registry lookup** (US N-numbers): reads the public FAA Aircraft Inquiry page (`src/lib/faa/registry.ts`) and fills blank fields (serial, manufacturer, model, year). The stored record shows registration status and expiry, airworthiness, engines and registered owner, and warns when the registry's aircraft does not match the entered type. Accident and incident history is with the NTSB, not the FAA; the record links to the NTSB CAROL search (the NTSB API needs a developer key).
 10. **Set up payouts** at `/operator/settings` → Payouts. This opens Stripe Connect Express onboarding. Customers cannot pay for an operator's quotes until onboarding is complete.
 
 ## Admin Workflow
@@ -129,7 +142,7 @@ A weekly automated pipeline finds new charter operators and invites them to join
 
 ### How It Works
 
-1. **Vercel Cron** triggers `GET /api/cron/weekly-discovery` every Monday at 8:00 AM HST (18:00 UTC).
+1. **Vercel Cron** triggers `GET /api/cron/weekly-discovery` every Monday at 8:00 AM HST (18:00 UTC), sending `Authorization: Bearer $CRON_SECRET`. The route refuses every call when `CRON_SECRET` is unset. Each FAA request has an 8 s timeout and the scrape stops after 35 s so storing and emailing fit the 60 s function limit; states that were skipped or failed are listed in the run's `errors`.
 2. **FAA scraper** queries `av-info.faa.gov` for Part 135 on-demand air taxi certificate holders, processing 10 states per run and rotating through all US states across ~5 weeks.
 3. **Deduplication** skips operators already in the `discovered_operators` table or registered on the platform.
 4. **Storage** inserts new records. Since the FAA registry does not publish email addresses, most land with status `no_email`.
@@ -153,7 +166,7 @@ At `/admin/discoveries`, admins can:
 - Filter by status, state, or search by company name / cert number
 - Click **Add Email** on any `no_email` operator — status auto-upgrades to `new`, and the next cron run sends the invite
 - Click **Opt out** to suppress future contact
-- Click **Run Discovery Now** to manually trigger the pipeline
+- Click **Run Discovery Now** to manually trigger the pipeline (admin session; 3 runs per hour)
 - View pipeline stats in the dashboard: total discovered, ready to email, need email, invited
 
 ---
@@ -173,12 +186,45 @@ Stripe → POST /api/webhooks/stripe (signature verified)
      other quotes rejected, request booked, receipt + operator emails sent
 ```
 
-- **Quotes are accepted only through payment.** `PATCH /api/quotes/[id]` can only decline.
+- **Quotes are accepted only through payment.** `PATCH /api/quotes/[id]` declines (traveler), or withdraws / revises (the quoting operator, while pending).
 - **One open checkout per request.** Starting a checkout for a different quote expires the previous session.
 - **Double payment protection.** If two sessions are both paid, the second one is refunded automatically, including the transfer reversal.
 - **Bank payments (ACH).** The payment shows as `processing` until `checkout.session.async_payment_succeeded` or `..._failed` arrives. The request is not booked until funds clear.
-- **Expired quotes** (`valid_until` in the past) cannot be paid.
+- **Expired quotes** (`valid_until` in the past) cannot be paid. The daily lifecycle job marks them `expired`.
 - **Webhooks are idempotent.** Event IDs are recorded in `payment_events`, and every handler can safely run more than once. If processing fails, the endpoint returns 500 so Stripe retries.
+
+### Receipts
+
+`/requests/[id]/receipt` (owner or admin) is an invoice-style, printable receipt: number `BF-<year>-<payment id padded to 6>`, billed-to, operator legal name with FAA certificate and safety rating, legs, aircraft and tail, each charge (booking and any paid itinerary changes) with date and payment method when known, refunds, and the net. It is linked from the trip page and the receipt email. Quote cards show the operator's certificate number and safety rating under the company name.
+
+### Cancelling a paid booking
+
+A traveler cancels from the trip page (**Cancel trip** → confirmation panel showing the refund). The refund follows the operator's **cancellation policy** (`operators.cancellation_policy`, set at `/operator/settings`), measured from the first leg's departure (its local date and time, or 23:59 when no time was given):
+
+| Window | Default | Refund |
+|---|---|---|
+| ≥ `full_refund_hours` before departure | 72 h | 100% |
+| ≥ `partial_refund_hours` | 24 h | `partial_refund_bps` (default 5000 = 50%) |
+| Closer than that | | none |
+
+`GET /api/booking-requests/[id]/cancel` previews the refund; `POST` performs it (owner or admin): the refund goes through the normal refund path (transfer reversal and fee return), the request becomes `cancelled`, pending quotes are rejected, both sides get a cancellation email and the operator's staff are alerted. Unpaid requests are still withdrawn with `PATCH /api/booking-requests/[id] {status:'cancelled'}`.
+
+### Changing a booked trip
+
+On a booked trip the traveler can **Request a change** (new legs, guest count, special requests) from the trip page. One change can be pending at a time (`change_requests` table). The winning operator sees it on their request page and in the **Change requests** section of the company board, and either:
+
+- **accepts at the same price**: the booking is updated at once, both sides are emailed;
+- **accepts at a higher all-in price**: a payment for the difference is created (`payments.change_request_id`); the change is applied when it is paid, through the normal fulfillment path (webhook or the stub "simulate" button);
+- **accepts at a lower price**: the difference is refunded and the change applied;
+- **declines** with a note: the traveler is emailed and the booking stands.
+
+Routes: `GET/POST /api/booking-requests/[id]/changes`, `PATCH /api/change-requests/[id]` with `{action: 'accept' | 'decline' | 'withdraw', newPriceCents?, note?}`. Staff alerts of kind `change` go to staff subscribed to **Change requested**.
+
+### Messaging
+
+Travelers and operators talk in the app instead of by phone or email. One thread exists per (request, operator) once that operator has quoted (`messages` table, ≤ 2000 characters per message). On the trip page each quote has **Message operator** (expanded for the accepted quote); the operator's request page has the conversation with the traveler. Threads poll every 15 seconds. Phone numbers and email addresses are never part of the thread payload.
+
+`GET/POST /api/booking-requests/[id]/messages?operatorId=` (operators omit `operatorId`; `?after=<id>` returns only newer messages). Admins can read but not post. A new message emails the other side with a link to the thread, at most once per thread and recipient every 10 minutes (`message_notifications`), and raises a `message` staff alert for the operator on every traveler message.
 
 ### Platform fee
 
@@ -227,18 +273,29 @@ To go live: remove `APP_TEST_MODE`, set the Stripe variables, and delete the dem
 
 ---
 
+## Quote lifecycle
+
+- **Withdraw**: an operator withdraws a pending quote (`PATCH /api/quotes/[id] {status:'withdrawn'}`) from the request page; the traveler is emailed and the operator may quote again (the partial unique index only counts pending and accepted quotes).
+- **Revise**: an operator changes the price, message, valid-until date or aircraft of a pending quote (`PATCH /api/quotes/[id] {priceCents?, message?, validUntil?, aircraftId?}`). The old price is kept in `quotes.previous_price_cents` and `revised_at` is set; the traveler receives a "Quote revised" email and the quote card shows the previous price.
+- **Daily lifecycle** (`GET /api/cron/daily-lifecycle`, 10:00 UTC via `vercel.json`, bearer `CRON_SECRET`, or `POST` as an admin): `expireQuotes` sets pending quotes past `valid_until` to `expired` (one email per request to the traveler) and `completeTrips` sets booked requests whose last leg is before today to `completed` (traveler emailed with a receipt link). `src/lib/lifecycle.ts`. The `quotes.status` CHECK constraint gains `expired` through a guarded `DO` block in `SCHEMA_BLOCKS` that runs once per database.
+
 ## Email System
 
-All email is sent through Resend's API via `src/lib/email/resend.ts`. Four email templates exist:
+All email is sent through Resend's API via `src/lib/email/resend.ts`. Templates (`src/lib/email/templates.ts`):
 
 | Template | Trigger | Content |
 |---|---|---|
 | **Operator Invite** | Discovery pipeline or manual trigger | Introduces Bespoke Flights, explains the marketplace model, links to `/register?role=operator` |
 | **RFQ Notification** | Customer submits a booking request | Full itinerary, passenger count, match score, link to `/operator/inbound` |
-| **Payment Receipt** | Payment succeeds | Sent to the customer: route, dates, operator, aircraft, total paid |
+| **New quote / Quote revised** | Operator submits or revises a quote | Sent to the traveler: operator, aircraft, all-in price, validity, link to compare |
+| **Payment Receipt** | Payment succeeds | Sent to the customer: route, dates, operator, aircraft, total paid, receipt link |
 | **Booking Confirmed** | Payment succeeds | Sent to the operator: itinerary, quote amount, platform fee, payout |
+| **Booking Cancelled** | Traveler cancels a paid booking | Both sides: itinerary, amount paid, refund, policy |
+| **Change request** | Proposed, accepted (with or without payment due), applied, declined | Proposed vs current itinerary, new price, operator note |
+| **New message** | A message arrives in a thread (≤ 1 per thread and side per 10 min) | Sender and a link to the thread; the body stays in the app |
+| **Status update** | Request withdrawn, quote declined or withdrawn, quotes expired, trip completed | One-paragraph notice with a link |
 | **Trip Sheet** | Operator emails a booking to colleagues | Itinerary and the private trip sheet link |
-| **Staff Alert** | Booking, cancellation or new request, per staff preferences | Itinerary, passengers, special requests, aircraft, lead passenger and a link |
+| **Staff Alert** | Booking, cancellation, new request, change request or message, per staff preferences | Itinerary, passengers, special requests, aircraft, lead passenger and a link |
 
 Texts go through Twilio (`src/lib/notify/sms.ts`). Phone numbers are normalized to E.164: 10-digit numbers are treated as US/Canada.
 
@@ -273,7 +330,9 @@ src/
 │   ├── operator/               # Outreach status display
 │   └── ui/                     # Badge, Button, Card, Input, Select, Table, AirportInput
 └── lib/
-    ├── auth.ts                 # JWT sessions via jose + cookies
+    ├── auth.ts                 # Neon Auth sessions (production); bcrypt + JWT cookie (development)
+    ├── access.ts               # Who may read or change a booking request
+    ├── rate-limit.ts           # Database-backed fixed-window limits
     ├── airports.ts             # Airport code data
     ├── types.ts                # All TypeScript interfaces + market/fleet constants
     ├── validations.ts          # Zod schemas for all API inputs
@@ -307,9 +366,10 @@ Fifteen tables in Postgres:
 
 | Table | Purpose |
 |---|---|
-| `users` | All accounts (customer, operator, admin). Passwords hashed with bcryptjs. |
+| `users` | App profile for every account (customer, operator, admin): role, phone, `auth_id` link to Neon Auth, `is_demo`. `password_hash` is used only by the development sign-in. |
 | `operators` | Linked to a user. Company name, certificate, approval status, contact preferences, market/fleet/safety profile for matching. |
-| `aircraft` | Operator fleet inventory. Tail number, type, capacity, range, year. |
+| `aircraft` | Operator fleet inventory. Tail number, type, capacity, range, year, serial/manufacturer/model, last FAA registry record (`faa_record` JSON, `faa_checked_at`). |
+| `aircraft_photos` | Photos per aircraft: JPEG/PNG/WebP bytes and thumbnail (BYTEA), position (0 = cover), dimensions, caption. |
 | `booking_requests` | Customer trip requests. Status lifecycle: open → quoted → booked → completed (or cancelled). |
 | `booking_legs` | Individual flight legs within a request. Origin, destination, date, time. |
 | `quotes` | Operator price submissions. Linked to request + operator + optional aircraft. Status: pending → accepted/rejected/withdrawn. |
@@ -322,6 +382,7 @@ Fifteen tables in Postgres:
 | `operator_staff` | An operator's staff roster: contact details, alert channels and which events each person receives. |
 | `staff_notifications` | One row per staff alert per channel. Unique on (staff_id, event_key, channel) so alerts are never duplicated. |
 | `operator_boards` | The private staff board link token for each operator. |
+| `rate_limits` | Fixed-window request counters, keyed by scope and user or IP. |
 
 The `operators` table also stores the Stripe Connect account ID, capability flags, and an optional fee override.
 
@@ -380,20 +441,22 @@ Created by `npm run seed` locally, or automatically in [test mode](#test-mode). 
 
 | Variable | Required | Description |
 |---|---|---|
-| `JWT_SECRET` | Yes | Random string for signing session tokens |
+| `NEON_AUTH_BASE_URL` | Production | Neon Auth endpoint (Neon console → Auth). Leave empty locally to use bcrypt accounts and a JWT cookie instead. |
+| `NEON_AUTH_COOKIE_SECRET` | Production | Signs Neon Auth session cookies (32+ random characters). |
+| `JWT_SECRET` | Development | Signs the development session cookie. Must be 16+ characters and not `change-me`; without it, development uses a random per-process key (sessions end on restart) and production refuses to sign. |
 | `RESEND_API_KEY` | No | Resend API key. Without it, emails log to stdout. |
 | `EMAIL_FROM` | No | Verified sender address (default: `hello@bespoke.flights`) |
-| `CRON_SECRET` | Production | Secures the `/api/cron/weekly-discovery` endpoint |
+| `CRON_SECRET` | Production | Secures the `/api/cron/weekly-discovery` and `/api/cron/daily-lifecycle` endpoints |
 | `STRIPE_SECRET_KEY` | Production | Stripe secret key. Without it, payments run in stub mode (development) or are disabled (production). |
 | `STRIPE_WEBHOOK_SECRET` | Production | Signing secret for the platform webhook endpoint |
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | Production | Signing secret for the connected-accounts webhook endpoint |
 | `PLATFORM_FEE_BPS` | No | Platform commission in basis points (default `500` = 5%) |
-| `APP_URL` | Production | Public base URL for Stripe redirect URLs and links in emails and texts (defaults to the request origin; set it so links sent from webhooks point at the right domain) |
+| `APP_URL` | Production | Public base URL for Stripe redirect URLs and links in emails and texts. In production the request's Host header is never used; without `APP_URL` the app falls back to Vercel's `VERCEL_PROJECT_PRODUCTION_URL` and otherwise fails the request. |
 | `TWILIO_ACCOUNT_SID` | No | Twilio account for RFQ texts and staff text alerts. Without the Twilio variables, texts log to stdout. |
 | `TWILIO_AUTH_TOKEN` | No | Twilio auth token |
 | `TWILIO_MESSAGING_SERVICE_SID` | No | Twilio Messaging Service to send from (or set `TWILIO_FROM_NUMBER`) |
 | `TWILIO_FROM_NUMBER` | No | Sending number in E.164, used when no Messaging Service is set |
-| `APP_TEST_MODE` | No | `true` simulates all payments, shows a test banner, and loads demo data into an empty database |
+| `APP_TEST_MODE` | No | `true` simulates all payments, shows a test banner, and loads demo data into an empty database. Demo accounts (`is_demo`) cannot sign in once this is off. Refused alongside a live Stripe key. |
 | `DATABASE_URL` | Production | Postgres connection string. Set automatically by the Vercel Neon integration (pooled). |
 | `DATABASE_POOL_MAX` | No | Max connections per function instance (default 5) |
 | `PGLITE_DIR` | No | Local PGlite data directory when `DATABASE_URL` is unset (default `data/pglite`; `memory` for in-memory) |
@@ -415,7 +478,7 @@ Optional: enable Neon's preview-branch option in the integration so each preview
 
 ### 2. Other environment variables
 
-Set `JWT_SECRET` (required: a long random string; without it, session tokens are signed with a public development key), `CRON_SECRET`, `APP_URL`, and the Stripe, Resend and Twilio variables from the table above.
+Set `NEON_AUTH_BASE_URL`, `NEON_AUTH_COOKIE_SECRET`, `CRON_SECRET` (required for the scheduled discovery run), `APP_URL`, and the Stripe, Resend and Twilio variables from the table above.
 
 ### 3. Deploy
 
@@ -423,12 +486,13 @@ Set `JWT_SECRET` (required: a long random string; without it, session tokens are
 vercel deploy
 ```
 
-The cron schedule in `vercel.json` runs the discovery pipeline every Monday at 18:00 UTC (8:00 AM HST). Vercel Cron requires a Pro plan.
+The cron schedules in `vercel.json` run the discovery pipeline every Monday at 18:00 UTC (8:00 AM HST) and the quote/trip lifecycle job daily at 10:00 UTC. Vercel Cron requires a Pro plan.
 
-To test the cron endpoint locally:
+To test the cron endpoint locally (set `CRON_SECRET` in `.env.local`):
 
 ```bash
 curl -X POST http://localhost:3000/api/cron/weekly-discovery \
+  -H "Authorization: Bearer $CRON_SECRET" \
   -H "Content-Type: application/json" \
   -d '{"states": ["HI"], "emailsPerRun": 5}'
 ```
@@ -441,5 +505,5 @@ curl -X POST http://localhost:3000/api/cron/weekly-discovery \
 - **Resend webhooks** — track email bounces and mark discovered operators as `bounced` automatically.
 - **Secondary email discovery** — the FAA registry doesn't publish emails. A future enrichment step (website scraping or data API) could automate email collection for `no_email` operators.
 - **AI phone outreach** — the contact method enum can be extended with `phone` for Bland.ai / Vapi voice agent integration.
-- **Operator invoicing / 1099-K reporting** — Stripe Connect produces tax forms for Express accounts. No in-app invoice documents exist yet.
+- **Operator invoicing / 1099-K reporting** — Stripe Connect produces tax forms for Express accounts. Travelers have a printable receipt; operators have no in-app invoice document yet.
 - **Deposits and balance payments** — the full quote amount is charged at booking. Split payments (deposit now, balance before departure) are not supported.

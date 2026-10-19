@@ -86,11 +86,11 @@ export default async function TripSheetPage({ params }: { params: Promise<{ toke
           <dd className="text-ink">{sheet.leadPassenger.name}</dd>
           <dt className="text-ink-muted">Phone</dt>
           <dd className="text-ink">
-            {sheet.leadPassenger.phone ? <a href={`tel:${sheet.leadPassenger.phone}`} className="hover:text-brass-ink">{sheet.leadPassenger.phone}</a> : 'Not provided'}
+            {sheet.leadPassenger.phone ? <a href={`tel:${sheet.leadPassenger.phone}`} className="hover:text-royal">{sheet.leadPassenger.phone}</a> : 'Not provided'}
           </dd>
           <dt className="text-ink-muted">Email</dt>
           <dd className="text-ink">
-            <a href={`mailto:${sheet.leadPassenger.email}`} className="hover:text-brass-ink">{sheet.leadPassenger.email}</a>
+            <a href={`mailto:${sheet.leadPassenger.email}`} className="hover:text-royal">{sheet.leadPassenger.email}</a>
           </dd>
         </dl>
       </section>

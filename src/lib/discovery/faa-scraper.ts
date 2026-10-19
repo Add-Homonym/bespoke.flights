@@ -164,28 +164,33 @@ export function parseOperatorTable(html: string, state: string): FAAOperator[] {
  * Scrape FAA Part 135 operators for a single state.
  * Returns parsed operator records.
  */
+export class ScrapeError extends Error {
+  constructor(public state: string, message: string) {
+    super(`${state}: ${message}`);
+    this.name = 'ScrapeError';
+  }
+}
+
+/** Per-request timeout. The whole run must fit a 60 s serverless budget. */
+const FETCH_TIMEOUT_MS = 8_000;
+
 export async function scrapeState(state: string): Promise<FAAOperator[]> {
+  let res: Response;
   try {
-    const res = await fetch(FAA_SEARCH_URL, {
+    res = await fetch(FAA_SEARCH_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'User-Agent': 'BespokeFlights/1.0 (charter marketplace; contact hello@bespoke.flights)',
       },
       body: buildFormBody(state),
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
-
-    if (!res.ok) {
-      console.error(`FAA scrape failed for ${state}: HTTP ${res.status}`);
-      return [];
-    }
-
-    const html = await res.text();
-    return parseOperatorTable(html, state);
   } catch (err) {
-    console.error(`FAA scrape error for ${state}:`, err instanceof Error ? err.message : err);
-    return [];
+    throw new ScrapeError(state, err instanceof Error ? err.message : String(err));
   }
+  if (!res.ok) throw new ScrapeError(state, `HTTP ${res.status}`);
+  return parseOperatorTable(await res.text(), state);
 }
 
 /**
@@ -198,25 +203,36 @@ export async function scrapeState(state: string): Promise<FAAOperator[]> {
 export async function scrapeStates(
   states: string[] = US_STATES,
   delayMs = 500,
-  maxStates = 10
-): Promise<{ operators: FAAOperator[]; statesQueried: string[] }> {
+  maxStates = 10,
+  budgetMs = 35_000
+): Promise<{ operators: FAAOperator[]; statesQueried: string[]; errors: string[] }> {
   const operators: FAAOperator[] = [];
   const statesQueried: string[] = [];
+  const errors: string[] = [];
+  const started = Date.now();
 
   const batch = states.slice(0, maxStates);
 
   for (let i = 0; i < batch.length; i++) {
     const state = batch[i];
-    const result = await scrapeState(state);
-    operators.push(...result);
-    statesQueried.push(state);
+    // Leave time for storing results and sending invites inside the function timeout.
+    if (Date.now() - started > budgetMs) {
+      errors.push(`Stopped before ${batch.slice(i).join(', ')}: time budget reached`);
+      break;
+    }
+    try {
+      operators.push(...(await scrapeState(state)));
+      statesQueried.push(state);
+    } catch (err) {
+      errors.push(err instanceof Error ? err.message : String(err));
+    }
 
     if (i < batch.length - 1) {
       await new Promise(r => setTimeout(r, delayMs));
     }
   }
 
-  return { operators, statesQueried };
+  return { operators, statesQueried, errors };
 }
 
 /**

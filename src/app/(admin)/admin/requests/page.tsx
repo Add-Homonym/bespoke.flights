@@ -4,16 +4,16 @@ import { legsByRequest, quoteCountsByRequest } from '@/lib/db/queries';
 import { Card } from '@/components/ui/card';
 import { TripDetails } from '@/components/booking/trip-details';
 import { fromDbLegs } from '@/lib/trip-format';
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { Table, Thead, Th, Td, Tr } from '@/components/ui/table';
 import type { BookingRequest } from '@/lib/types';
 
-const statusBadge: Record<string, 'default' | 'success' | 'warning' | 'error' | 'gold'> = {
-  open: 'gold',
+const statusBadge: Record<string, 'neutral' | 'confirmed' | 'warning' | 'danger' | 'neutral'> = {
+  open: 'neutral',
   quoted: 'warning',
-  booked: 'success',
-  cancelled: 'error',
-  completed: 'default',
+  booked: 'confirmed',
+  cancelled: 'danger',
+  completed: 'neutral',
 };
 
 export default async function AdminRequestsPage() {
@@ -67,7 +67,7 @@ export default async function AdminRequestsPage() {
                     <div className="text-ink-muted text-xs">{req.customer_email}</div>
                   </Td>
                   <Td>{quoteCount}</Td>
-                  <Td><Badge variant={statusBadge[req.status]}>{req.status}</Badge></Td>
+                  <Td><StatusBadge variant={statusBadge[req.status]}>{req.status}</StatusBadge></Td>
                   <Td className="text-ink-muted text-xs">{new Date(req.created_at).toLocaleDateString()}</Td>
                 </Tr>
               );

@@ -9,7 +9,7 @@ const base =
 const variants: Record<ButtonVariant, string> = {
   primary: 'bg-royal text-on-royal hover:opacity-90',
   secondary: 'bg-transparent border border-border-control text-ink hover:bg-surface-sunken',
-  quiet: 'bg-transparent text-brass-ink hover:underline underline-offset-4',
+  quiet: 'bg-transparent text-royal hover:underline underline-offset-4',
   // Destructive confirmation (admin refunds). Not part of the traveler flows.
   danger: 'bg-transparent border border-danger text-danger hover:bg-danger-tint',
 };

@@ -5,6 +5,7 @@ import { rfqNotificationEmail, rfqSmsBody } from '@/lib/email/templates';
 import { sendSms } from '@/lib/notify/sms';
 import { alertStaff } from '@/lib/staff/alerts';
 import { appBaseUrl } from '@/lib/payments/config';
+import { draftQuote } from '@/lib/quotes/autopilot';
 
 // Route distance estimates for range filtering (nm)
 const ROUTE_DISTANCES: Record<string, number> = {
@@ -185,7 +186,7 @@ export function generateRFQ(
 REQUEST #${requestId}
 ROUTE: ${route}
 DATES: ${dateRange}
-PASSENGERS: ${passengerCount}
+PASSENGERS: ${passengerCount}${passengerCount > 19 ? ' (may need more than one aircraft)' : ''}
 ${notes ? `NOTES: ${notes}` : ''}
 
 ITINERARY:
@@ -198,7 +199,7 @@ QUOTE REQUIREMENTS:
 • Catering inclusions
 • Cancellation terms
 
-Submit your quote at: https://bespoke.flights/operator/inbound
+Submit your quote at: ${appBaseUrl()}/operator/inbound
 
 No markup on your quoted price. Commission on confirmed booking only.
 
@@ -320,7 +321,10 @@ export async function dispatchOutreach(
     dispatched++;
 
     pending.push(
-      deliverRFQ(op, {
+      // Autopilot drafts first, so the inquiry and its drafted response reach the dashboard together.
+      draftQuote(db, requestId, op.id)
+        .catch(err => { console.error(`Autopilot draft failed for operator ${op.id}:`, err); })
+        .then(() => deliverRFQ(op, {
         requestId,
         route,
         dateRange,
@@ -328,7 +332,7 @@ export async function dispatchOutreach(
         notes,
         legDetails,
         matchScore: match.score,
-      }).then(async result => {
+      })).then(async result => {
         if (result.emailId && !result.error) {
           await db.run("UPDATE outreach_log SET status = 'delivered' WHERE request_id = ? AND operator_id = ?", [requestId, op.id]);
         } else if (result.error) {
@@ -337,7 +341,8 @@ export async function dispatchOutreach(
         }
       }).catch(err => {
         console.error(`RFQ delivery error for operator ${op.id}:`, err);
-      }).then(() => alertStaff(db, { kind: 'new_request', requestId, operatorId: op.id }, baseUrl).then(() => {}))
+      })
+        .then(() => alertStaff(db, { kind: 'new_request', requestId, operatorId: op.id }, baseUrl).then(() => {}))
     );
   }
 

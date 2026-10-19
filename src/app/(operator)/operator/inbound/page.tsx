@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { SubmitQuoteForm, type QuoteDraft } from '@/components/booking/submit-quote-form';
+import { Bot } from 'lucide-react';
 import type { BookingLeg, Aircraft } from '@/lib/types';
 
 interface InboundRFQ {
@@ -25,6 +26,8 @@ interface InboundRFQ {
   quote_price: number | null;
   quote_status: string | null;
   legs: BookingLeg[];
+  /** Autopilot draft waiting for review. */
+  draft: QuoteDraft | null;
 }
 
 export default function OperatorInboundPage() {
@@ -42,31 +45,18 @@ export default function OperatorInboundPage() {
       setRfqs(rfqData);
       setAircraft(fleetData);
       setLoading(false);
+      // ?review=<requestId> (from the Autopilot console) opens that request's form.
+      const review = Number(new URLSearchParams(window.location.search).get('review'));
+      if (review) {
+        setExpandedId(review);
+        setTimeout(() => document.getElementById(`rfq-${review}`)?.scrollIntoView({ block: 'start' }), 50);
+      }
     });
   }, []);
 
-  const submitQuote = async (requestId: number, form: HTMLFormElement) => {
-    const formData = new FormData(form);
-    const price = parseFloat(formData.get('price') as string);
-    if (isNaN(price) || price <= 0) return;
-
-    const res = await fetch(`/api/booking-requests/${requestId}/quotes`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        priceCents: Math.round(price * 100),
-        aircraftId: formData.get('aircraftId') ? Number(formData.get('aircraftId')) : undefined,
-        message: formData.get('message') || undefined,
-        validUntil: formData.get('validUntil') || undefined,
-      }),
-    });
-
-    if (res.ok) {
-      // Refresh data
-      const updated = await fetch('/api/operator/inbound').then(r => r.json());
-      setRfqs(updated);
-      setExpandedId(null);
-    }
+  const refresh = async () => {
+    setRfqs(await fetch('/api/operator/inbound').then(r => r.json()));
+    setExpandedId(null);
   };
 
   const pending = rfqs.filter(r => !r.quote_id && r.request_status !== 'booked' && r.request_status !== 'cancelled');
@@ -81,13 +71,13 @@ export default function OperatorInboundPage() {
           <h1 className="font-display text-3xl text-ink mb-2">Inbound Requests</h1>
           <p className="text-ink-muted">
             Charter requests matched to your operator profile. {pending.length > 0 && (
-              <span className="text-brass-ink">{pending.length} awaiting your quote.</span>
+              <span className="text-royal">{pending.length} awaiting your quote.</span>
             )}
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Badge variant="gold">{pending.length} new</Badge>
-          <Badge variant="default">{quoted.length} quoted</Badge>
+          <StatusBadge variant="brass">{pending.length} new</StatusBadge>
+          <StatusBadge variant="neutral">{quoted.length} quoted</StatusBadge>
         </div>
       </div>
 
@@ -96,7 +86,7 @@ export default function OperatorInboundPage() {
           <div className="text-center py-12">
             <p className="text-ink-muted mb-4">No inbound requests yet.</p>
             <p className="text-ink-muted text-sm">
-              Make sure your <a href="/operator/settings" className="text-brass-ink hover:underline">operator profile</a> is configured with your markets and fleet types so the matching engine can route requests to you.
+              Make sure your <a href="/operator/settings" className="text-royal hover:underline">operator profile</a> is configured with your markets and fleet types so the matching engine can route requests to you.
             </p>
           </div>
         </Card>
@@ -105,7 +95,7 @@ export default function OperatorInboundPage() {
           {/* Pending quotes first */}
           {pending.length > 0 && (
             <>
-              <h2 className="text-xs font-semibold text-brass-ink uppercase tracking-wider mt-6 mb-3">Awaiting Your Quote</h2>
+              <h2 className="text-xs font-semibold text-royal uppercase tracking-wider mt-6 mb-3">Awaiting Your Quote</h2>
               {pending.map(rfq => (
                 <RFQCard
                   key={rfq.outreach_id}
@@ -113,7 +103,7 @@ export default function OperatorInboundPage() {
                   aircraft={aircraft}
                   expanded={expandedId === rfq.request_id}
                   onToggle={() => setExpandedId(expandedId === rfq.request_id ? null : rfq.request_id)}
-                  onSubmit={(form) => submitQuote(rfq.request_id, form)}
+                  onSubmitted={refresh}
                   onViewDetails={() => router.push(`/operator/requests/${rfq.request_id}`)}
                 />
               ))}
@@ -131,7 +121,7 @@ export default function OperatorInboundPage() {
                   aircraft={aircraft}
                   expanded={false}
                   onToggle={() => {}}
-                  onSubmit={() => {}}
+                  onSubmitted={() => {}}
                   onViewDetails={() => router.push(`/operator/requests/${rfq.request_id}`)}
                 />
               ))}
@@ -148,14 +138,14 @@ function RFQCard({
   aircraft,
   expanded,
   onToggle,
-  onSubmit,
+  onSubmitted,
   onViewDetails,
 }: {
   rfq: InboundRFQ;
   aircraft: Aircraft[];
   expanded: boolean;
   onToggle: () => void;
-  onSubmit: (form: HTMLFormElement) => void;
+  onSubmitted: () => void;
   onViewDetails: () => void;
 }) {
   const legs = rfq.legs as BookingLeg[];
@@ -166,14 +156,16 @@ function RFQCard({
   const timeAgo = getTimeAgo(rfq.sent_at);
   const hasQuote = !!rfq.quote_id;
 
-  const quoteBadge: Record<string, 'success' | 'warning' | 'error' | 'default'> = {
+  const quoteBadge: Record<string, 'confirmed' | 'warning' | 'danger' | 'neutral'> = {
     pending: 'warning',
-    accepted: 'success',
-    rejected: 'error',
+    accepted: 'confirmed',
+    rejected: 'danger',
+    withdrawn: 'neutral',
+    expired: 'neutral',
   };
 
   return (
-    <Card className={`${!hasQuote ? 'border-brass' : ''}`}>
+    <Card id={`rfq-${rfq.request_id}`} className={`scroll-mt-6 ${!hasQuote ? 'border-brass' : ''}`}>
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <div className="flex items-center gap-3 mb-1">
@@ -194,15 +186,22 @@ function RFQCard({
         <div className="flex items-center gap-3">
           {hasQuote ? (
             <div className="text-right">
-              <p className="text-brass-ink font-display text-lg">${((rfq.quote_price || 0) / 100).toLocaleString()}</p>
-              <Badge variant={quoteBadge[rfq.quote_status || 'pending']}>
+              <p className="text-royal font-display text-lg">${((rfq.quote_price || 0) / 100).toLocaleString()}</p>
+              <StatusBadge variant={quoteBadge[rfq.quote_status || 'pending'] ?? 'neutral'}>
                 {rfq.quote_status}
-              </Badge>
+              </StatusBadge>
             </div>
           ) : (
-            <Button onClick={onToggle} size="sm">
-              {expanded ? 'Cancel' : 'Quote Now'}
-            </Button>
+            <div className="flex items-center gap-3">
+              {rfq.draft && !expanded && (
+                <span className="inline-flex items-center gap-1.5 text-label text-royal">
+                  <Bot size={14} strokeWidth={1.5} aria-hidden="true" /> Draft ${Math.round(rfq.draft.priceCents / 100).toLocaleString()}
+                </span>
+              )}
+              <Button onClick={onToggle} size="sm">
+                {expanded ? 'Cancel' : rfq.draft ? 'Review draft' : 'Quote Now'}
+              </Button>
+            </div>
           )}
           <button
             onClick={onViewDetails}
@@ -222,40 +221,12 @@ function RFQCard({
         ))}
       </div>
 
-      {/* Inline quote form */}
+      {/* Inline quote form, with the private price worksheet */}
       {expanded && !hasQuote && (
-        <form
-          className="mt-5 pt-5 border-t border-hairline"
-          onSubmit={e => { e.preventDefault(); onSubmit(e.currentTarget); }}
-        >
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Input name="price" label="Total Price (USD)" type="number" step="0.01" min="0" placeholder="25000" required />
-            <div>
-              <label className="block text-sm font-medium text-ink-muted mb-1.5">Aircraft</label>
-              <select
-                name="aircraftId"
-                className="w-full rounded-md border border-hairline bg-surface-raised px-3 py-2.5 text-ink text-sm focus:outline-none transition-colors"
-              >
-                <option value="">Optional</option>
-                {aircraft.map(a => (
-                  <option key={a.id} value={a.id}>{a.type} ({a.tail_number})</option>
-                ))}
-              </select>
-            </div>
-            <Input name="validUntil" label="Valid Until" type="date" />
-            <div className="flex items-end">
-              <Button type="submit" block>Submit Quote</Button>
-            </div>
-          </div>
-          <div className="mt-3">
-            <textarea
-              name="message"
-              rows={2}
-              placeholder="Optional message: describe your offer, amenities, etc."
-              className="w-full rounded-md border border-hairline bg-surface-raised px-3 py-2 text-sm text-ink placeholder:text-ink-subtle focus:outline-none transition-colors resize-none"
-            />
-          </div>
-        </form>
+        <div className="mt-5 border-t border-hairline pt-5">
+          <SubmitQuoteForm requestId={rfq.request_id} aircraft={aircraft} legs={legs}
+            passengerCount={rfq.passenger_count} onSubmitted={onSubmitted} draft={rfq.draft} />
+        </div>
       )}
     </Card>
   );

@@ -6,6 +6,7 @@ export interface User {
   auth_id: string | null;
   name: string;
   role: 'customer' | 'operator' | 'admin';
+  is_demo: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -30,8 +31,11 @@ export interface Operator {
   stripe_account_id: string | null;
   stripe_charges_enabled: number;
   stripe_payouts_enabled: number;
+  /** Autopilot settings JSON (src/lib/quotes/autopilot.ts). */
+  autopilot?: string | null;
   stripe_details_submitted: number;
   platform_fee_bps: number | null;  // per-operator override of PLATFORM_FEE_BPS
+  cancellation_policy: string | null;  // JSON, see src/lib/bookings/cancellation.ts
   created_at: string;
 }
 
@@ -43,7 +47,27 @@ export interface Aircraft {
   capacity: number;
   range_nm: number | null;
   year: number | null;
+  serial_number: string | null;
+  manufacturer: string | null;
+  model: string | null;
+  /** JSON RegistryRecord from the last FAA lookup. */
+  faa_record: string | null;
+  faa_checked_at: string | null;
+  /** Pricing defaults for the quote worksheet; private to the operator. */
+  hourly_rate_cents: number | null;
+  cruise_ktas: number | null;
+  updated_at: string | null;
   created_at: string;
+}
+
+export interface AircraftPhotoMeta {
+  id: number;
+  aircraft_id: number;
+  position: number;
+  content_type: string;
+  width: number | null;
+  height: number | null;
+  caption: string | null;
 }
 
 export interface BookingRequest {
@@ -76,8 +100,10 @@ export interface Quote {
   price_cents: number;
   currency: string;
   message: string | null;
-  status: 'pending' | 'accepted' | 'rejected' | 'withdrawn';
+  status: 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'expired';
   valid_until: string | null;
+  previous_price_cents: number | null;
+  revised_at: string | null;
   created_at: string;
 }
 
@@ -117,6 +143,8 @@ export interface Payment {
   checkout_url: string | null;
   failure_reason: string | null;
   dispute_status: string | null;
+  /** Set on a price-difference payment for an accepted change request. */
+  change_request_id: number | null;
   created_at: string;
   updated_at: string;
   paid_at: string | null;

@@ -48,7 +48,7 @@ export default async function DashboardPage() {
       <h2 className="mb-4 text-title text-ink">Recent requests</h2>
       {requests.length === 0 ? (
         <Card>
-          <p className="text-body text-ink-muted text-center py-8">No trips yet. <Link href="/book" className="text-brass-ink underline underline-offset-4">Request your first quotes</Link></p>
+          <p className="text-body text-ink-muted text-center py-8">No trips yet. <Link href="/book" className="text-royal underline underline-offset-4">Request your first quotes</Link></p>
         </Card>
       ) : (
         <ul className="space-y-3">

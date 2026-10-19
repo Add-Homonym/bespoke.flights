@@ -14,13 +14,13 @@ export type BookingRequestInput = z.infer<typeof bookingRequestSchema>;
  * RFQ delivery continues after the response via next/server `after()`.
  */
 export async function createBookingRequest(db: Db, customerId: number, input: BookingRequestInput, baseUrl?: string) {
-  const { passengerCount, notes, legs } = input;
+  const { passengerCount, notes, legs, formVariant } = input;
   const savedLegs: BookingLeg[] = [];
 
   const requestId = await db.transaction(async tx => {
     const { id } = (await tx.one<{ id: number }>(
-      'INSERT INTO booking_requests (customer_id, passenger_count, notes) VALUES (?, ?, ?) RETURNING id',
-      [customerId, passengerCount, notes || null]
+      'INSERT INTO booking_requests (customer_id, passenger_count, notes, form_variant) VALUES (?, ?, ?, ?) RETURNING id',
+      [customerId, passengerCount, notes || null, formVariant ?? null]
     ))!;
 
     for (let i = 0; i < legs.length; i++) {

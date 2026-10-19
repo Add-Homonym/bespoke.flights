@@ -1,20 +1,20 @@
 import Link from 'next/link';
 import { getDb } from '@/lib/db';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { Table, Thead, Th, Td, Tr } from '@/components/ui/table';
 import { RefundButton } from '@/components/admin/refund-button';
 import { formatMoney, getPaymentsMode, platformFeeBps } from '@/lib/payments/config';
 import type { Payment } from '@/lib/types';
 
-const statusBadge: Record<string, 'default' | 'success' | 'warning' | 'error' | 'gold'> = {
-  pending: 'gold',
+const statusBadge: Record<string, 'neutral' | 'confirmed' | 'warning' | 'danger' | 'neutral'> = {
+  pending: 'neutral',
   processing: 'warning',
-  succeeded: 'success',
+  succeeded: 'confirmed',
   partially_refunded: 'warning',
-  refunded: 'default',
-  failed: 'error',
-  canceled: 'default',
+  refunded: 'neutral',
+  failed: 'danger',
+  canceled: 'neutral',
 };
 
 export default async function AdminPaymentsPage() {
@@ -60,9 +60,9 @@ export default async function AdminPaymentsPage() {
             {(platformFeeBps() / 100).toFixed(2).replace(/\.00$/, '')}%
           </p>
         </div>
-        <Badge variant={mode === 'stripe' ? 'success' : mode === 'stub' ? 'warning' : 'error'}>
+        <StatusBadge variant={mode === 'stripe' ? 'confirmed' : mode === 'stub' ? 'warning' : 'danger'}>
           {mode === 'stripe' ? 'Stripe' : mode === 'stub' ? 'Test mode: simulated' : 'Payments disabled'}
-        </Badge>
+        </StatusBadge>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
@@ -102,7 +102,7 @@ export default async function AdminPaymentsPage() {
                   )}
                 </Td>
                 <Td>
-                  <Link href={`/requests/${p.request_id}`} className="hover:text-brass-ink">#{p.request_id}</Link>
+                  <Link href={`/requests/${p.request_id}`} className="hover:text-royal">#{p.request_id}</Link>
                 </Td>
                 <Td>{p.customer_name}</Td>
                 <Td>{p.company_name}</Td>
@@ -110,8 +110,8 @@ export default async function AdminPaymentsPage() {
                 <Td className="text-ink-muted">{formatMoney(p.platform_fee_cents, p.currency)}</Td>
                 <Td className="text-ink-muted">{p.refunded_cents > 0 ? formatMoney(p.refunded_cents, p.currency) : '—'}</Td>
                 <Td>
-                  <Badge variant={statusBadge[p.status] ?? 'default'}>{p.status.replace('_', ' ')}</Badge>
-                  {p.dispute_status && <Badge variant="error" className="ml-1">dispute: {p.dispute_status}</Badge>}
+                  <StatusBadge variant={statusBadge[p.status] ?? 'neutral'}>{p.status.replace('_', ' ')}</StatusBadge>
+                  {p.dispute_status && <StatusBadge variant="danger" className="ml-1">dispute: {p.dispute_status}</StatusBadge>}
                   {p.failure_reason && ['failed', 'canceled'].includes(p.status) && (
                     <div className="text-ink-muted text-xs mt-1">{p.failure_reason}</div>
                   )}

@@ -209,7 +209,7 @@ async function supersedePendingPayments(db: Db, requestId: number, exceptPayment
 
 // ─── State transitions ──────────────────────────────────────────────
 
-export type FulfillmentOutcome = 'booked' | 'duplicate' | 'conflict';
+export type FulfillmentOutcome = 'booked' | 'duplicate' | 'conflict' | 'change_paid';
 
 /**
  * Record a successful payment and book the request. Idempotent.
@@ -234,6 +234,7 @@ export async function markPaymentSucceeded(
     if ((SETTLED_STATUSES as readonly string[]).includes(payment.status)) {
       // A succeeded payment whose quote never got accepted is a conflict whose
       // refund has not gone through yet (e.g. Stripe error, webhook retried).
+      if (payment.change_request_id) return payment.status === 'succeeded' ? 'change_paid' : 'duplicate';
       return payment.status === 'succeeded' && quote.status !== 'accepted' ? 'conflict' : 'duplicate';
     }
 
@@ -243,6 +244,12 @@ export async function markPaymentSucceeded(
         stripe_payment_intent_id = COALESCE(?, stripe_payment_intent_id)
       WHERE id = ?
     `, [details.paymentIntentId ?? null, paymentId]);
+
+    // A price-difference payment for an accepted change request: the trip is
+    // already booked; the change is applied by fulfillPayment.
+    if (payment.change_request_id) {
+      return quote.status === 'accepted' && request.status === 'booked' ? 'change_paid' : 'conflict';
+    }
 
     if (quote.status !== 'pending' || !['open', 'quoted'].includes(request.status)) {
       return 'conflict';
@@ -293,7 +300,8 @@ export async function applyRefundTotal(db: Db, paymentId: number, refundedCents:
       UPDATE payments SET refunded_cents = ?, status = ?, updated_at = now() WHERE id = ?
     `, [total, status, paymentId]);
 
-    if (status === 'refunded') {
+    // Refunding a price-difference payment in full never cancels the booking.
+    if (status === 'refunded' && !payment.change_request_id) {
       const quote = (await tx.one<{ status: string }>('SELECT status FROM quotes WHERE id = ?', [payment.quote_id]))!;
       if (quote.status === 'accepted') {
         const changed = await tx.run(`
@@ -317,7 +325,12 @@ export async function refundPayment(
   paymentId: number,
   params: { amountCents?: number; reason?: string | null; initiatedBy?: number | null; baseUrl?: string }
 ): Promise<Payment> {
-  const payment = await getPayment(db, paymentId);
+  // One refund at a time per payment: the amount check, the Stripe call and the
+  // ledger update happen under a per-payment lock so two concurrent partial
+  // refunds cannot both pass the "remaining" check.
+  return db.transaction(async tx => {
+  await tx.query('SELECT pg_advisory_xact_lock(727276, ?)', [paymentId]);
+  const payment = await getPayment(tx, paymentId);
   if (!payment) throw new PaymentError('Payment not found', 404);
   if (!['succeeded', 'partially_refunded'].includes(payment.status)) {
     throw new PaymentError(`Cannot refund a payment that is ${payment.status}`, 409);
@@ -351,14 +364,15 @@ export async function refundPayment(
     }
   }
 
-  await db.run(`
+  await tx.run(`
     INSERT INTO refunds (payment_id, amount_cents, reason, stripe_refund_id, initiated_by)
     VALUES (?, ?, ?, ?, ?)
     ON CONFLICT (stripe_refund_id) DO NOTHING
   `, [payment.id, amount, params.reason ?? null, stripeRefundId, params.initiatedBy ?? null]);
-  await applyRefundTotal(db, payment.id, payment.refunded_cents + amount, params.baseUrl);
+  await applyRefundTotal(tx, payment.id, payment.refunded_cents + amount, params.baseUrl);
 
-  return (await getPayment(db, payment.id))!;
+  return (await getPayment(tx, payment.id))!;
+  });
 }
 
 // ─── Fulfillment side effects ───────────────────────────────────────
@@ -381,6 +395,15 @@ export async function fulfillPayment(
       console.error('Booking email failed:', err)
     );
     await alertStaff(db, { kind: 'booking', requestId: payment.request_id, operatorId: payment.operator_id }, details.baseUrl);
+  } else if (outcome === 'change_paid') {
+    // Idempotent: applies the change once, emails on first application only.
+    const payment = (await getPayment(db, paymentId))!;
+    const { onChangePaymentSucceeded } = await import('@/lib/bookings/changes');
+    await onChangePaymentSucceeded(db, payment, details.baseUrl);
+    await alertStaff(db, {
+      kind: 'change', requestId: payment.request_id, operatorId: payment.operator_id,
+      detail: { eventId: payment.change_request_id ?? undefined, summary: 'The traveler has paid the difference and the itinerary is updated.' },
+    }, details.baseUrl).catch(() => {});
   } else if (outcome === 'conflict') {
     await refundPayment(db, paymentId, {
       reason: 'Automatic refund: request already booked or quote no longer available',

@@ -30,7 +30,7 @@ export default async function RequestsPage() {
 
       {requests.length === 0 ? (
         <Card>
-          <p className="text-body text-ink-muted text-center py-12">No trips yet. <Link href="/book" className="text-brass-ink underline underline-offset-4">Request your first quotes</Link></p>
+          <p className="text-body text-ink-muted text-center py-12">No trips yet. <Link href="/book" className="text-royal underline underline-offset-4">Request your first quotes</Link></p>
         </Card>
       ) : (
         <ul className="space-y-3">

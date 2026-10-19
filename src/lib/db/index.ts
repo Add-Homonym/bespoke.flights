@@ -16,7 +16,7 @@ import path from 'path';
 import { types as pgTypes, Pool, type PoolClient } from 'pg';
 import { attachDatabasePool } from '@vercel/functions';
 import type { PGlite, Transaction as PGliteTransaction } from '@electric-sql/pglite';
-import { SCHEMA } from './schema';
+import { SCHEMA, SCHEMA_BLOCKS } from './schema';
 
 export interface Db {
   /** All rows. */
@@ -149,6 +149,9 @@ export async function migrate(db: Db): Promise<void> {
     for (const statement of SCHEMA.split(';').map(s => s.trim()).filter(Boolean)) {
       await tx.run(statement);
     }
+    for (const block of SCHEMA_BLOCKS) {
+      await tx.run(block);
+    }
   });
 }
 
@@ -156,6 +159,13 @@ export async function migrate(db: Db): Promise<void> {
 
 declare global {
   var __bespokeDb: Promise<Db> | undefined;
+}
+
+/** Test mode simulates every payment; a live Stripe key alongside it would mean unpaid bookings. */
+function assertNoLiveStripeKey() {
+  if ((process.env.STRIPE_SECRET_KEY ?? '').startsWith('sk_live_')) {
+    throw new Error('APP_TEST_MODE=true with a live Stripe key. Remove one of them.');
+  }
 }
 
 async function connect(): Promise<Db> {
@@ -184,6 +194,7 @@ async function connect(): Promise<Db> {
 
   await migrate(db);
   if (process.env.APP_TEST_MODE === 'true') {
+    assertNoLiveStripeKey();
     const { seedDemoData } = await import('./demo-data');
     if (await seedDemoData(db)) console.log('[test mode] Loaded demo accounts');
   }

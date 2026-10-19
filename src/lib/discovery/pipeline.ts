@@ -176,9 +176,12 @@ export async function runDiscoveryPipeline(
   // Step 2: Scrape FAA registry
   let operatorsFound = 0;
   let newOperators = 0;
+  let statesQueried: string[] = [];
 
   try {
     const scrapeResult = await scrapeStates(stateBatch, 500, statesPerRun);
+    errors.push(...scrapeResult.errors.map(e => 'Scrape error: ' + e));
+    statesQueried = scrapeResult.statesQueried;
     operatorsFound = scrapeResult.operators.length;
     console.log(`[Discovery] Found ${operatorsFound} operators across ${scrapeResult.statesQueried.length} states`);
 
@@ -208,7 +211,7 @@ export async function runDiscoveryPipeline(
   }
 
   return {
-    statesQueried: stateBatch,
+    statesQueried,
     operatorsFound,
     newOperators,
     emailsSent,

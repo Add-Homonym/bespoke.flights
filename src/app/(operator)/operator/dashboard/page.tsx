@@ -1,132 +1,142 @@
 import Link from 'next/link';
+import type { ReactNode } from 'react';
+import {
+  Armchair, ArrowRight, BadgeCheck, Banknote, Camera, CircleAlert, CircleCheck, FileWarning, Handshake, Inbox, Mail,
+  MessageSquare, Plane, Send, Settings, SlidersHorizontal, Trophy, Users, Bot,
+} from 'lucide-react';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
-import { Card } from '@/components/ui/card';
+import { buildDashboard } from '@/lib/operator/dashboard';
+import { formatMoney as money } from '@/lib/payments/config';
+import { CompanyBoard } from '@/components/board/company-board';
+import { LiveInquiries } from '@/components/operator/live-inquiries';
+import { Notice } from '@/components/ui/notice';
+import { StatusBadge } from '@/components/ui/status-badge';
 import type { Operator } from '@/lib/types';
-import { Badge } from '@/components/ui/badge';
+
+export const dynamic = 'force-dynamic';
+
+/** Whole dollars when there are no cents. */
+const formatMoney = (cents: number) => money(cents).replace(/\.00$/, '');
+
+type Icon = typeof Inbox;
+
+/** One dashboard box: icon title, rows, and a link to the section. */
+function Tile({ id, title, icon: TitleIcon, href, action, children }: {
+  id: string; title: string; icon: Icon; href: string; action: string; children: ReactNode;
+}) {
+  return (
+    <section id={id} aria-labelledby={`${id}-title`}
+      className="group relative flex flex-col rounded-lg border border-hairline bg-surface-raised p-6 shadow-raised transition-colors duration-200 ease-out hover:border-border-control focus-within:border-royal">
+      <h2 id={`${id}-title`} className="flex items-center gap-3 text-heading text-ink">
+        <span className="flex h-10 w-10 items-center justify-center rounded-md bg-surface-sunken text-royal">
+          <TitleIcon size={20} strokeWidth={1.5} aria-hidden="true" />
+        </span>
+        {title}
+      </h2>
+      <ul className="mt-5 flex-1 divide-y divide-hairline">{children}</ul>
+      <Link href={href}
+        className="mt-4 inline-flex min-h-11 items-center gap-1.5 text-label text-royal after:absolute after:inset-0 after:rounded-lg after:content-[''] focus-visible:outline-none">
+        {action} <ArrowRight size={14} strokeWidth={1.5} aria-hidden="true" className="transition-transform duration-200 group-hover:translate-x-0.5" />
+      </Link>
+    </section>
+  );
+}
+
+const TONES = { ink: 'text-ink', danger: 'text-danger', confirmed: 'text-confirmed', muted: 'text-ink-muted' } as const;
+
+function Stat({ icon: StatIcon, label, value, tone = 'ink' }: { icon: Icon; label: string; value: ReactNode; tone?: keyof typeof TONES }) {
+  return (
+    <li className="flex items-center gap-3 py-2.5">
+      <StatIcon size={18} strokeWidth={1.5} aria-hidden="true" className="shrink-0 text-ink-muted" />
+      <span className="text-body text-ink-muted">{label}</span>
+      <span className={`ml-auto text-heading tabular-nums ${TONES[tone]}`}>{value}</span>
+    </li>
+  );
+}
+
+function Check({ good, yes, no }: { good: boolean; yes: string; no: string }) {
+  const I = good ? CircleCheck : CircleAlert;
+  return <span className="inline-flex items-center gap-1.5"><I size={16} strokeWidth={1.5} aria-hidden="true" />{good ? yes : no}</span>;
+}
 
 export default async function OperatorDashboardPage() {
   const session = await getSession();
   const db = getDb();
-
-  const user = (await db.one<{ name: string }>('SELECT name FROM users WHERE id = ?', [session!.userId]))!;
   const operator = await db.one<Operator>('SELECT * FROM operators WHERE user_id = ?', [session!.userId]);
+  if (!operator) return <Notice tone="danger">No operator company is linked to this account.</Notice>;
 
-  const openRequests = (await db.one<{ count: number }>("SELECT COUNT(*) as count FROM booking_requests WHERE status IN ('open', 'quoted')"))!.count;
-  const myQuotes = operator ? (await db.one<{ count: number }>('SELECT COUNT(*) as count FROM quotes WHERE operator_id = ?', [operator.id]))!.count : 0;
-  const acceptedQuotes = operator ? (await db.one<{ count: number }>("SELECT COUNT(*) as count FROM quotes WHERE operator_id = ? AND status = 'accepted'", [operator.id]))!.count : 0;
-  const fleetSize = operator ? (await db.one<{ count: number }>('SELECT COUNT(*) as count FROM aircraft WHERE operator_id = ?', [operator.id]))!.count : 0;
-
-  // Inbound RFQs (auto-matched to this operator)
-  const inboundTotal = operator ? (await db.one<{ count: number }>('SELECT COUNT(*) as count FROM outreach_log WHERE operator_id = ?', [operator.id]))!.count : 0;
-  const inboundPending = operator ? (await db.one<{ count: number }>(`
-    SELECT COUNT(*) as count FROM outreach_log ol
-    WHERE ol.operator_id = ?
-      AND NOT EXISTS (SELECT 1 FROM quotes q WHERE q.request_id = ol.request_id AND q.operator_id = ol.operator_id)
-      AND EXISTS (SELECT 1 FROM booking_requests br WHERE br.id = ol.request_id AND br.status IN ('open', 'quoted'))
-  `, [operator.id]))!.count : 0;
-
-  // Profile completeness check
-  const profileComplete = operator && operator.markets && operator.fleet_types && operator.safety_rating && (operator.contact_email || operator.contact_phone);
+  const { deals, fleet, team, settings } = await buildDashboard(db, operator);
 
   return (
-    <div>
-      <div className="mb-10">
-        <h1 className="font-display text-3xl text-ink mb-2">Operator Dashboard</h1>
-        <p className="text-ink-muted">Welcome back, {user.name}</p>
-        {operator && (
-          <div className="mt-2 flex items-center gap-2">
-            <span className="text-ink text-sm">{operator.company_name}</span>
-            <Badge variant={operator.status === 'approved' ? 'success' : operator.status === 'pending' ? 'warning' : 'error'}>
-              {operator.status}
-            </Badge>
-          </div>
-        )}
+    <div id="operator-dashboard" className="space-y-10">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-overline text-ink-muted">Dashboard</p>
+          <h1 className="mt-1 text-display text-ink">{operator.company_name}</h1>
+        </div>
+        <StatusBadge variant={operator.status === 'approved' ? 'confirmed' : operator.status === 'pending' ? 'warning' : 'danger'}>
+          {operator.status}
+        </StatusBadge>
       </div>
 
-      {/* Profile incomplete warning */}
-      {operator && !profileComplete && (
-        <Card className="mb-8 border-warning bg-warning-tint">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-warning text-sm font-semibold">Complete your operator profile</p>
-              <p className="text-warning text-xs mt-1">
-                Configure your markets, fleet types, safety rating, and contact method so the matching engine can route charter requests to you automatically.
-              </p>
-            </div>
-            <Link href="/operator/settings" className="rounded-md bg-royal px-4 py-2 text-sm font-semibold text-on-royal hover:opacity-90 transition-colors shrink-0">
-              Configure →
+      {operator.status === 'pending' && (
+        <Notice tone="warning">Your account is pending approval. Requests start arriving once it is approved.</Notice>
+      )}
+
+      <div id="dashboard-tiles" className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {/* Deals: totals beside the live inquiries and Autopilot's drafted responses. Full width. */}
+        <section id="tile-deals" aria-labelledby="tile-deals-title"
+          className="grid gap-6 rounded-lg border border-hairline bg-surface-raised p-6 shadow-raised md:col-span-2 xl:col-span-4 xl:grid-cols-[16rem_1fr]">
+          <div className="flex flex-col">
+            <h2 id="tile-deals-title" className="flex items-center gap-3 text-heading text-ink">
+              <span className="flex h-10 w-10 items-center justify-center rounded-md bg-surface-sunken text-royal">
+                <Handshake size={20} strokeWidth={1.5} aria-hidden="true" />
+              </span>
+              Deals
+            </h2>
+            <ul className="mt-5 flex-1 divide-y divide-hairline">
+              <Stat icon={Inbox} label="Inbound requests" value={deals.inbound} />
+              <Stat icon={Send} label="Quotes submitted" value={deals.submitted} />
+              <Stat icon={BadgeCheck} label="Quotes accepted" value={deals.accepted} />
+              <Stat icon={Trophy} label="Total value won" value={formatMoney(deals.wonCents)} tone={deals.wonCents ? 'confirmed' : 'ink'} />
+              {deals.drafts > 0 && <Stat icon={Bot} label="Drafts to review" value={deals.drafts} tone="danger" />}
+            </ul>
+            <Link href="/operator/inbound" className="mt-4 inline-flex min-h-11 items-center gap-1.5 text-label text-royal hover:underline underline-offset-4">
+              {deals.awaiting ? `${deals.awaiting} awaiting your quote` : 'Inbound requests'} <ArrowRight size={14} strokeWidth={1.5} aria-hidden="true" />
             </Link>
           </div>
-        </Card>
-      )}
+          <LiveInquiries compact />
+        </section>
 
-      {operator?.status === 'pending' && (
-        <Card className="mb-8 border-warning bg-warning-tint">
-          <p className="text-warning text-sm">Your operator account is pending approval. Configure your profile now — RFQs will begin flowing once approved.</p>
-        </Card>
-      )}
+        <Tile id="tile-fleet" title="Fleet" icon={Plane} href="/operator/fleet" action="Fleet management">
+          <Stat icon={Plane} label="Aircraft" value={fleet.count} />
+          <Stat icon={Armchair} label="Seats" value={fleet.seats} />
+          {fleet.withoutPhotos > 0 && <Stat icon={Camera} label="Without photos" value={fleet.withoutPhotos} tone="muted" />}
+          {fleet.registryFlags > 0 && <Stat icon={FileWarning} label="Registrations to check" value={fleet.registryFlags} tone="danger" />}
+        </Tile>
 
-      {/* Inbound highlight */}
-      {inboundPending > 0 && (
-        <Link href="/operator/inbound">
-          <Card hover className="mb-8 border-hairline bg-surface-sunken">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-brass-ink font-semibold text-lg">{inboundPending} inbound request{inboundPending !== 1 ? 's' : ''} awaiting your quote</p>
-                <p className="text-ink-muted text-sm mt-1">These were automatically matched to your operator profile.</p>
-              </div>
-              <span className="text-brass-ink text-2xl">→</span>
-            </div>
-          </Card>
-        </Link>
-      )}
+        <Tile id="tile-team" title="Team" icon={Users} href="/operator/team" action="Team and alerts">
+          <Stat icon={Users} label="Staff on alerts" value={team.active} />
+          <Stat icon={Mail} label="By email" value={team.emailAlerts} />
+          <Stat icon={MessageSquare} label="By text" value={team.smsAlerts} />
+        </Tile>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
-        {[
-          { label: 'Inbound RFQs', value: inboundTotal, sub: inboundPending > 0 ? `${inboundPending} pending` : undefined, href: '/operator/inbound' },
-          { label: 'Quotes Submitted', value: myQuotes, href: '/operator/quotes' },
-          { label: 'Quotes Accepted', value: acceptedQuotes, href: '/operator/quotes' },
-          { label: 'Fleet Size', value: fleetSize, href: '/operator/fleet' },
-        ].map(stat => (
-          <Link key={stat.label} href={stat.href}>
-            <Card hover>
-              <p className="text-ink-muted text-xs uppercase tracking-wider mb-1">{stat.label}</p>
-              <p className="text-ink font-display text-3xl">{stat.value}</p>
-              {stat.sub && <p className="text-brass-ink text-xs mt-1">{stat.sub}</p>}
-            </Card>
-          </Link>
-        ))}
+        <Tile id="tile-settings" title="Settings" icon={Settings} href="/operator/settings" action="Settings">
+          <Stat icon={SlidersHorizontal} label="Routing profile" tone={settings.profileComplete ? 'confirmed' : 'danger'}
+            value={<Check good={settings.profileComplete} yes="Set" no="Incomplete" />} />
+          <Stat icon={Banknote} label="Payouts" tone={settings.payoutsReady ? 'confirmed' : 'danger'}
+            value={<Check good={settings.payoutsReady} yes="Ready" no="Not set up" />} />
+        </Tile>
       </div>
 
-      {/* Quick actions */}
-      <div className="grid md:grid-cols-4 gap-4">
-        <Link href="/operator/inbound">
-          <Card hover className="text-center py-8">
-            <h3 className="text-ink font-semibold mb-1">Inbound RFQs</h3>
-            <p className="text-ink-muted text-xs">Requests matched to you</p>
-          </Card>
-        </Link>
-        <Link href="/operator/requests">
-          <Card hover className="text-center py-8">
-            <h3 className="text-ink font-semibold mb-1">Browse All Demand</h3>
-            <p className="text-ink-muted text-xs">See all open requests</p>
-          </Card>
-        </Link>
-        <Link href="/operator/fleet">
-          <Card hover className="text-center py-8">
-            <h3 className="text-ink font-semibold mb-1">Manage Fleet</h3>
-            <p className="text-ink-muted text-xs">Add and manage aircraft</p>
-          </Card>
-        </Link>
-        <Link href="/operator/settings">
-          <Card hover className="text-center py-8">
-            <h3 className="text-ink font-semibold mb-1">Settings</h3>
-            <p className="text-ink-muted text-xs">Contact method & profile</p>
-          </Card>
-        </Link>
-      </div>
+      <section id="dashboard-board" aria-labelledby="dashboard-board-title" className="space-y-4">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <h2 id="dashboard-board-title" className="text-title text-ink">Charters</h2>
+          <Link href="/operator/team" className="inline-flex min-h-11 items-center text-label text-royal hover:underline underline-offset-4">Staff board link</Link>
+        </div>
+        <CompanyBoard source="/api/operator/board" linkTrips />
+      </section>
     </div>
   );
 }

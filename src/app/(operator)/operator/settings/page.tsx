@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { PayoutSettings } from '@/components/operator/payout-settings';
+import Link from 'next/link';
+import { Bot } from 'lucide-react';
 import { MARKET_LABELS, FLEET_TYPE_LABELS, SAFETY_RATINGS } from '@/lib/types';
 import type { MarketKey } from '@/lib/types';
 
@@ -24,13 +25,14 @@ interface OperatorSettings {
   transoceanic: number;
   certificate: string | null;
   notes: string | null;
+  cancellation_policy: { full_refund_hours: number; partial_refund_hours: number; partial_refund_bps: number };
+  cancellation_policy_custom: boolean;
   user_email: string;
   user_phone: string | null;
 }
 
 export default function OperatorSettingsPage() {
   const [settings, setSettings] = useState<OperatorSettings | null>(null);
-  const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
 
   useEffect(() => {
@@ -38,7 +40,6 @@ export default function OperatorSettingsPage() {
   }, []);
 
   const save = async (patch: Partial<OperatorSettings>) => {
-    setSaving(true);
     setMessage('');
     const res = await fetch('/api/operator/settings', {
       method: 'PATCH',
@@ -51,7 +52,22 @@ export default function OperatorSettingsPage() {
       setMessage('Saved');
       setTimeout(() => setMessage(''), 2000);
     }
-    setSaving(false);
+  };
+
+  const [policyError, setPolicyError] = useState('');
+  const savePolicy = async (patch: Partial<OperatorSettings['cancellation_policy']>) => {
+    if (!settings) return;
+    const policy = { ...settings.cancellation_policy, ...patch };
+    if (Object.values(policy).some(v => !Number.isInteger(v) || v < 0)) {
+      setPolicyError('Enter whole numbers.');
+      return;
+    }
+    if (policy.partial_refund_hours > policy.full_refund_hours) {
+      setPolicyError('The partial refund window must end before the full refund window.');
+      return;
+    }
+    setPolicyError('');
+    await save({ cancellation_policy: policy });
   };
 
   const toggleArrayItem = (arr: string[], item: string): string[] =>
@@ -66,10 +82,16 @@ export default function OperatorSettingsPage() {
           <h1 className="font-display text-3xl text-ink mb-2">Operator Settings</h1>
           <p className="text-ink-muted">Configure how Bespoke Flights reaches you with charter requests.</p>
         </div>
-        {message && <Badge variant="success">{message}</Badge>}
+        {message && <StatusBadge variant="confirmed">{message}</StatusBadge>}
       </div>
 
-      <PayoutSettings />
+      <Link href="/operator/autopilot" className="mb-6 flex min-h-11 items-center gap-3 rounded-lg border border-hairline bg-surface-raised px-6 py-4 text-body text-ink shadow-raised transition-colors duration-200 hover:border-border-control">
+        <Bot size={20} strokeWidth={1.5} aria-hidden="true" className="text-royal" />
+        <span>Autopilot: drafted quotes from your pricing parameters</span>
+        <span className="ml-auto text-label text-royal">Open console</span>
+      </Link>
+
+      <div id="payouts" className="scroll-mt-6"><PayoutSettings /></div>
 
       {/* Contact Method */}
       <Card className="mb-6">
@@ -152,6 +174,40 @@ export default function OperatorSettingsPage() {
         </div>
       </Card>
 
+      {/* Cancellation policy */}
+      <Card className="mb-6">
+        <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wider mb-2">Cancellation policy</h2>
+        <p className="text-ink-muted text-sm mb-6">
+          Applied when a traveler cancels a paid booking. Refunds are measured from the first leg&apos;s departure and go back automatically.
+          {!settings.cancellation_policy_custom && ' Showing the platform default.'}
+        </p>
+        <div className="grid grid-cols-3 gap-4">
+          <Input
+            label="Full refund until (hours before)"
+            type="number"
+            min={0}
+            defaultValue={settings.cancellation_policy.full_refund_hours}
+            onBlur={e => savePolicy({ full_refund_hours: Number(e.target.value) })}
+          />
+          <Input
+            label="Partial refund until (hours before)"
+            type="number"
+            min={0}
+            defaultValue={settings.cancellation_policy.partial_refund_hours}
+            onBlur={e => savePolicy({ partial_refund_hours: Number(e.target.value) })}
+          />
+          <Input
+            label="Partial refund (%)"
+            type="number"
+            min={0}
+            max={100}
+            defaultValue={Math.round(settings.cancellation_policy.partial_refund_bps / 100)}
+            onBlur={e => savePolicy({ partial_refund_bps: Math.round(Number(e.target.value) * 100) })}
+          />
+        </div>
+        {policyError && <p className="text-danger text-xs mt-2" role="alert">{policyError}</p>}
+      </Card>
+
       {/* Market Coverage */}
       <Card className="mb-6">
         <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wider mb-4">Market Coverage</h2>
@@ -172,7 +228,7 @@ export default function OperatorSettingsPage() {
                     : 'border-hairline text-ink-muted hover:border-border-control'
                 }`}
               >
-                <span className={active ? 'text-brass-ink' : ''}>●</span>{' '}{label}
+                <span className={active ? 'text-royal' : ''}>●</span>{' '}{label}
               </button>
             );
           })}
@@ -184,7 +240,7 @@ export default function OperatorSettingsPage() {
               type="checkbox"
               checked={!!settings.hi_capable}
               onChange={e => save({ hi_capable: e.target.checked ? 1 : 0 })}
-              className="rounded border-hairline bg-surface-raised text-brass-ink "
+              className="rounded border-hairline bg-surface-raised text-royal "
             />
             <span className="text-sm text-ink">Hawaii capable</span>
           </label>
@@ -193,7 +249,7 @@ export default function OperatorSettingsPage() {
               type="checkbox"
               checked={!!settings.transoceanic}
               onChange={e => save({ transoceanic: e.target.checked ? 1 : 0 })}
-              className="rounded border-hairline bg-surface-raised text-brass-ink "
+              className="rounded border-hairline bg-surface-raised text-royal "
             />
             <span className="text-sm text-ink">Transoceanic capable</span>
           </label>
@@ -251,9 +307,9 @@ export default function OperatorSettingsPage() {
               }
             </p>
           </div>
-          <Badge variant={settings.status === 'approved' ? 'success' : settings.status === 'pending' ? 'warning' : 'error'}>
+          <StatusBadge variant={settings.status === 'approved' ? 'confirmed' : settings.status === 'pending' ? 'warning' : 'danger'}>
             {settings.status}
-          </Badge>
+          </StatusBadge>
         </div>
       </Card>
     </div>

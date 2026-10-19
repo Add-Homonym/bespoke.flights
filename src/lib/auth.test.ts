@@ -40,7 +40,17 @@ vi.mock('@/lib/neon-auth', () => {
 const { authenticate, registerUser, getSession } = await import('./auth');
 
 describe('Neon Auth', () => {
-  beforeEach(() => { store.users = []; store.current = null; });
+  beforeEach(() => { store.users = []; store.current = null; vi.stubEnv('APP_TEST_MODE', 'true'); });
+
+  it('refuses demo accounts when test mode is off', async () => {
+    const db = await testDb();
+    await resetDb(db);
+    setDb(db);
+    await seedDemoData(db);
+    vi.stubEnv('APP_TEST_MODE', '');
+    expect(await authenticate(db, 'admin@bespoke.flights', DEMO_PASSWORD)).toBeNull();
+    expect(await authenticate(db, 'john@example.com', DEMO_PASSWORD)).toBeNull();
+  });
 
   it('moves a seeded demo account onto Neon Auth on first sign-in', async () => {
     const db = await testDb();

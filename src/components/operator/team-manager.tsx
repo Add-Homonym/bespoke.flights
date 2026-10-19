@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/ui/status-badge';
 import type { StaffMember } from '@/lib/staff/roster';
 
 interface Form {
@@ -17,26 +17,31 @@ interface Form {
   on_new_request: boolean;
   on_booking: boolean;
   on_cancellation: boolean;
+  on_change: boolean;
+  on_message: boolean;
   active: boolean;
 }
 
 const blank: Form = {
   name: '', role: '', email: '', phone: '',
   notify_email: true, notify_sms: false,
-  on_new_request: false, on_booking: true, on_cancellation: true, active: true,
+  on_new_request: false, on_booking: true, on_cancellation: true, on_change: true, on_message: true, active: true,
 };
 
 const fromMember = (m: StaffMember): Form => ({
   name: m.name, role: m.role ?? '', email: m.email ?? '', phone: m.phone ?? '',
   notify_email: !!m.notify_email, notify_sms: !!m.notify_sms,
   on_new_request: !!m.on_new_request, on_booking: !!m.on_booking, on_cancellation: !!m.on_cancellation,
+  on_change: m.on_change == null ? true : !!m.on_change, on_message: m.on_message == null ? true : !!m.on_message,
   active: !!m.active,
 });
 
-const EVENTS: { key: 'on_booking' | 'on_cancellation' | 'on_new_request'; label: string }[] = [
+const EVENTS: { key: 'on_booking' | 'on_cancellation' | 'on_new_request' | 'on_change' | 'on_message'; label: string }[] = [
   { key: 'on_booking', label: 'Charter booked' },
   { key: 'on_cancellation', label: 'Charter cancelled' },
   { key: 'on_new_request', label: 'New request to quote' },
+  { key: 'on_change', label: 'Change requested' },
+  { key: 'on_message', label: 'Message from traveler' },
 ];
 
 function Check({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
@@ -167,7 +172,7 @@ export function TeamManager() {
                   <div>
                     <p className="text-ink font-medium">
                       {m.name} {m.role && <span className="text-ink-muted font-normal">· {m.role}</span>}
-                      {!m.active && <Badge className="ml-2">alerts off</Badge>}
+                      {!m.active && <StatusBadge className="ml-2">alerts off</StatusBadge>}
                     </p>
                     <p className="text-ink-muted text-sm mt-1">
                       {[m.notify_email && m.email && `Email ${m.email}`, m.notify_sms && m.phone && `Text ${m.phone}`].filter(Boolean).join(' · ') || 'No alert channel on'}
@@ -177,7 +182,7 @@ export function TeamManager() {
                     </p>
                   </div>
                   <div className="flex gap-4 text-sm">
-                    <button type="button" onClick={() => test(m)} className="text-brass-ink hover:underline cursor-pointer">Send test</button>
+                    <button type="button" onClick={() => test(m)} className="text-royal hover:underline cursor-pointer">Send test</button>
                     <button type="button" onClick={() => setEditing(m.id)} className="text-ink-muted hover:text-ink cursor-pointer">Edit</button>
                     <button type="button" onClick={() => remove(m)} className="text-ink-muted hover:text-danger cursor-pointer">Remove</button>
                   </div>

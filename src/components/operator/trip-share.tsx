@@ -102,8 +102,8 @@ export function TripShare({ requestId }: { requestId: number }) {
                 <Button type="button" size="sm" onClick={() => copy(share.url!)} disabled={busy}>Copy</Button>
               </div>
               <div className="flex flex-wrap gap-x-5 gap-y-1 mt-2 text-xs">
-                <a href={share.url} target="_blank" rel="noreferrer" className="text-brass-ink hover:underline">Open trip sheet</a>
-                <a href={`${new URL(share.url).pathname}/calendar`} className="text-brass-ink hover:underline">Download calendar file</a>
+                <a href={share.url} target="_blank" rel="noreferrer" className="text-royal hover:underline">Open trip sheet</a>
+                <a href={`${new URL(share.url).pathname}/calendar`} className="text-royal hover:underline">Download calendar file</a>
                 <button type="button" onClick={revoke} disabled={busy} className="text-ink-muted hover:text-danger cursor-pointer">
                   Turn off link
                 </button>

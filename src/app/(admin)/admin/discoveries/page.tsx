@@ -3,7 +3,7 @@
 import { Suspense, useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
 
 interface DiscoveredOperator {
@@ -36,13 +36,13 @@ interface Stats {
   bounced_count: number;
 }
 
-const statusBadge: Record<string, 'default' | 'success' | 'warning' | 'error' | 'gold'> = {
-  new: 'gold',
+const statusBadge: Record<string, 'neutral' | 'confirmed' | 'warning' | 'danger' | 'neutral'> = {
+  new: 'neutral',
   no_email: 'warning',
-  emailed: 'success',
-  registered: 'success',
-  opted_out: 'default',
-  bounced: 'error',
+  emailed: 'confirmed',
+  registered: 'confirmed',
+  opted_out: 'neutral',
+  bounced: 'danger',
 };
 
 function DiscoveriesContent() {
@@ -204,7 +204,7 @@ function DiscoveriesContent() {
                     <div className="flex items-center gap-3 mb-1">
                       <h3 className="text-ink font-semibold truncate">{op.company_name}</h3>
                       {op.dba_name && <span className="text-ink-muted text-xs">DBA: {op.dba_name}</span>}
-                      <Badge variant={statusBadge[op.status] || 'default'}>{op.status}</Badge>
+                      <StatusBadge variant={statusBadge[op.status] || 'neutral'}>{op.status}</StatusBadge>
                     </div>
                     <p className="text-ink-muted text-xs">
                       {[op.city, op.state, op.zip].filter(Boolean).join(', ')}

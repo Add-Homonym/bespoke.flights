@@ -17,8 +17,13 @@ interface AirportFieldProps {
  * (upper-cased) until an airport is chosen, then its ICAO code. Accepts city,
  * airport name, IATA or ICAO.
  */
-function AirportField({ label, value, onChange, readOnly, required }: AirportFieldProps) {
-  const id = useId();
+export function AirportField({ label, value, onChange, readOnly, required, cellClass = 'px-4 py-3 pr-16', inputClass = 'text-title', labelClass = 'text-label', placeholder = 'City, airport or code', id: givenId, listClass = 'inset-x-0' }: AirportFieldProps & {
+  cellClass?: string; inputClass?: string; labelClass?: string; placeholder?: string; id?: string;
+  /** Listbox position; narrow fields widen it with e.g. 'left-0 w-72'. */
+  listClass?: string;
+}) {
+  const autoId = useId();
+  const id = givenId ?? autoId;
   const listId = `${id}-list`;
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(-1);
@@ -59,8 +64,8 @@ function AirportField({ label, value, onChange, readOnly, required }: AirportFie
   };
 
   return (
-    <div className="relative px-4 py-3 pr-16">
-      <label htmlFor={id} className="block text-label text-ink-muted">{label}</label>
+    <div className={`field-cell relative ${cellClass}`}>
+      <label htmlFor={id} className={`block text-ink-muted ${labelClass}`}>{label}</label>
       <input
         id={id}
         type="text"
@@ -73,12 +78,12 @@ function AirportField({ label, value, onChange, readOnly, required }: AirportFie
         readOnly={readOnly}
         required={required}
         autoComplete="off"
-        placeholder="City, airport or code"
+        placeholder={placeholder}
         onChange={e => { onChange(e.target.value.toUpperCase()); setOpen(true); setHighlight(-1); }}
         onFocus={() => setOpen(true)}
         onBlur={onBlur}
         onKeyDown={onKeyDown}
-        className={`block w-full bg-transparent text-title text-ink placeholder:text-ink-subtle ${readOnly ? 'opacity-70' : ''}`}
+        className={`block w-full bg-transparent text-ink placeholder:text-ink-subtle ${inputClass} ${readOnly ? 'opacity-70' : ''}`}
       />
       <p className="min-h-[18px] text-[13px] leading-[18px] text-ink-muted">
         {resolved ? `${resolved.iata} · ${resolved.name}` : ''}
@@ -89,7 +94,7 @@ function AirportField({ label, value, onChange, readOnly, required }: AirportFie
           id={listId}
           role="listbox"
           aria-label={`${label} airports`}
-          className="absolute inset-x-0 top-full z-50 mt-1 max-h-64 overflow-y-auto rounded-md border border-hairline bg-surface-raised shadow-float"
+          className={`absolute ${listClass} top-full z-50 mt-1 max-h-64 overflow-y-auto rounded-md border border-hairline bg-surface-raised shadow-float`}
         >
           {results.map((airport, i) => (
             <li
@@ -104,7 +109,7 @@ function AirportField({ label, value, onChange, readOnly, required }: AirportFie
             >
               <span className="w-12 shrink-0 text-label text-ink tabular-nums">{airport.iata}</span>
               <span className="min-w-0">
-                <span className="block truncate text-body text-ink">{airport.name}</span>
+                <span className="block text-body text-ink">{airport.name}</span>
                 <span className="block truncate text-label text-ink-muted">{airport.city}, {airport.country}</span>
               </span>
             </li>
@@ -136,10 +141,10 @@ export function RouteField({
   originLocked?: boolean;
 }) {
   return (
-    <div className="relative rounded-md border border-border-control bg-surface-raised">
-      <AirportField label="From" value={origin} onChange={onOriginChange} readOnly={originLocked} required />
+    <div className="field-card relative rounded-md border border-border-control bg-surface-raised">
+      <AirportField label="From" value={origin} onChange={onOriginChange} readOnly={originLocked} required cellClass="px-4 py-3 pr-16 rounded-t-md" />
       <div className="border-t border-hairline" />
-      <AirportField label="To" value={destination} onChange={onDestinationChange} required />
+      <AirportField label="To" value={destination} onChange={onDestinationChange} required cellClass="px-4 py-3 pr-16 rounded-b-md" />
       <button
         type="button"
         aria-label="Swap origin and destination"

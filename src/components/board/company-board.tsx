@@ -2,17 +2,18 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { TripDetails } from '@/components/booking/trip-details';
 import { formatTripDate } from '@/lib/trip-format';
 import type { Board, BoardTrip } from '@/lib/board/data';
 
 const REFRESH_MS = 15_000;
 
-type SectionKey = 'upcoming' | 'toQuote' | 'awaitingClient' | 'cancelled';
+type SectionKey = 'upcoming' | 'changeRequests' | 'toQuote' | 'awaitingClient' | 'cancelled';
 
 const SECTIONS: { key: SectionKey; title: string; empty: string }[] = [
   { key: 'upcoming', title: 'Upcoming charters', empty: 'No booked charters coming up.' },
+  { key: 'changeRequests', title: 'Change requests', empty: 'No change requests waiting for a decision.' },
   { key: 'toQuote', title: 'New requests to quote', empty: 'No new requests waiting for a quote.' },
   { key: 'awaitingClient', title: 'Quoted, awaiting client', empty: 'No quotes waiting on a client.' },
   { key: 'cancelled', title: 'Recently cancelled', empty: 'No cancellations in the last 14 days.' },
@@ -40,7 +41,7 @@ export function CompanyBoard({ source, linkTrips }: { source: string; linkTrips:
         return;
       }
       const data = (await res.json()) as Board;
-      const keys = SECTIONS.flatMap(s => data[s.key].map(t => tripKey(s.key, t)));
+      const keys = SECTIONS.flatMap(s => (data[s.key] ?? []).map(t => tripKey(s.key, t)));
       if (seen.current) {
         const added = keys.filter(k => !seen.current!.has(k));
         if (added.length) setFresh(prev => new Set([...prev, ...added]));
@@ -85,14 +86,14 @@ export function CompanyBoard({ source, linkTrips }: { source: string; linkTrips:
         <div className="flex flex-wrap gap-2">
           {SECTIONS.map(s => (
             <a key={s.key} href={`#${s.key}`} className="rounded-full border border-hairline px-3 py-1 text-xs text-ink hover:border-border-control">
-              {s.title} <span className="text-brass-ink">{board[s.key].length}</span>
+              {s.title} <span className="text-royal">{(board[s.key] ?? []).length}</span>
             </a>
           ))}
         </div>
         <p className="text-xs text-ink-muted" aria-live="polite">
           {error ? <span className="text-danger">{error}</span> : <>Live · updated {ago < 5 ? 'just now' : `${ago}s ago`}</>}
           {fresh.size > 0 && (
-            <button type="button" onClick={() => setFresh(new Set())} className="ml-3 text-brass-ink hover:underline cursor-pointer">
+            <button type="button" onClick={() => setFresh(new Set())} className="ml-3 text-royal hover:underline cursor-pointer">
               Mark {fresh.size} as seen
             </button>
           )}
@@ -103,26 +104,37 @@ export function CompanyBoard({ source, linkTrips }: { source: string; linkTrips:
         {SECTIONS.map(s => (
           <section key={s.key} id={s.key} aria-labelledby={`${s.key}-title`}>
             <h2 id={`${s.key}-title`} className="font-display text-xl text-ink mb-4">
-              {s.title} <span className="text-ink-muted text-sm font-normal">({board[s.key].length})</span>
+              {s.title} <span className="text-ink-muted text-sm font-normal">({(board[s.key] ?? []).length})</span>
             </h2>
-            {board[s.key].length === 0 ? (
+            {(board[s.key] ?? []).length === 0 ? (
               <p className="text-ink-muted text-sm">{s.empty}</p>
             ) : (
               <div className="grid gap-3 md:grid-cols-2">
-                {board[s.key].map(trip => {
+                {(board[s.key] ?? []).map(trip => {
                   const isNew = fresh.has(tripKey(s.key, trip));
                   const departsToday = trip.legs.some(l => l.date === today);
                   const card = (
-                    <div className={`h-full rounded-lg border bg-surface-raised p-5 ${isNew ? 'border-brass' : 'border-hairline'} ${linkTrips ? 'hover:border-border-control transition-colors' : ''}`}>
+                    <div className={`relative h-full rounded-lg border bg-surface-raised p-5 ${isNew ? 'border-brass' : 'border-hairline'} ${linkTrips ? 'hover:border-border-control transition-colors' : ''}`}>
                       <div className="flex items-center justify-between gap-2 mb-3">
-                        <span className="text-xs text-ink-muted">#{trip.requestId}</span>
+                        {linkTrips
+                          // The whole card is the link (stretched), so the phone link inside it stays a separate link.
+                          ? <Link href={`/operator/requests/${trip.requestId}`} className="text-xs text-ink-muted after:absolute after:inset-0 after:rounded-lg after:content-['']">#{trip.requestId}<span className="sr-only"> — open trip</span></Link>
+                          : <span className="text-xs text-ink-muted">#{trip.requestId}</span>}
                         <div className="flex gap-1.5">
-                          {isNew && <Badge variant="gold">{s.key === 'upcoming' || s.key === 'cancelled' ? 'Updated' : 'New'}</Badge>}
-                          {departsToday && s.key === 'upcoming' && <Badge variant="warning">Departs today</Badge>}
-                          {s.key === 'cancelled' && <Badge variant="error">Cancelled</Badge>}
+                          {isNew && <StatusBadge variant="brass">{s.key === 'upcoming' || s.key === 'cancelled' ? 'Updated' : 'New'}</StatusBadge>}
+                          {s.key === 'changeRequests' && <StatusBadge variant="warning">Decision needed</StatusBadge>}
+                          {departsToday && s.key === 'upcoming' && <StatusBadge variant="warning">Departs today</StatusBadge>}
+                          {s.key === 'cancelled' && <StatusBadge variant="danger">Cancelled</StatusBadge>}
                         </div>
                       </div>
-                      <TripDetails compact legs={trip.legs} passengerCount={trip.passengerCount} notes={trip.specialRequests} />
+                      {trip.proposed ? (
+                        <div className="space-y-3">
+                          <TripDetails compact title="Proposed" legs={trip.proposed.legs} passengerCount={trip.proposed.passengerCount} notes={trip.proposed.notes} />
+                          <TripDetails compact title="Currently booked" legs={trip.legs} passengerCount={trip.passengerCount} notes={trip.specialRequests} />
+                        </div>
+                      ) : (
+                        <TripDetails compact legs={trip.legs} passengerCount={trip.passengerCount} notes={trip.specialRequests} />
+                      )}
                       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-sm mt-2">
                         {trip.aircraft && (<><dt className="text-ink-muted">Aircraft</dt><dd className="text-ink">{trip.aircraft}</dd></>)}
                         {trip.quoteCents != null && (<><dt className="text-ink-muted">Quote</dt><dd className="text-ink">${(trip.quoteCents / 100).toLocaleString()}</dd></>)}
@@ -131,7 +143,7 @@ export function CompanyBoard({ source, linkTrips }: { source: string; linkTrips:
                             <dt className="text-ink-muted">Lead passenger</dt>
                             <dd className="text-ink">
                               {trip.leadPassenger.name}
-                              {trip.leadPassenger.phone && <> · <a href={`tel:${trip.leadPassenger.phone}`} className="hover:text-brass-ink">{trip.leadPassenger.phone}</a></>}
+                              {trip.leadPassenger.phone && <> · <a href={`tel:${trip.leadPassenger.phone}`} className="relative z-10 hover:text-royal">{trip.leadPassenger.phone}</a></>}
                             </dd>
                           </>
                         )}
@@ -141,9 +153,7 @@ export function CompanyBoard({ source, linkTrips }: { source: string; linkTrips:
                       )}
                     </div>
                   );
-                  return linkTrips
-                    ? <Link key={trip.requestId} href={`/operator/requests/${trip.requestId}`} className="block">{card}</Link>
-                    : <div key={trip.requestId}>{card}</div>;
+                  return <div key={trip.requestId}>{card}</div>;
                 })}
               </div>
             )}
