@@ -104,6 +104,45 @@ export const discoveryPatchSchema = z.object({
   notes: z.string().max(2000).optional().nullable(),
 });
 
+const roleEnum = z.enum(['customer', 'operator', 'admin']);
+const optPhone = z.union([z.string().trim().min(7).max(32), z.literal('')]).optional().nullable();
+
+/** Admin: add a user. */
+export const adminCreateUserSchema = z.object({
+  email: z.string().trim().email().max(254),
+  name: z.string().trim().min(1).max(120),
+  phone: optPhone,
+  role: roleEnum,
+  companyName: z.string().trim().max(120).optional().nullable(),
+  password: z.union([z.string().min(8).max(128), z.literal('')]).optional().nullable(),
+}).strict().refine(d => d.role !== 'operator' || !!d.companyName, { message: 'Company name is required for an operator', path: ['companyName'] });
+
+/** Admin: change a user's name, phone or role. */
+export const adminUpdateUserSchema = z.object({
+  name: z.string().trim().min(1).max(120).optional(),
+  phone: optPhone,
+  role: roleEnum.optional(),
+  companyName: z.string().trim().max(120).optional().nullable(),
+}).strict();
+
+/** Admin: add an operator (a new operator account with its company profile). */
+export const adminCreateOperatorSchema = z.object({
+  companyName: z.string().trim().min(1).max(120),
+  name: z.string().trim().min(1).max(120),
+  email: z.string().trim().email().max(254),
+  phone: optPhone,
+  certificate: z.string().trim().max(80).optional().nullable(),
+  status: z.enum(['pending', 'approved', 'suspended']).default('approved'),
+  password: z.union([z.string().min(8).max(128), z.literal('')]).optional().nullable(),
+}).strict();
+
+/** Admin: edit an operator's company profile and status. */
+export const adminOperatorPatchSchema = operatorSettingsSchema.omit({ cancellation_policy: true, autopilot: true }).extend({
+  company_name: z.string().trim().min(1).max(120).optional(),
+  status: z.enum(['pending', 'approved', 'suspended']).optional(),
+  platform_fee_bps: z.number().int().min(0).max(5000).optional().nullable(),
+}).strict();
+
 export const operatorStatusSchema = z.object({
   status: z.enum(['approved', 'suspended']),
 });

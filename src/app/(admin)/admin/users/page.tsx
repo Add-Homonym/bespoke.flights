@@ -1,50 +1,23 @@
 import { getDb } from '@/lib/db';
-import { Table, Thead, Th, Td, Tr } from '@/components/ui/table';
-import { StatusBadge } from '@/components/ui/status-badge';
-import type { User } from '@/lib/types';
+import { getSession } from '@/lib/auth';
+import { UsersManager, type AdminUserRow } from '@/components/admin/users-manager';
+
+export const dynamic = 'force-dynamic';
 
 export default async function AdminUsersPage() {
-  const db = getDb();
-  const users = await db.query<Omit<User, 'password_hash' | 'updated_at'>>('SELECT id, email, phone, name, role, created_at FROM users ORDER BY created_at DESC');
-
-  const roleBadge: Record<string, 'neutral' | 'confirmed' | 'warning'> = {
-    customer: 'neutral',
-    operator: 'confirmed',
-    admin: 'warning',
-  };
+  const session = await getSession();
+  const users = await getDb().query<AdminUserRow>(`
+    SELECT u.id, u.email, u.phone, u.name, u.role, u.created_at, o.id AS operator_id, o.company_name
+    FROM users u LEFT JOIN operators o ON o.user_id = u.id
+    ORDER BY u.created_at DESC`);
 
   return (
-    <div>
-      <h1 className="font-display text-3xl text-ink mb-2">User Management</h1>
-      <p className="text-ink-muted mb-10">All registered users.</p>
-
-      <Table>
-        <Thead>
-          <tr>
-            <Th>Name</Th>
-            <Th>Email</Th>
-            <Th>Phone</Th>
-            <Th>Role</Th>
-            <Th>Joined</Th>
-          </tr>
-        </Thead>
-        <tbody>
-          {users.map(user => (
-            <Tr key={user.id}>
-              <Td>{user.name}</Td>
-              <Td className="font-mono text-xs">{user.email}</Td>
-              <Td className="text-ink-muted">{user.phone || '—'}</Td>
-              <Td><StatusBadge variant={roleBadge[user.role]}>{user.role}</StatusBadge></Td>
-              <Td className="text-ink-muted text-xs">{new Date(user.created_at).toLocaleDateString()}</Td>
-            </Tr>
-          ))}
-          {users.length === 0 && (
-            <Tr>
-              <Td className="text-center text-ink-muted py-8">No users yet.</Td>
-            </Tr>
-          )}
-        </tbody>
-      </Table>
+    <div id="admin-users" className="space-y-8">
+      <div>
+        <h1 className="text-display text-ink">Users</h1>
+        <p className="mt-2 text-body text-ink-muted">Add accounts and change roles. Role changes take effect on the user&apos;s next page load.</p>
+      </div>
+      <UsersManager initial={users} selfId={session!.userId} />
     </div>
   );
 }
