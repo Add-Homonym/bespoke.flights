@@ -1,3 +1,4 @@
+import { saveBusinessModel } from '@/lib/business-model';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFixture, row, type Fixture } from './fixtures';
 import {
@@ -50,6 +51,18 @@ describe('createCheckout (stub mode)', () => {
     // Quote and request untouched until paid
     expect(await status('quotes', f.quoteA)).toBe('pending');
     expect(await status('booking_requests', f.requestId)).toBe('quoted');
+  });
+
+  it('uses the admin-set default commission, empty-leg rate and processing pass-through', async () => {
+    await saveBusinessModel(f.db, { operatorCommissionBps: 800, emptyLegCommissionBps: 1500, passProcessingToOperator: true, processingFeeBps: 100, processingFeeFixedCents: 30 });
+    let res = await createCheckout(f.db, { quoteId: f.quoteA, customerId: f.customerId, baseUrl: BASE });
+    // 8% of $85,000 = $6,800, plus 1% + $0.30 processing = $850.30
+    expect((await payment(res.paymentId)).platform_fee_cents).toBe(680_000 + 85_030);
+
+    await f.db.run('UPDATE quotes SET is_empty_leg = 1 WHERE id = ?', [f.quoteA]);
+    await f.db.run("UPDATE payments SET status = 'canceled' WHERE id = ?", [res.paymentId]);
+    res = await createCheckout(f.db, { quoteId: f.quoteA, customerId: f.customerId, baseUrl: BASE });
+    expect((await payment(res.paymentId)).platform_fee_cents).toBe(1_275_000 + 85_030);
   });
 
   it('uses a per-operator fee override', async () => {

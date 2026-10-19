@@ -228,7 +228,7 @@ Travelers and operators talk in the app instead of by phone or email. One thread
 
 ### Platform fee
 
-`PLATFORM_FEE_BPS` sets the fee in basis points (default `500` = 5%). The `operators.platform_fee_bps` column overrides it for one operator. The fee is rounded to the nearest cent. Stripe's processing fees come out of the platform's share.
+The business model is configured by an admin at `/admin/settings` (stored as JSON under `platform_settings.key = 'business_model'`, see `src/lib/business-model.ts`): default operator commission, subscriber-tier commission, empty-leg commission, launch-partner promotion (rate, booking cap, end date), processing pass-through and quote ranking are applied at checkout; the remaining fields (traveler fee, subscription price, ancillary margin, payout hold, referral fee, affiliation disclosure) are recorded for features that do not exist yet. `PLATFORM_FEE_BPS` (default `500` = 5%) is only the fallback before an admin saves a commission. Commission precedence: `operators.platform_fee_bps` override → launch promo (`operators.launch_partner = 1`) → empty leg (`quotes.is_empty_leg = 1`) → subscriber plan (`operators.plan = 'subscriber'`) → default. The fee is rounded to the nearest cent. Stripe's processing fees come out of the platform's share unless pass-through is on.
 
 ### Refunds and disputes
 
@@ -451,7 +451,7 @@ Created by `npm run seed` locally, or automatically in [test mode](#test-mode). 
 | `STRIPE_SECRET_KEY` | Production | Stripe secret key. Without it, payments run in stub mode (development) or are disabled (production). |
 | `STRIPE_WEBHOOK_SECRET` | Production | Signing secret for the platform webhook endpoint |
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | Production | Signing secret for the connected-accounts webhook endpoint |
-| `PLATFORM_FEE_BPS` | No | Platform commission in basis points (default `500` = 5%) |
+| `PLATFORM_FEE_BPS` | No | Fallback platform commission in basis points (default `500` = 5%) until set at `/admin/settings` |
 | `APP_URL` | Production | Public base URL for Stripe redirect URLs and links in emails and texts. In production the request's Host header is never used; without `APP_URL` the app falls back to Vercel's `VERCEL_PROJECT_PRODUCTION_URL` and otherwise fails the request. |
 | `TWILIO_ACCOUNT_SID` | No | Twilio account for RFQ texts and staff text alerts. Without the Twilio variables, texts log to stdout. |
 | `TWILIO_AUTH_TOKEN` | No | Twilio auth token |

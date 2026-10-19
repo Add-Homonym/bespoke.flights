@@ -18,7 +18,8 @@ import { z } from 'zod';
 import type { Db } from '@/lib/db';
 import { sendEmail } from '@/lib/email/resend';
 import { changeRequestEmail } from '@/lib/email/templates';
-import { appBaseUrl, computeFees, formatMoney, getPaymentsMode, MIN_CHARGE_CENTS, platformFeeBps } from '@/lib/payments/config';
+import { appBaseUrl, computeFees, formatMoney, getPaymentsMode, MIN_CHARGE_CENTS } from '@/lib/payments/config';
+import { estimatedProcessingCents, getBusinessModel, resolveCommission } from '@/lib/business-model';
 import { PaymentError, refundPayment } from '@/lib/payments/service';
 import { alertStaff } from '@/lib/staff/alerts';
 import { fromDbLegs, legLine, tripRoute } from '@/lib/trip-format';
@@ -142,7 +143,7 @@ export interface AcceptResult {
 export async function acceptChange(
   db: Db,
   changeRequestId: number,
-  operator: Pick<Operator, 'id' | 'platform_fee_bps' | 'stripe_account_id'>,
+  operator: Pick<Operator, 'id' | 'platform_fee_bps' | 'stripe_account_id' | 'plan' | 'launch_partner'>,
   params: { newPriceCents?: number; note?: string; baseUrl?: string },
 ): Promise<AcceptResult> {
   const baseUrl = params.baseUrl ?? appBaseUrl();
@@ -250,7 +251,7 @@ export async function onChangePaymentSucceeded(db: Db, payment: Payment & { chan
 // ─── Difference payment ─────────────────────────────────────────────
 
 async function createDifferenceCheckout(
-  db: Db, cr: ChangeRequest, booking: Payment, operator: Pick<Operator, 'id' | 'platform_fee_bps' | 'stripe_account_id'>,
+  db: Db, cr: ChangeRequest, booking: Payment, operator: Pick<Operator, 'id' | 'platform_fee_bps' | 'stripe_account_id' | 'plan' | 'launch_partner'>,
   diff: number, baseUrl: string,
 ) {
   const mode = getPaymentsMode();
@@ -260,7 +261,9 @@ async function createDifferenceCheckout(
   // Only one open difference checkout per change request.
   await db.run("UPDATE payments SET status = 'canceled', failure_reason = 'Superseded', updated_at = now() WHERE change_request_id = ? AND status = 'pending'", [cr.id]);
 
-  const fees = computeFees(diff, platformFeeBps(operator.platform_fee_bps));
+  const model = await getBusinessModel(db);
+  const commission = await resolveCommission(db, model, operator);
+  const fees = computeFees(diff, commission.bps, estimatedProcessingCents(model, diff));
   const provider = mode === 'stripe' ? 'stripe' : 'stub';
   const paymentId = (await db.one<{ id: number }>(`
     INSERT INTO payments (request_id, quote_id, customer_id, operator_id, amount_cents, platform_fee_cents,

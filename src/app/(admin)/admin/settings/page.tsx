@@ -1,35 +1,27 @@
 import { Card } from '@/components/ui/card';
+import { BusinessModelForm } from '@/components/admin/business-model-form';
+import { getDb } from '@/lib/db';
+import { APPLIED_FIELDS, getBusinessModel } from '@/lib/business-model';
 
-export default function AdminSettingsPage() {
+export const dynamic = 'force-dynamic';
+
+export default async function AdminSettingsPage() {
+  const model = await getBusinessModel(getDb());
+
   return (
     <div>
-      <h1 className="font-display text-3xl text-ink mb-2">Settings</h1>
-      <p className="text-ink-muted mb-10">System configuration.</p>
+      <h1 className="text-display text-ink mb-2">Settings</h1>
+      <p className="text-body text-ink-muted mb-10">
+        Business model. Changes apply to new checkouts; existing payments keep the split they were created with.
+        A per-operator fee set on the Operators page overrides every commission rule here.
+      </p>
 
-      <div className="space-y-6">
-        <Card>
-          <h2 className="text-ink font-semibold mb-4">Platform Settings</h2>
-          <div className="space-y-4 text-sm">
-            <div className="flex items-center justify-between py-2 border-b border-hairline">
-              <span className="text-ink-muted">Auto-approve operators</span>
-              <span className="text-ink">Disabled</span>
-            </div>
-            <div className="flex items-center justify-between py-2 border-b border-hairline">
-              <span className="text-ink-muted">Default quote validity</span>
-              <span className="text-ink">7 days</span>
-            </div>
-            <div className="flex items-center justify-between py-2">
-              <span className="text-ink-muted">Max legs per request</span>
-              <span className="text-ink">10</span>
-            </div>
-          </div>
-        </Card>
+      <BusinessModelForm initial={model} applied={[...APPLIED_FIELDS]} />
 
-        <Card>
-          <h2 className="text-ink font-semibold mb-4">Database</h2>
-          <p className="text-ink-muted text-sm">Postgres (Neon in production, provisioned through the Vercel integration). Local development without DATABASE_URL uses an embedded PGlite database in data/pglite.</p>
-        </Card>
-      </div>
+      <Card className="mt-6">
+        <h2 className="text-title text-ink mb-2">Database</h2>
+        <p className="text-body text-ink-muted">Postgres (Neon in production, provisioned through the Vercel integration). Local development without DATABASE_URL uses an embedded PGlite database in data/pglite.</p>
+      </Card>
     </div>
   );
 }

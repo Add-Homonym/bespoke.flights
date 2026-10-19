@@ -43,6 +43,7 @@ const links = {
     { href: '/admin/requests', label: 'Requests' },
     { href: '/admin/payments', label: 'Payments' },
     { href: '/admin/discoveries', label: 'Discoveries' },
+    { href: '/admin/settings', label: 'Settings' },
   ],
 } as const;
 
