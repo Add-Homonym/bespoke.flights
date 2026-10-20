@@ -20,6 +20,9 @@ import { MessageThread } from '@/components/messaging/message-thread';
 import { unreadByOperator } from '@/lib/messaging/messages';
 import { previewCancellation } from '@/lib/bookings/cancellation';
 import { formatMoney, getPaymentsMode } from '@/lib/payments/config';
+import { emptyLegsForRequest } from '@/lib/empty-legs/service';
+import { EmptyLegCard } from '@/components/empty-legs/empty-leg-card';
+import { BookEmptyLeg } from '@/components/empty-legs/book-empty-leg';
 import type { BookingRequest, BookingLeg, Quote, Payment } from '@/lib/types';
 
 function isExpired(validUntil: string | null, today: string): boolean {
@@ -99,6 +102,9 @@ export default async function RequestDetailPage({
   const cancelPreview = canCancel && request.status === 'booked' ? await previewCancellation(db, request) : null;
   const changes = request.status === 'booked' || request.status === 'completed' ? await changeRequestViews(db, request.id, payment?.currency) : [];
   const unread = quotes.length ? await unreadByOperator(db, request.id, request.customer_id) : new Map<number, number>();
+  // Listed empty legs that fit this trip, offered while the request is still open.
+  const emptyLegs = session.role === 'customer' && ['open', 'quoted'].includes(request.status) && !paymentInFlight ? await emptyLegsForRequest(db, request.id) : [];
+  const isEmptyLegBooking = quotes.some(q => q.empty_leg_id);
 
   return (
     <div className={`mx-auto max-w-3xl ${payment?.status === 'pending' || changePayment?.status === 'pending' ? 'pb-28' : ''}`}>
@@ -127,6 +133,11 @@ export default async function RequestDetailPage({
       {submitted === '1' && (
         <Notice tone="confirmed" className="mb-8">
           Your request is submitted. Matching operators have been notified, and quotes appear below as they respond.
+        </Notice>
+      )}
+      {submitted === 'empty-leg' && (
+        <Notice tone="confirmed" className="mb-8">
+          The empty leg is held for you at the listed price. Pay below to confirm it. Another traveler can take it until the payment clears.
         </Notice>
       )}
 
@@ -221,12 +232,29 @@ export default async function RequestDetailPage({
       {/* Outreach Status — shows which operators were auto-contacted */}
       {outreachCount > 0 && <OutreachStatus requestId={request.id} />}
 
+      {emptyLegs.length > 0 && (
+        <section aria-labelledby="empty-legs-heading" className="mb-8">
+          <h2 id="empty-legs-heading" className="text-title text-ink">Empty legs on this route</h2>
+          <p className="mt-1 mb-4 text-label text-ink-muted">
+            Repositioning flights at a fixed price. The operator sets the date. Booking one opens its own trip; this request stays open until you cancel it.
+          </p>
+          <div className="grid gap-4">
+            {emptyLegs.map(leg => (
+              <EmptyLegCard key={leg.id} leg={leg} badge={<StatusBadge variant="neutral">Empty leg</StatusBadge>}
+                action={<BookEmptyLeg legId={leg.id} seats={leg.seats} viewerRole={session.role} />} />
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Quotes */}
       <section aria-labelledby="quotes-heading">
         <h2 id="quotes-heading" className="text-title text-ink">
           Quotes {quotes.length > 0 && <span className="text-ink-muted tabular-nums">({quotes.length})</span>}
         </h2>
-        <p className="mt-1 mb-4 text-label text-ink-muted">Part 135 — certified for charter. Every price is all-in.</p>
+        <p className="mt-1 mb-4 text-label text-ink-muted">
+          {isEmptyLegBooking ? 'Empty leg at the listed price. Part 135 — certified for charter. All-in.' : 'Part 135 — certified for charter. Every price is all-in.'}
+        </p>
 
         {quotes.length === 0 ? (
           <Card>
@@ -256,6 +284,7 @@ export default async function RequestDetailPage({
                     : expired ? <StatusBadge variant="warning">Expired</StatusBadge>
                     : quote.revised_at ? <StatusBadge variant="neutral">Revised</StatusBadge>
                     : quote.id === bestValueId ? <StatusBadge variant="brass">Best value</StatusBadge>
+                    : quote.is_empty_leg ? <StatusBadge variant="neutral">Empty leg</StatusBadge>
                     : undefined
                   }
                   seats={quote.aircraft_capacity ?? null}

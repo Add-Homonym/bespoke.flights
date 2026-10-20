@@ -105,7 +105,7 @@ describe('GET /api/cron/daily-lifecycle', () => {
   });
 
   it('runDailyLifecycle reports both counts', async () => {
-    expect(await runDailyLifecycle(f.db, { baseUrl: BASE })).toEqual({ expiredQuotes: 0, completedTrips: 0 });
+    expect(await runDailyLifecycle(f.db, { baseUrl: BASE })).toEqual({ expiredQuotes: 0, completedTrips: 0, expiredEmptyLegs: 0 });
   });
 });
 

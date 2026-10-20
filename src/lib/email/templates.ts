@@ -104,6 +104,8 @@ export interface RFQEmailData {
   legDetails: string[];
   matchScore: number;
   operatorCompany: string;
+  /** When set, the operator may quote by replying to this email. */
+  replyToQuote?: boolean;
 }
 
 export function rfqNotificationEmail(data: RFQEmailData): { subject: string; html: string } {
@@ -131,9 +133,32 @@ export function rfqNotificationEmail(data: RFQEmailData): { subject: string; htm
     legsHtml +
     '</table>' +
     button('Submit Your Quote', 'https://bespoke.flights/operator/inbound') +
+    (data.replyToQuote
+      ? p('Or reply to this email with your all-in price, for example <strong style="color:' + BRAND.cream + '">Quote $12,500</strong>. Add a tail number and a validity date if you like: <em>$12,500 N123AB valid 2026-11-01</em>. The rest of your reply reaches the traveler as your message.', 'color:' + BRAND.muted + ';font-size:13px')
+      : '') +
     p('No markup on your quoted price. Commission on confirmed booking only.', 'color:' + BRAND.muted + ';font-size:13px');
 
   return { subject, html: layout(body) };
+}
+
+// ─── Reply-by-email quoting: receipts to the operator ─────────────
+
+export function quoteConfirmationEmail(data: { requestId: number; priceCents: number; url: string }): { subject: string; html: string } {
+  const price = '$' + (data.priceCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 });
+  const body =
+    '<h1 style="margin:0 0 8px 0;color:' + BRAND.cream + ';font-size:22px;font-weight:600">Quote received</h1>' +
+    p('Your reply quoted <strong style="color:' + BRAND.cream + '">' + price + '</strong> on request #' + data.requestId + '. The traveler has been notified.') +
+    button('View the request', data.url);
+  return { subject: 'Quote received — Request #' + data.requestId, html: layout(body) };
+}
+
+export function quoteRejectedEmail(data: { requestId: number; reason: string; url: string }): { subject: string; html: string } {
+  const body =
+    '<h1 style="margin:0 0 8px 0;color:' + BRAND.cream + ';font-size:22px;font-weight:600">We could not record your quote</h1>' +
+    p('Request #' + data.requestId + ': ' + escapeHtml(data.reason)) +
+    p('Reply again with the price on its own line, or quote from your dashboard.', 'color:' + BRAND.muted + ';font-size:13px') +
+    button('Quote from the dashboard', data.url);
+  return { subject: 'Quote not recorded — Request #' + data.requestId, html: layout(body) };
 }
 
 function summaryRow(label: string, value: string): string {

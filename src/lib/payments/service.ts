@@ -32,6 +32,8 @@ import { alertStaff } from '@/lib/staff/alerts';
 import { paymentReceiptEmail, bookingConfirmedOperatorEmail } from '@/lib/email/templates';
 import type { Payment, Quote, BookingRequest, Operator, BookingLeg } from '@/lib/types';
 import { fromDbLegs, legLine } from '@/lib/trip-format';
+import { listingAvailable, markListingBooked, relistAfterCancellation } from '@/lib/empty-legs/service';
+import { notifyEmptyLegUnavailable } from '@/lib/notify/traveler';
 
 export class PaymentError extends Error {
   constructor(message: string, public status: number) {
@@ -82,6 +84,9 @@ export async function createCheckout(
   }
   if (quote.price_cents < MIN_CHARGE_CENTS) {
     throw new PaymentError('Quote amount is below the minimum charge', 400);
+  }
+  if (!(await listingAvailable(db, quote))) {
+    throw new PaymentError('This empty leg is no longer available', 409);
   }
 
   const operator = (await db.one<Operator>('SELECT * FROM operators WHERE id = ?', [quote.operator_id]))!;
@@ -256,10 +261,13 @@ export async function markPaymentSucceeded(
     if (quote.status !== 'pending' || !['open', 'quoted'].includes(request.status)) {
       return 'conflict';
     }
+    // An empty leg already taken by another traveler's payment.
+    if (!(await listingAvailable(tx, quote))) return 'conflict';
 
     await tx.run("UPDATE quotes SET status = 'accepted' WHERE id = ?", [quote.id]);
     await tx.run("UPDATE quotes SET status = 'rejected' WHERE request_id = ? AND id != ? AND status = 'pending'", [request.id, quote.id]);
     await tx.run("UPDATE booking_requests SET status = 'booked', updated_at = now() WHERE id = ?", [request.id]);
+    await markListingBooked(tx, quote);
     return 'booked';
   });
 }
@@ -310,7 +318,10 @@ export async function applyRefundTotal(db: Db, paymentId: number, refundedCents:
           UPDATE booking_requests SET status = 'cancelled', updated_at = now()
           WHERE id = ? AND status = 'booked'
         `, [payment.request_id]);
-        if (changed) return { requestId: payment.request_id, operatorId: payment.operator_id };
+        if (changed) {
+          await relistAfterCancellation(tx, payment.request_id);
+          return { requestId: payment.request_id, operatorId: payment.operator_id };
+        }
       }
     }
     return null;
@@ -397,6 +408,13 @@ export async function fulfillPayment(
       console.error('Booking email failed:', err)
     );
     await alertStaff(db, { kind: 'booking', requestId: payment.request_id, operatorId: payment.operator_id }, details.baseUrl);
+    // Travelers who held a quote on the same empty leg: their quote was withdrawn in the transaction.
+    const lost = await db.query<{ request_id: number }>(`
+      SELECT DISTINCT q.request_id FROM quotes q
+      JOIN quotes won ON won.id = ? AND won.empty_leg_id = q.empty_leg_id
+      WHERE q.status = 'withdrawn' AND q.request_id != won.request_id
+    `, [payment.quote_id]);
+    for (const r of lost) await notifyEmptyLegUnavailable(db, r.request_id, details.baseUrl);
   } else if (outcome === 'change_paid') {
     // Idempotent: applies the change once, emails on first application only.
     const payment = (await getPayment(db, paymentId))!;

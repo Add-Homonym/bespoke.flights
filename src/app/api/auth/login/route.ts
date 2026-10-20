@@ -3,6 +3,7 @@ import { getDb } from '@/lib/db';
 import { loginSchema } from '@/lib/validations';
 import { authenticate } from '@/lib/auth';
 import { claimBookingDraft } from '@/lib/bookings/create';
+import { claimEmptyLegCookie } from '@/lib/empty-legs/service';
 import { appBaseUrl } from '@/lib/payments/config';
 import { clientIp, rateLimited } from '@/lib/rate-limit';
 
@@ -25,7 +26,8 @@ export async function POST(req: Request) {
     }
 
     // A traveler who built a trip before signing in: submit it now.
-    const requestId = user.role === 'customer' ? await claimBookingDraft(db, user.id, appBaseUrl(req)) : null;
+    const requestId = user.role === 'customer'
+      ? (await claimBookingDraft(db, user.id, appBaseUrl(req))) ?? (await claimEmptyLegCookie(db, user.id)) : null;
 
     return NextResponse.json({
       id: user.id, email: user.email, name: user.name, role: user.role,

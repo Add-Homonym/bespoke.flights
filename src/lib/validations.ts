@@ -50,6 +50,33 @@ export const quoteSchema = z.object({
   worksheet: worksheetSchema.optional().nullable(),
 });
 
+export const emptyLegSchema = z.object({
+  aircraftId: z.number().int().positive().optional().nullable(),
+  originCode: z.string().trim().toUpperCase().min(3).max(4),
+  destCode: z.string().trim().toUpperCase().min(3).max(4),
+  departureDate: z.string().regex(ISO_DATE)
+    .refine(d => d >= new Date().toISOString().slice(0, 10), { message: 'Departure date is in the past' }),
+  departureTime: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
+  flexDays: z.number().int().min(0).max(7).default(0),
+  seats: z.number().int().min(1).max(100),
+  // Cents, up to $10,000,000.
+  priceCents: z.number().int().min(50).max(1_000_000_000),
+  currency: z.enum(['USD']).default('USD'),
+  notes: z.string().trim().max(1000).optional().nullable(),
+}).refine(l => l.originCode !== l.destCode, { message: 'Origin and destination are the same', path: ['destCode'] });
+
+export const emptyLegPatchSchema = z.object({
+  priceCents: z.number().int().min(50).max(1_000_000_000).optional(),
+  seats: z.number().int().min(1).max(100).optional(),
+  notes: z.string().trim().max(1000).optional().nullable(),
+  status: z.enum(['withdrawn']).optional(),
+}).strict();
+
+export const emptyLegBookSchema = z.object({
+  passengerCount: z.number().int().min(1).max(100),
+  notes: z.string().trim().max(2000).optional().nullable(),
+});
+
 export const profileSchema = z.object({
   name: z.string().min(1).optional(),
   email: z.string().email().optional(),
