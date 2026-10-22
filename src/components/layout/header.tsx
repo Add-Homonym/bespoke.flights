@@ -20,6 +20,7 @@ const links = {
     { href: '/book', label: 'Request quotes' },
     { href: '/empty-legs', label: 'Empty legs' },
     OPERATORS_LINK,
+    { href: '/register?role=operator', label: 'Operator sign-up' },
     { href: '/login', label: 'Sign in' },
   ],
   customer: [

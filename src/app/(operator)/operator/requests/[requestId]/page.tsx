@@ -12,6 +12,7 @@ import { ChangeRequestSummary, OperatorChangeRequests } from '@/components/booki
 import { changeRequestViews } from '@/lib/bookings/changes';
 import { displayCode } from '@/lib/airports';
 import { formatMoney } from '@/lib/payments/config';
+import { withholdTravelerText } from '@/lib/access';
 import { cancellationSummary } from '@/lib/bookings/cancellation';
 import { MessageThread } from '@/components/messaging/message-thread';
 import { unreadForOperator } from '@/lib/messaging/messages';
@@ -125,7 +126,11 @@ export default async function OperatorRequestDetailPage({ params, searchParams }
           <dt className="text-ink-muted">Passengers</dt>
           <dd className="text-ink">{request.passenger_count}</dd>
           <dt className="text-ink-muted">Special requests</dt>
-          <dd className="text-ink break-words">{request.notes?.trim() || <span className="text-ink-subtle">None</span>}</dd>
+          <dd className="text-ink break-words">
+            {withholdTravelerText(operator?.status)
+              ? <span className="text-ink-subtle">Shown once your account is approved</span>
+              : request.notes?.trim() || <span className="text-ink-subtle">None</span>}
+          </dd>
         </dl>
       </Card>
 

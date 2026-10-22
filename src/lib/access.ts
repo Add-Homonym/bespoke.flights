@@ -10,6 +10,14 @@ import type { BookingRequest, SessionPayload } from '@/lib/types';
  *   see each other's quotes, and see the customer's contact details only once
  *   their own quote has been paid for.
  */
+/**
+ * Until an operator is approved they see what a request is (route, date, passenger
+ * count) and nothing a traveler typed: no special requests or notes.
+ */
+export function withholdTravelerText(operatorStatus: string | null | undefined): boolean {
+  return operatorStatus !== 'approved';
+}
+
 export interface RequestAccess {
   /** May read the request and its legs. */
   canView: boolean;
