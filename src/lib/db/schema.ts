@@ -453,6 +453,9 @@ ALTER TABLE booking_requests ADD COLUMN IF NOT EXISTS cancel_tier TEXT;
 ALTER TABLE booking_requests ADD COLUMN IF NOT EXISTS cancel_refund_cents BIGINT;
 ALTER TABLE change_requests ADD COLUMN IF NOT EXISTS closed_reason TEXT;
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_method_label TEXT;
+
+-- An empty-leg booking links to its listing here. The traveler notes stay in notes.
+ALTER TABLE booking_requests ADD COLUMN IF NOT EXISTS empty_leg_id INTEGER REFERENCES empty_legs(id);
 `;
 
 /**
@@ -484,6 +487,12 @@ export const SCHEMA_BLOCKS: string[] = [
         CHECK (status IN ('pending','accepted','rejected','withdrawn','expired','cancelled'));
     END IF;
   END $$`,
+  // Empty-leg bookings used to put "Empty leg #N" in the special requests. Move the link to its own column.
+  `UPDATE booking_requests br SET empty_leg_id = q.empty_leg_id
+   FROM quotes q WHERE q.request_id = br.id AND q.empty_leg_id IS NOT NULL AND br.empty_leg_id IS NULL AND br.form_variant = 'empty_leg'`,
+  `UPDATE booking_requests
+   SET notes = NULLIF(btrim(regexp_replace(notes, '(^|\n)Empty leg #[0-9]+', '', 'g'), E' \n'), '')
+   WHERE form_variant = 'empty_leg' AND notes ~ 'Empty leg #[0-9]+'`,
   // Backfill: bookings cancelled before this change still show an accepted quote.
   `UPDATE quotes SET status = 'cancelled'
    WHERE status = 'accepted' AND request_id IN (SELECT id FROM booking_requests WHERE status = 'cancelled')`,

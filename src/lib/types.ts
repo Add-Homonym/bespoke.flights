@@ -85,6 +85,8 @@ export interface BookingRequest {
   /** Refund tier applied at cancellation: full, partial or none. */
   cancel_tier?: 'full' | 'partial' | 'none' | null;
   cancel_refund_cents?: number | null;
+  /** The empty-leg listing this request was booked from. */
+  empty_leg_id?: number | null;
 }
 
 export interface BookingLeg {

@@ -42,6 +42,9 @@ function NewListingForm({ aircraft, onCreated, onCancel }: { aircraft: Aircraft[
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
 
+  const capacity = aircraft.find(x => String(x.id) === aircraftId)?.capacity ?? 100;
+  const today = new Date().toISOString().slice(0, 10);
+
   const pickAircraft = (id: string) => {
     setAircraftId(id);
     const a = aircraft.find(x => String(x.id) === id);
@@ -84,7 +87,7 @@ function NewListingForm({ aircraft, onCreated, onCancel }: { aircraft: Aircraft[
       </div>
       {(errors.originCode || errors.destCode) && <p className="text-label text-danger">{errors.originCode ?? errors.destCode}</p>}
       <div className="grid gap-4 sm:grid-cols-3">
-        <Input label="Departure date" type="date" value={date} onChange={e => setDate(e.target.value)} required error={errors.departureDate} />
+        <Input label="Departure date" type="date" min={today} value={date} onChange={e => setDate(e.target.value)} required error={errors.departureDate} />
         <Input label="Departure time (local)" type="time" value={time} onChange={e => setTime(e.target.value)} error={errors.departureTime} />
         <Select label="Date flexibility" value={flex} onChange={e => setFlex(e.target.value)} error={errors.flexDays}
           options={[{ value: '0', label: 'Fixed date' }, { value: '1', label: '±1 day' }, { value: '2', label: '±2 days' }, { value: '3', label: '±3 days' }, { value: '7', label: '±7 days' }]} />
@@ -92,7 +95,7 @@ function NewListingForm({ aircraft, onCreated, onCancel }: { aircraft: Aircraft[
       <div className="grid gap-4 sm:grid-cols-3">
         <Select label="Aircraft" value={aircraftId} onChange={e => pickAircraft(e.target.value)} error={errors.aircraftId}
           options={[{ value: '', label: 'To be confirmed' }, ...aircraft.map(a => ({ value: String(a.id), label: `${a.type} · ${a.tail_number}` }))]} />
-        <Input label="Seats" type="number" min={1} max={100} value={seats} onChange={e => setSeats(e.target.value)} required error={errors.seats} />
+        <Input label={aircraftId ? `Seats (this aircraft seats ${capacity})` : 'Seats'} type="number" min={1} max={capacity} value={seats} onChange={e => setSeats(e.target.value)} required error={errors.seats} />
         <Input label="All-in price (USD)" type="number" min={1} step="1" inputMode="decimal" value={price} onChange={e => setPrice(e.target.value)} required error={errors.priceCents} />
       </div>
       <Input label="Note to travelers (optional)" value={notes} onChange={e => setNotes(e.target.value)} maxLength={1000} placeholder="Catering included. Pets welcome." error={errors.notes} />
@@ -108,28 +111,57 @@ function NewListingForm({ aircraft, onCreated, onCancel }: { aircraft: Aircraft[
 function ListingActions({ leg, onChange }: { leg: EmptyLegView; onChange: (leg: EmptyLegView) => void }) {
   const [editing, setEditing] = useState(false);
   const [price, setPrice] = useState(String(leg.price_cents / 100));
+  const [seats, setSeats] = useState(String(leg.seats));
+  const [date, setDate] = useState(leg.departure_date);
+  const [time, setTime] = useState(leg.departure_time ?? '');
+  const [notes, setNotes] = useState(leg.notes ?? '');
   const [confirm, setConfirm] = useState(false);
   const [error, setError] = useState('');
+  const [errors, setErrors] = useState<Errors>({});
   const [busy, setBusy] = useState(false);
+  const capacity = leg.aircraft_capacity ?? 100;
+  const today = new Date().toISOString().slice(0, 10);
 
   const patch = async (body: Record<string, unknown>) => {
     setBusy(true);
     setError('');
+    setErrors({});
     const res = await fetch(`/api/operator/empty-legs/${leg.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    const data = await res.json().catch(() => null);
-    if (res.ok) { onChange(data as EmptyLegView); setEditing(false); setConfirm(false); }
-    else setError(typeof data?.error === 'string' ? data.error : 'Could not update the listing');
+    if (res.ok) { onChange((await res.json()) as EmptyLegView); setEditing(false); setConfirm(false); }
+    else {
+      const failure = await readApiFailure(res, 'Could not update the listing');
+      setErrors(failure.fields);
+      setError(Object.keys(failure.fields).length ? summaryLine(failure.fields, FIELD_LABELS) : failure.message);
+    }
     setBusy(false);
+  };
+
+  const save = (e: React.FormEvent) => {
+    e.preventDefault();
+    patch({
+      priceCents: Math.round(Number(price) * 100), seats: Number(seats),
+      departureDate: date, departureTime: time || null, notes: notes.trim() || null,
+    });
   };
 
   if (leg.status !== 'listed') return null;
   return (
-    <div className="flex flex-col items-start gap-2 sm:items-end">
+    <div className="flex w-full flex-col items-start gap-2 sm:w-auto sm:items-end">
       {editing ? (
-        <form onSubmit={e => { e.preventDefault(); patch({ priceCents: Math.round(Number(price) * 100) }); }} className="flex items-end gap-2">
-          <Input label="New price (USD)" type="number" min={1} step="1" value={price} onChange={e => setPrice(e.target.value)} className="w-36" />
-          <Button type="submit" size="sm" disabled={busy}>Save price</Button>
-          <Button type="button" size="sm" variant="quiet" onClick={() => setEditing(false)}>Cancel</Button>
+        <form onSubmit={save} aria-label="Edit listing" className="w-full space-y-3 sm:min-w-96">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input label="Departure date" type="date" min={today} value={date} onChange={e => setDate(e.target.value)} required error={errors.departureDate} />
+            <Input label="Departure time (local)" type="time" value={time} onChange={e => setTime(e.target.value)} error={errors.departureTime} />
+            <Input label={`Seats (up to ${capacity})`} type="number" min={1} max={capacity} value={seats} onChange={e => setSeats(e.target.value)} required error={errors.seats} />
+            <Input label="All-in price (USD)" type="number" min={1} step="1" value={price} onChange={e => setPrice(e.target.value)} required error={errors.priceCents} />
+          </div>
+          <Input label="Note to travelers (optional)" value={notes} onChange={e => setNotes(e.target.value)} maxLength={1000} error={errors.notes} />
+          <p className="text-label text-ink-muted">Travelers holding a quote keep their price. A changed date, time or seat count withdraws their quote and tells them.</p>
+          {error && <Notice tone="danger">{error}</Notice>}
+          <div className="flex gap-2">
+            <Button type="submit" size="sm" disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</Button>
+            <Button type="button" size="sm" variant="quiet" onClick={() => { setEditing(false); setError(''); setErrors({}); }}>Cancel</Button>
+          </div>
         </form>
       ) : confirm ? (
         <div className="flex items-center gap-2">
@@ -139,11 +171,11 @@ function ListingActions({ leg, onChange }: { leg: EmptyLegView; onChange: (leg: 
         </div>
       ) : (
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="secondary" onClick={() => setEditing(true)}>Change price</Button>
+          <Button size="sm" variant="secondary" onClick={() => setEditing(true)}>Edit listing</Button>
           <Button size="sm" variant="quiet" onClick={() => setConfirm(true)}>Withdraw</Button>
         </div>
       )}
-      {error && <p role="alert" className="text-label text-danger">Error: {error}</p>}
+      {!editing && error && <Notice tone="danger">{error}</Notice>}
     </div>
   );
 }

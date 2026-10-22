@@ -62,7 +62,7 @@ export default async function DashboardPage() {
                       <TripDetails compact legs={fromDbLegs(legs)} passengerCount={req.passenger_count} notes={req.notes} />
                       <p className="mt-2 text-label text-ink-muted">Requested {new Date(req.created_at).toLocaleDateString()}</p>
                     </div>
-                    <RequestStatusBadge status={req.status} />
+                    <RequestStatusBadge status={req.status} emptyLeg={req.empty_leg_id != null} />
                   </Card>
                 </Link>
               </li>

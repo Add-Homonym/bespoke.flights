@@ -68,6 +68,10 @@ export const emptyLegSchema = z.object({
 export const emptyLegPatchSchema = z.object({
   priceCents: z.number().int().min(50).max(1_000_000_000).optional(),
   seats: z.number().int().min(1).max(100).optional(),
+  departureDate: z.string().regex(ISO_DATE, 'Enter a date')
+    .refine(d => d >= new Date().toISOString().slice(0, 10), { message: 'Departure date is in the past' }).optional(),
+  departureTime: z.string().regex(/^\d{2}:\d{2}$/, 'Enter a time').optional().nullable(),
+  flexDays: z.number().int().min(0).max(7).optional(),
   notes: z.string().trim().max(1000).optional().nullable(),
   status: z.enum(['withdrawn']).optional(),
 }).strict();

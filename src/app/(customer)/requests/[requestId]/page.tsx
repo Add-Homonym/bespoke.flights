@@ -92,6 +92,14 @@ export default async function RequestDetailPage({
     return { code: airport?.iata ?? code ?? '', city: airport?.city ?? '' };
   };
   const acceptedQuote = quotes.find(q => q.status === 'accepted');
+  // Aircraft: the booked quote's, else the one aircraft the open quotes name, else not yet known.
+  const bookedQuote = acceptedQuote ?? quotes.find(q => q.status === 'cancelled');
+  const quotedTypes = [...new Set(quotes.filter(q => q.status === 'pending' && q.aircraft_type).map(q => q.aircraft_type!))];
+  const aircraftLabel = bookedQuote?.aircraft_type
+    ? [bookedQuote.aircraft_type, bookedQuote.tail_number].filter(Boolean).join(' · ')
+    : quotedTypes.length === 1 ? quotedTypes[0]!
+    : quotedTypes.length > 1 ? `${quotedTypes.length} aircraft quoted`
+    : 'To be assigned';
   const confirmed = request.status === 'booked' || request.status === 'completed';
 
   // One "Best value" per list: the lowest price still open to book, when there is a choice.
@@ -107,6 +115,8 @@ export default async function RequestDetailPage({
   // Listed empty legs that fit this trip, offered while the request is still open.
   const emptyLegs = session.role === 'customer' && ['open', 'quoted'].includes(request.status) && !paymentInFlight ? await emptyLegsForRequest(db, request.id) : [];
   const isEmptyLegBooking = quotes.some(q => q.empty_leg_id);
+  // An empty leg is held, not booked, until its payment clears.
+  const awaitingPayment = request.empty_leg_id != null && ['open', 'quoted'].includes(request.status);
 
   return (
     <div className={`mx-auto max-w-3xl ${payment?.status === 'pending' || changePayment?.status === 'pending' ? 'pb-28' : ''}`}>
@@ -123,13 +133,13 @@ export default async function RequestDetailPage({
       {first && last && (
         <div className="mb-8">
           <TripSummary
-            status={<RequestStatusBadge status={request.status} />}
+            status={<RequestStatusBadge status={request.status} emptyLeg={awaitingPayment} />}
             reference={`Request #${request.id}`}
             origin={place(first.origin_code)}
             destination={place(last.dest_code)}
             depart={formatDeparture(first.departure_date, first.departure_time ?? '') || first.departure_date}
             guests={request.passenger_count}
-            aircraft={acceptedQuote?.aircraft_type ?? 'To be assigned'}
+            aircraft={aircraftLabel}
           />
         </div>
       )}
@@ -147,8 +157,8 @@ export default async function RequestDetailPage({
         </Notice>
       )}
       {submitted === 'empty-leg' && (
-        <Notice tone="confirmed" className="mb-8">
-          The empty leg is held for you at the listed price. Pay below to confirm it. Another traveler can take it until the payment clears.
+        <Notice tone="warning" className="mb-8">
+          Not booked yet. The empty leg is held at the listed price until you pay. Book it below to confirm; another traveler can take it until your payment clears.
         </Notice>
       )}
 

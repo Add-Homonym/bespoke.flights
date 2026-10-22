@@ -25,7 +25,11 @@ export async function POST(req: Request) {
     const id = await createEmptyLeg(db, me.operator.id, parsed.data);
     return NextResponse.json(await getEmptyLeg(db, id), { status: 201 });
   } catch (err) {
-    if (err instanceof EmptyLegError) return NextResponse.json({ error: { aircraftId: [err.message] } }, { status: err.status });
+    if (err instanceof EmptyLegError) {
+      return NextResponse.json(err.field
+        ? { error: 'Check the highlighted fields.', fieldErrors: { [err.field]: [err.message] } }
+        : { error: err.message }, { status: err.status });
+    }
     throw err;
   }
 }
