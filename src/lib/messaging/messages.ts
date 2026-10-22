@@ -78,18 +78,19 @@ export async function getThread(
   const rows = await db.query<Message>(
     'SELECT * FROM messages WHERE request_id = ? AND operator_id = ? AND id > ? ORDER BY id ASC LIMIT 500',
     [requestId, operatorId, afterId]);
+  const customerName = viewer === 'operator' ? await customerNameForOperator(db, requestId, operatorId, p.customer_name) : p.customer_name;
   return {
     requestId,
     operatorId,
     operatorName: p.company_name,
-    customerName: p.customer_name,
+    customerName,
     messages: rows.map(m => ({
       id: m.id,
       body: m.body,
       createdAt: m.created_at,
       readAt: m.read_at,
       from: m.sender_user_id === p.customer_id ? 'customer' : 'operator',
-      senderName: m.sender_user_id === p.customer_id ? p.customer_name : p.company_name,
+      senderName: m.sender_user_id === p.customer_id ? customerName : p.company_name,
     })),
   };
 }
@@ -141,6 +142,12 @@ export async function postMessage(
   };
 }
 
+/** An operator learns the traveler's name only once its quote is paid for (src/lib/access.ts). */
+async function customerNameForOperator(db: Db, requestId: number, operatorId: number, name: string): Promise<string> {
+  const won = await db.one("SELECT id FROM quotes WHERE request_id = ? AND operator_id = ? AND status = 'accepted'", [requestId, operatorId]);
+  return won ? name : 'Traveler';
+}
+
 /** True when no email went to this side of the thread within the throttle window. Records the send. */
 async function claimNotification(db: Db, requestId: number, operatorId: number, recipient: 'customer' | 'operator', now = Date.now()): Promise<boolean> {
   const cutoff = new Date(now - NOTIFY_THROTTLE_MS).toISOString();
@@ -167,7 +174,7 @@ async function emailRecipient(
   const email = newMessageEmail({
     requestId,
     route: tripRoute(legs),
-    senderName: recipient === 'customer' ? p.company_name : p.customer_name,
+    senderName: recipient === 'customer' ? p.company_name : await customerNameForOperator(db, requestId, operatorId, p.customer_name),
     url: recipient === 'customer' ? `${baseUrl}/requests/${requestId}#messages-${operatorId}` : `${baseUrl}/operator/requests/${requestId}#messages`,
   });
   await sendEmail({ to, ...email, tags: [{ name: 'type', value: 'message' }, { name: 'request_id', value: String(requestId) }] });

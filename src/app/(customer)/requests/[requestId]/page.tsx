@@ -1,6 +1,8 @@
 import { notFound, redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
+import { toId } from '@/lib/db/queries';
+import { canManageRequest } from '@/lib/access';
 import { getBusinessModel } from '@/lib/business-model';
 import { Card } from '@/components/ui/card';
 import { Notice } from '@/components/ui/notice';
@@ -46,8 +48,11 @@ export default async function RequestDetailPage({
   const { checkout, submitted } = await searchParams;
   const db = getDb();
 
-  const request = await db.one<BookingRequest>('SELECT * FROM booking_requests WHERE id = ?', [requestId]);
-  if (!request || (session.role === 'customer' && request.customer_id !== session.userId)) {
+  // This page shows every quote on the request: the owning traveler and admins only.
+  // Operators have their own view, which shows only their quote.
+  if (session.role === 'operator') redirect(`/operator/requests/${toId(requestId)}`);
+  const request = await db.one<BookingRequest>('SELECT * FROM booking_requests WHERE id = ?', [toId(requestId)]);
+  if (!request || !canManageRequest(session, request)) {
     notFound();
   }
 

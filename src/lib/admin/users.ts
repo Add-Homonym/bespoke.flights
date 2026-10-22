@@ -82,8 +82,9 @@ export async function updateAccount(db: Db, actorId: number, userId: number, cha
     if (changes.role && changes.role !== user.role) {
       if (userId === actorId) throw new AdminError('You cannot change your own role', 403, 'role');
       if (user.role === 'admin') {
-        const { n } = (await tx.one<{ n: number }>("SELECT COUNT(*)::int AS n FROM users WHERE role = 'admin'"))!;
-        if (n <= 1) throw new AdminError('This is the only admin', 409, 'role');
+        // Lock the admin rows so two admins demoting each other at once cannot both pass.
+        const admins = await tx.query("SELECT id FROM users WHERE role = 'admin' FOR UPDATE");
+        if (admins.length <= 1) throw new AdminError('This is the only admin', 409, 'role');
       }
       if (changes.role === 'operator') {
         const existing = await tx.one('SELECT id FROM operators WHERE user_id = ?', [userId]);

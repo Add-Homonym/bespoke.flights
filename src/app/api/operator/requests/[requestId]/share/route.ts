@@ -40,6 +40,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ request
   if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await req.json().catch(() => ({})) as { action?: string; recipients?: string };
+  // A suspended operator may revoke links but not hand out new ones.
+  if (body.action !== 'revoke' && ctx.operator.status !== 'approved') {
+    return NextResponse.json({ error: 'Your company is not approved' }, { status: 403 });
+  }
   const baseUrl = appBaseUrl(req);
 
   try {

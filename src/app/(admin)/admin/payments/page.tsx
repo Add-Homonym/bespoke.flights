@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { requireAdminPage } from '@/lib/admin/guard';
 import { getDb } from '@/lib/db';
 import { Card } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -19,6 +20,7 @@ const statusBadge: Record<string, 'neutral' | 'confirmed' | 'warning' | 'danger'
 };
 
 export default async function AdminPaymentsPage() {
+  await requireAdminPage();
   const db = getDb();
   const mode = getPaymentsMode();
 

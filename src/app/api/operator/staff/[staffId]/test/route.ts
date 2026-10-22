@@ -10,6 +10,8 @@ import type { StaffMember } from '@/lib/staff/roster';
 export async function POST(_req: Request, { params }: { params: Promise<{ staffId: string }> }) {
   const ctx = await currentOperator();
   if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  // Test alerts send real texts and email; only approved companies may trigger them.
+  if (ctx.operator.status !== 'approved') return NextResponse.json({ error: 'Test alerts are available once your company is approved' }, { status: 403 });
   const member = await ctx.db.one<StaffMember>(
     'SELECT * FROM operator_staff WHERE id = ? AND operator_id = ?', [toId((await params).staffId), ctx.operator.id]
   );

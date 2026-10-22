@@ -70,6 +70,17 @@ export async function PATCH(req: Request) {
     autopilot,
   } = parsed.data;
 
+  // Certificate and safety rating are what admins checked at approval and what
+  // travelers see next to every quote; after approval only an admin changes them.
+  if (operator.status === 'approved') {
+    const locked: Record<string, string[]> = {};
+    if (certificate && certificate !== operator.certificate) locked.certificate = ['Contact bespoke.flights to change your certificate after approval.'];
+    if (safety_rating && safety_rating !== operator.safety_rating) locked.safety_rating = ['Contact bespoke.flights to change your safety rating after approval.'];
+    if (Object.keys(locked).length) {
+      return NextResponse.json({ error: 'Check the highlighted fields.', fieldErrors: locked }, { status: 400 });
+    }
+  }
+
   await db.run(`
     UPDATE operators SET
       contact_method = COALESCE(?, contact_method),

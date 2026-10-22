@@ -1,4 +1,5 @@
 import { Card } from '@/components/ui/card';
+import { requireAdminPage } from '@/lib/admin/guard';
 import { BusinessModelForm } from '@/components/admin/business-model-form';
 import { getDb } from '@/lib/db';
 import { APPLIED_FIELDS, getBusinessModel } from '@/lib/business-model';
@@ -6,6 +7,7 @@ import { APPLIED_FIELDS, getBusinessModel } from '@/lib/business-model';
 export const dynamic = 'force-dynamic';
 
 export default async function AdminSettingsPage() {
+  await requireAdminPage();
   const model = await getBusinessModel(getDb());
 
   return (
