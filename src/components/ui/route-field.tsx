@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { ArrowUpDown } from 'lucide-react';
 import { findAirport, searchAirports } from '@/lib/airports';
 
@@ -28,9 +28,12 @@ export function AirportField({ label, value, onChange, readOnly, required, cellC
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(-1);
 
+  const input = useRef<HTMLInputElement>(null);
   const results = open && !readOnly ? searchAirports(value) : [];
   const expanded = results.length > 0;
   const resolved = findAirport(value);
+  // A resolved airport reads as its IATA code (HNL), whatever code is stored.
+  const shown = resolved?.iata || value;
 
   const choose = (code: string) => {
     onChange(code);
@@ -38,10 +41,36 @@ export function AirportField({ label, value, onChange, readOnly, required, cellC
     setHighlight(-1);
   };
 
+  /** Enter picks an airport and moves on to the next field, like Tab. */
+  const chooseAndAdvance = (code: string) => {
+    choose(code);
+    const el = input.current;
+    if (!el) return;
+    const fields = Array.from((el.form ?? document).querySelectorAll<HTMLElement>('input, select, textarea, button'))
+      .filter(f => !(f as HTMLInputElement).disabled && !(f as HTMLInputElement).readOnly && f.tabIndex >= 0 && f.getAttribute('type') !== 'hidden' && getComputedStyle(f).display !== 'none' && getComputedStyle(f).visibility !== 'hidden');
+    const next = fields[fields.indexOf(el) + 1];
+    // Wait a tick so the list closes before focus moves on.
+    setTimeout(() => next?.focus(), 0);
+  };
+
+  /** Typing into a resolved field replaces it; the new text never lands after the old code. */
+  const onType = (typed: string) => {
+    let next = typed.toUpperCase();
+    if (resolved && next !== shown) {
+      if (next.length > shown.length && next.startsWith(shown)) next = next.slice(shown.length);
+      else if (next.length > shown.length && next.endsWith(shown)) next = next.slice(0, next.length - shown.length);
+    }
+    onChange(next);
+    setOpen(true);
+    setHighlight(-1);
+  };
+
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Escape') {
       setOpen(false);
     } else if (!expanded) {
+      // Nothing to pick, but the airport may already be settled: Enter moves on.
+      if (e.key === 'Enter' && resolved && !readOnly) { e.preventDefault(); chooseAndAdvance(resolved.icao); }
       return;
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -49,9 +78,9 @@ export function AirportField({ label, value, onChange, readOnly, required, cellC
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setHighlight(h => Math.max(h - 1, 0));
-    } else if (e.key === 'Enter' && highlight >= 0) {
+    } else if (e.key === 'Enter') {
       e.preventDefault();
-      choose(results[highlight].icao);
+      chooseAndAdvance(results[highlight >= 0 ? highlight : 0].icao);
     }
   };
 
@@ -67,6 +96,7 @@ export function AirportField({ label, value, onChange, readOnly, required, cellC
     <div className={`field-cell relative ${cellClass}`}>
       <label htmlFor={id} className={`block text-ink-muted ${labelClass}`}>{label}</label>
       <input
+        ref={input}
         id={id}
         type="text"
         role="combobox"
@@ -74,13 +104,13 @@ export function AirportField({ label, value, onChange, readOnly, required, cellC
         aria-controls={expanded ? listId : undefined}
         aria-autocomplete="list"
         aria-activedescendant={expanded && highlight >= 0 ? `${id}-opt-${highlight}` : undefined}
-        value={value}
+        value={shown}
         readOnly={readOnly}
         required={required}
         autoComplete="off"
         placeholder={placeholder}
-        onChange={e => { onChange(e.target.value.toUpperCase()); setOpen(true); setHighlight(-1); }}
-        onFocus={() => setOpen(true)}
+        onChange={e => onType(e.target.value)}
+        onFocus={e => { setOpen(true); if (resolved) e.currentTarget.select(); }}
         onBlur={onBlur}
         onKeyDown={onKeyDown}
         className={`block w-full bg-transparent text-ink placeholder:text-ink-subtle ${inputClass} ${readOnly ? 'opacity-70' : ''}`}

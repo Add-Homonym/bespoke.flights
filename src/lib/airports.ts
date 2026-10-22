@@ -217,16 +217,28 @@ export const AIRPORTS: Airport[] = [
   { icao: 'SPJC', iata: 'LIM', name: 'Jorge Chavez International', city: 'Lima', country: 'PE', lat: -12.0219, lon: -77.1143 },
 ];
 
+/** Airports matching a code, city or name. An exact code comes first, then prefixes, then the rest. */
 export function searchAirports(query: string): Airport[] {
   if (!query || query.length < 1) return [];
   const q = query.toLowerCase().trim();
+  if (!q) return [];
 
-  return AIRPORTS.filter(a =>
-    a.icao.toLowerCase().includes(q) ||
-    a.iata.toLowerCase().includes(q) ||
-    a.name.toLowerCase().includes(q) ||
-    a.city.toLowerCase().includes(q)
-  ).slice(0, 8);
+  const rank = (a: Airport): number => {
+    const codes = [a.icao.toLowerCase(), a.iata.toLowerCase()];
+    if (codes.includes(q)) return 0;
+    if (codes.some(c => c.startsWith(q)) || a.city.toLowerCase().startsWith(q) || a.name.toLowerCase().startsWith(q)) return 1;
+    return 2;
+  };
+  return AIRPORTS
+    .filter(a =>
+      a.icao.toLowerCase().includes(q) ||
+      a.iata.toLowerCase().includes(q) ||
+      a.name.toLowerCase().includes(q) ||
+      a.city.toLowerCase().includes(q))
+    .map((a, i) => ({ a, i, r: rank(a) }))
+    .sort((x, y) => x.r - y.r || x.i - y.i)
+    .slice(0, 8)
+    .map(x => x.a);
 }
 
 /** Resolve an ICAO or IATA code (any case) to its airport, if known. */
