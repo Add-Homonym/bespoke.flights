@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import type { Operator, Quote } from '@/lib/types';
 import Link from 'next/link';
+import { displayCode } from '@/lib/airports';
 import { formatMoney } from '@/lib/payments/config';
 
 const statusBadge: Record<string, 'neutral' | 'confirmed' | 'warning' | 'danger' | 'neutral'> = {
@@ -70,7 +71,7 @@ export default async function OperatorQuotesPage() {
         <div className="space-y-3">
           {quotes.map(quote => {
             const legs = legsByReq.get(quote.request_id) ?? [];
-            const route = legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).join(' → ');
+            const route = legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).map(displayCode).join(' → ');
 
             return (
               <Link key={quote.id} href={`/operator/requests/${quote.request_id}`}>

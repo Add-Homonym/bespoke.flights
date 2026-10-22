@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
+import { plural } from '@/lib/plural';
 
 interface DiscoveredOperator {
   id: number;
@@ -106,7 +107,7 @@ function DiscoveriesContent() {
       const json = await res.json();
       if (json.ok) {
         setCronResult(
-          `Found ${json.operatorsFound} operators in ${json.statesQueried?.length || 0} states. ` +
+          `Found ${plural(json.operatorsFound, "operator")} in ${plural(json.statesQueried?.length || 0, "state")}. ` +
           `${json.newOperators} new. ${json.emailsSent} emails sent.`
         );
         await fetchData();

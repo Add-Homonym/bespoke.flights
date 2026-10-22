@@ -19,8 +19,8 @@ export function EmptyLegFilter({ from, to }: { from: string; to: string }) {
   };
   return (
     <form onSubmit={apply} aria-label="Filter empty legs" className="grid grid-cols-[1fr_1fr_auto] items-end gap-3">
-      <Input label="From" placeholder="HNL" value={origin} onChange={e => setOrigin(e.target.value)} autoCapitalize="characters" maxLength={4} />
-      <Input label="To" placeholder="OGG" value={dest} onChange={e => setDest(e.target.value)} autoCapitalize="characters" maxLength={4} />
+      <Input label="From" placeholder="From" value={origin} onChange={e => setOrigin(e.target.value)} autoCapitalize="characters" maxLength={4} />
+      <Input label="To" placeholder="To" value={dest} onChange={e => setDest(e.target.value)} autoCapitalize="characters" maxLength={4} />
       <Button type="submit" variant="secondary">Filter</Button>
     </form>
   );

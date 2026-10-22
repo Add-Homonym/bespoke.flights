@@ -7,6 +7,7 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
 import { SubmitQuoteForm, type QuoteDraft } from '@/components/booking/submit-quote-form';
 import { Bot } from 'lucide-react';
+import { displayCode } from '@/lib/airports';
 import type { BookingLeg, Aircraft } from '@/lib/types';
 
 interface InboundRFQ {
@@ -151,7 +152,7 @@ function RFQCard({
   onViewDetails: () => void;
 }) {
   const legs = rfq.legs as BookingLeg[];
-  const route = legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).join(' → ');
+  const route = legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).map(displayCode).join(' → ');
   const dateRange = legs.length > 0
     ? `${legs[0].departure_date}${legs.length > 1 ? ` — ${legs[legs.length - 1].departure_date}` : ''}`
     : '';
@@ -231,7 +232,7 @@ function RFQCard({
       <div className="mt-3 flex flex-wrap gap-2">
         {legs.map((leg, i) => (
           <span key={i} className="text-xs rounded bg-surface-sunken px-2 py-1 text-ink-muted font-mono">
-            {leg.origin_code}→{leg.dest_code} {leg.departure_date}{leg.departure_time ? ` @${leg.departure_time}` : ''}
+            {displayCode(leg.origin_code)}→{displayCode(leg.dest_code)} {leg.departure_date}{leg.departure_time ? ` @${leg.departure_time}` : ''}
           </span>
         ))}
       </div>

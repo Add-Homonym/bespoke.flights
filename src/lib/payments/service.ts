@@ -31,7 +31,9 @@ import { sendEmail } from '@/lib/email/resend';
 import { alertStaff } from '@/lib/staff/alerts';
 import { paymentReceiptEmail, bookingConfirmedOperatorEmail } from '@/lib/email/templates';
 import type { Payment, Quote, BookingRequest, Operator, BookingLeg } from '@/lib/types';
+import { displayCode } from '@/lib/airports';
 import { fromDbLegs, legLine } from '@/lib/trip-format';
+import { describePolicy, parsePolicy } from '@/lib/bookings/policy';
 import { closeCancelledBooking } from '@/lib/bookings/close';
 import { listingAvailable, markListingBooked, relistAfterCancellation } from '@/lib/empty-legs/service';
 import { notifyEmptyLegUnavailable } from '@/lib/notify/traveler';
@@ -155,7 +157,7 @@ export async function createCheckout(
           unit_amount: fees.amountCents,
           product_data: {
             name: `Private charter: ${route}`,
-            description: checkoutDescription(operator.company_name, request, legs),
+            description: checkoutDescription(operator.company_name, request, legs, describePolicy(parsePolicy(operator.cancellation_policy))),
           },
         },
       }],
@@ -455,12 +457,13 @@ export async function simulateStubPayment(
 }
 
 /** Full trip details for the Stripe Checkout line item, so the customer sees exactly what they pay for. */
-export function checkoutDescription(company: string, request: Pick<BookingRequest, 'id' | 'passenger_count' | 'notes'>, legs: BookingLeg[]): string {
+export function checkoutDescription(company: string, request: Pick<BookingRequest, 'id' | 'passenger_count' | 'notes'>, legs: BookingLeg[], policyText?: string): string {
   const parts = [
     `${company} · Request #${request.id}`,
     ...fromDbLegs(legs).map(legLine),
     `${request.passenger_count} passenger${request.passenger_count !== 1 ? 's' : ''}`,
     `Special requests: ${request.notes?.trim() || 'none'}`,
+    ...(policyText ? [`Cancellation: ${policyText}`] : []),
   ];
   const text = parts.join(' | ');
   return text.length > 1000 ? text.slice(0, 997) + '...' : text;
@@ -468,7 +471,7 @@ export function checkoutDescription(company: string, request: Pick<BookingReques
 
 async function routeLabel(db: Db, requestId: number): Promise<string> {
   const legs = await db.query<BookingLeg>('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order', [requestId]);
-  return legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).join(' → ');
+  return legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).map(displayCode).join(' → ');
 }
 
 async function sendBookingEmails(db: Db, paymentId: number, baseUrl: string) {

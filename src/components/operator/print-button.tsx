@@ -2,10 +2,11 @@
 
 import { Button } from '@/components/ui/button';
 
-export function PrintButton() {
+/** Opens the browser print dialog. The label says what is being printed. */
+export function PrintButton({ label = 'Print trip sheet' }: { label?: string }) {
   return (
     <Button type="button" size="sm" onClick={() => window.print()}>
-      Print trip sheet
+      {label}
     </Button>
   );
 }

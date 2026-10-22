@@ -2,28 +2,29 @@
 
 import { useState, useEffect } from 'react';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { plural } from '@/lib/plural';
 
 interface OutreachEntry {
   id: number;
-  request_id: number;
-  operator_id: number;
   company_name: string;
-  contact_method: string;
-  match_score: number;
   status: string;
-  sent_at: string;
-  responded_at: string | null;
   quote_id: number | null;
   quote_price: number | null;
-  quote_status: string | null;
 }
 
-const statusBadge: Record<string, 'neutral' | 'confirmed' | 'warning' | 'neutral'> = {
+const statusBadge: Record<string, 'neutral' | 'confirmed' | 'warning'> = {
   queued: 'neutral',
   sent: 'warning',
   delivered: 'warning',
   responded: 'confirmed',
-  failed: 'neutral',
+};
+
+/** What the traveler is told about each operator asked to quote. */
+const statusLabel: Record<string, string> = {
+  queued: 'Request queued',
+  sent: 'Request sent',
+  delivered: 'Request delivered',
+  responded: 'Replied',
 };
 
 export function OutreachStatus({ requestId }: { requestId: number }) {
@@ -37,39 +38,34 @@ export function OutreachStatus({ requestId }: { requestId: number }) {
       .catch(() => setLoading(false));
   }, [requestId]);
 
-  if (loading) return null;
-  if (entries.length === 0) return null;
+  // A delivery that failed is the platform's problem, not something to show a traveler.
+  const asked = entries.filter(e => e.status !== 'failed');
+  if (loading || asked.length === 0) return null;
 
-  const responded = entries.filter(e => e.quote_id);
-  const pending = entries.filter(e => !e.quote_id && e.status !== 'failed');
+  const responded = asked.filter(e => e.quote_id);
+  const pending = asked.filter(e => !e.quote_id);
 
   return (
     <div className="rounded-lg border border-hairline bg-surface-raised p-6 mb-8">
       <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wider mb-4">
-        Operator Outreach
+        Operators asked
         <span className="text-ink-muted font-normal ml-2">
-          {entries.length} operators contacted
+          {plural(asked.length, 'operator')} contacted
         </span>
       </h2>
 
       <div className="space-y-2">
-        {entries.map(entry => (
+        {asked.map(entry => (
           <div key={entry.id} className="flex items-center justify-between py-2 border-b border-hairline last:border-0">
             <div className="flex items-center gap-3">
-              <div className={`w-2 h-2 rounded-full ${entry.quote_id ? 'bg-confirmed' : entry.status === 'sent' ? 'bg-warning' : 'bg-ink-subtle'}`} />
-              <div>
-                <span className="text-ink text-sm">{entry.company_name}</span>
-                <span className="text-ink-subtle text-xs ml-2">
-                  via {entry.contact_method}
-                </span>
-              </div>
+              <div aria-hidden="true" className={`w-2 h-2 rounded-full ${entry.quote_id ? 'bg-confirmed' : 'bg-warning'}`} />
+              <span className="text-ink text-sm">{entry.company_name}</span>
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-ink-subtle text-xs">Score: {entry.match_score}</span>
               {entry.quote_id ? (
                 <StatusBadge variant="confirmed">Quoted ${((entry.quote_price || 0) / 100).toLocaleString()}</StatusBadge>
               ) : (
-                <StatusBadge variant={statusBadge[entry.status] || 'neutral'}>{entry.status}</StatusBadge>
+                <StatusBadge variant={statusBadge[entry.status] || 'neutral'}>{statusLabel[entry.status] ?? 'Request sent'}</StatusBadge>
               )}
             </div>
           </div>
@@ -77,8 +73,8 @@ export function OutreachStatus({ requestId }: { requestId: number }) {
       </div>
 
       <div className="mt-4 flex gap-4 text-xs text-ink-muted">
-        <span>{responded.length} responded</span>
-        <span>{pending.length} awaiting response</span>
+        <span>{responded.length} replied</span>
+        <span>{pending.length} awaiting a reply</span>
       </div>
     </div>
   );

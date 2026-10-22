@@ -10,6 +10,7 @@ import { Notice } from '@/components/ui/notice';
 import { RouteField } from '@/components/ui/route-field';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { readApiFailure, summaryLine } from '@/lib/api/form-errors';
+import { displayCode } from '@/lib/airports';
 import { formatTripDate, formatTripTime } from '@/lib/trip-format';
 import type { DraftLeg } from '@/lib/bookings/draft';
 
@@ -48,7 +49,7 @@ export function ProposedItinerary({ cr }: { cr: ChangeRequestView }) {
         {cr.proposed_legs.map((l, i) => (
           <li key={i} className="flex flex-wrap items-baseline gap-x-3">
             <span className="text-ink-muted w-12 shrink-0">Leg {i + 1}</span>
-            <span className="text-ink tabular-nums">{l.originCode} → {l.destCode}</span>
+            <span className="text-ink tabular-nums">{displayCode(l.originCode)} → {displayCode(l.destCode)}</span>
             <span className="text-ink">{formatTripDate(l.departureDate) || l.departureDate}</span>
             <span className="text-ink-muted">{formatTripTime(l.departureTime ?? '') || 'Any time'}</span>
           </li>

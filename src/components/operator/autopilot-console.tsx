@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Minus, Plus } from 'lucide-react';
+import { displayCode } from '@/lib/airports';
 import { AirportField } from '@/components/ui/route-field';
 import type { AutopilotSettings } from '@/lib/quotes/autopilot';
 import type { Learned } from '@/lib/quotes/learning';
@@ -242,7 +243,7 @@ export function AutopilotConsole() {
               <ol aria-live="polite" className="max-h-[28rem] space-y-1 overflow-y-auto pr-1">
                 {feed.slice(0, 30).map(r => {
                   const st = feedState(r, engaged);
-                  const route = r.legs.length ? [r.legs[0]!.origin_code, ...r.legs.map(l => l.dest_code)].join('›') : '—';
+                  const route = r.legs.length ? [r.legs[0]!.origin_code, ...r.legs.map(l => l.dest_code)].map(displayCode).join('›') : '—';
                   const row = (
                     <>
                       <span className="flex justify-between gap-2 text-[12px] opacity-70">

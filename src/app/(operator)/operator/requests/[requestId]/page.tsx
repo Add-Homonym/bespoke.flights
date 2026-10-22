@@ -10,6 +10,7 @@ import { ManageQuote } from '@/components/booking/manage-quote';
 import { TripShare } from '@/components/operator/trip-share';
 import { ChangeRequestSummary, OperatorChangeRequests } from '@/components/booking/change-request';
 import { changeRequestViews } from '@/lib/bookings/changes';
+import { displayCode } from '@/lib/airports';
 import { formatMoney } from '@/lib/payments/config';
 import { cancellationSummary } from '@/lib/bookings/cancellation';
 import { MessageThread } from '@/components/messaging/message-thread';
@@ -49,7 +50,7 @@ export default async function OperatorRequestDetailPage({ params, searchParams }
     ? aircraft.find(a => a.id === existingQuote.aircraft_id) ?? null
     : null;
 
-  const route = legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).join(' → ');
+  const route = legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).map(displayCode).join(' → ');
   const won = existingQuote?.status === 'accepted' && ['booked', 'completed'].includes(request.status);
   const changes = won ? await changeRequestViews(db, request.id, existingQuote!.currency) : [];
   const cancelled = request.status === 'cancelled' && existingQuote?.status === 'cancelled' ? await cancellationSummary(db, request.id) : null;
@@ -108,9 +109,9 @@ export default async function OperatorRequestDetailPage({ params, searchParams }
               </span>
               <div className="flex-1 flex items-center justify-between rounded-md bg-surface-sunken px-4 py-3">
                 <div>
-                  <span className="text-ink font-mono">{leg.origin_code}</span>
+                  <span className="text-ink font-mono">{displayCode(leg.origin_code)}</span>
                   <span className="text-ink-muted mx-3">&rarr;</span>
-                  <span className="text-ink font-mono">{leg.dest_code}</span>
+                  <span className="text-ink font-mono">{displayCode(leg.dest_code)}</span>
                 </div>
                 <div className="text-right">
                   <p className="text-ink text-sm">{formatTripDate(leg.departure_date) || leg.departure_date}</p>

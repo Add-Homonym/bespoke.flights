@@ -19,7 +19,9 @@ import { changeRequestViews } from '@/lib/bookings/changes';
 import { MessageThread } from '@/components/messaging/message-thread';
 import { unreadByOperator } from '@/lib/messaging/messages';
 import { cancellationSummary, previewCancellation } from '@/lib/bookings/cancellation';
+import { describePolicy, parsePolicy } from '@/lib/bookings/policy';
 import { cancelBanner } from '@/lib/bookings/cancel-text';
+import { plural } from '@/lib/plural';
 import { formatMoney, getPaymentsMode } from '@/lib/payments/config';
 import { emptyLegsForRequest } from '@/lib/empty-legs/service';
 import { EmptyLegCard } from '@/components/empty-legs/empty-leg-card';
@@ -51,8 +53,8 @@ export default async function RequestDetailPage({
 
   const legs = await db.query<BookingLeg>('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order', [request.id]);
 
-  const quotes = await db.query<Quote & { company_name: string; certificate: string | null; safety_rating: string | null; stripe_charges_enabled: number; aircraft_type?: string; aircraft_capacity?: number; tail_number?: string; aircraft_year?: number }>(`
-    SELECT q.*, o.company_name, o.certificate, o.safety_rating, o.stripe_charges_enabled, a.type as aircraft_type, a.capacity as aircraft_capacity, a.tail_number, a.year as aircraft_year
+  const quotes = await db.query<Quote & { company_name: string; cancellation_policy: string | null; certificate: string | null; safety_rating: string | null; stripe_charges_enabled: number; aircraft_type?: string; aircraft_capacity?: number; tail_number?: string; aircraft_year?: number }>(`
+    SELECT q.*, o.company_name, o.cancellation_policy, o.certificate, o.safety_rating, o.stripe_charges_enabled, a.type as aircraft_type, a.capacity as aircraft_capacity, a.tail_number, a.year as aircraft_year
     FROM quotes q
     JOIN operators o ON o.id = q.operator_id
     LEFT JOIN aircraft a ON a.id = q.aircraft_id
@@ -62,8 +64,8 @@ export default async function RequestDetailPage({
   `, [request.id]);
 
   // Most relevant payment: settled or in flight first, then the latest failure.
-  const payment = await db.one<(Payment & { company_name: string })>(`
-    SELECT p.*, o.company_name FROM payments p
+  const payment = await db.one<(Payment & { company_name: string; cancellation_policy: string | null })>(`
+    SELECT p.*, o.company_name, o.cancellation_policy FROM payments p
     JOIN operators o ON o.id = p.operator_id
     WHERE p.request_id = ? AND p.status != 'canceled' AND p.change_request_id IS NULL
     ORDER BY CASE p.status
@@ -181,6 +183,7 @@ export default async function RequestDetailPage({
             failureReason: payment.failure_reason,
             checkoutUrl: payment.status === 'pending' && session.role === 'customer' ? payment.checkout_url : null,
           }}
+          policyText={describePolicy(parsePolicy(payment.cancellation_policy))}
         />
       )}
 
@@ -288,7 +291,7 @@ export default async function RequestDetailPage({
           <Card>
             <p className="text-body text-ink-muted text-center py-8">
               {outreachCount > 0
-                ? `${outreachCount} operators have been contacted. Quotes appear here as they respond.`
+                ? `${plural(outreachCount, 'operator')} ${outreachCount === 1 ? 'has' : 'have'} been contacted. Quotes appear here as they respond.`
                 : 'No quotes yet. Operators are reviewing your request.'
               }
             </p>
@@ -320,12 +323,15 @@ export default async function RequestDetailPage({
                   flightTime={null}
                   yearBuilt={quote.aircraft_year ?? null}
                   price={formatMoney(quote.price_cents, quote.currency)}
-                  note={(quote.message || quote.valid_until || quote.previous_price_cents != null) && (
+                  note={(quote.message || quote.valid_until || quote.previous_price_cents != null || quote.status === 'pending') && (
                     <>
                       {quote.message && <span className="block italic">&ldquo;{quote.message}&rdquo;</span>}
                       {quote.valid_until && <span className="block text-label">{expired ? 'Expired' : 'Valid until'} {quote.valid_until}</span>}
                       {quote.previous_price_cents != null && quote.previous_price_cents !== quote.price_cents && (
                         <span className="block text-label">Previously {formatMoney(quote.previous_price_cents, quote.currency)}</span>
+                      )}
+                      {quote.status === 'pending' && (
+                        <span className="block text-label">Cancellation: {describePolicy(parsePolicy(quote.cancellation_policy))}</span>
                       )}
                     </>
                   )}

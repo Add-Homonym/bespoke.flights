@@ -248,6 +248,11 @@ export function findAirport(code: string): Airport | undefined {
   return AIRPORTS.find(a => a.icao === c || a.iata === c);
 }
 
+/** The code travelers and operators read: IATA when the airport has one (PHNL → HNL), else the code as given. */
+export function displayCode(code: string): string {
+  return findAirport(code)?.iata || code;
+}
+
 /** 'Honolulu · HNL'. Falls back to the code as given when the airport is unknown. */
 export function airportLabel(code: string): string {
   const a = findAirport(code);

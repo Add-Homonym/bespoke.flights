@@ -88,11 +88,11 @@ describe('alerts', () => {
     expect(out.emails).not.toContain('rival@bravo.com');
     expect(out.texts).toEqual(['+18085550100']);
     const sms = out.bodies.find(b => b.includes('BOOKED'))!;
-    expect(sms).toContain(`BOOKED #${f.requestId}: KLAX → PHNL → KLAX`);
+    expect(sms).toContain(`BOOKED #${f.requestId}: LAX → HNL → LAX`);
     expect(sms).toContain('4 pax');
     expect(sms).toContain('Requests: Vegan catering');
     expect(sms).toMatch(/https:\/\/bespoke\.flights\/trip\/[A-Za-z0-9_-]{32}/);
-    expect(out.subjects).toContain(`New charter booked: KLAX → PHNL → KLAX (#${f.requestId})`);
+    expect(out.subjects).toContain(`New charter booked: LAX → HNL → LAX (#${f.requestId})`);
 
     // Repeating the event (e.g. a redelivered webhook) sends nothing new
     const again = await alertStaff(f.db, { kind: 'booking', requestId: f.requestId, operatorId: f.operatorA }, BASE);
@@ -114,7 +114,7 @@ describe('alerts', () => {
     const start = log.mock.calls.length;
     await refundPayment(f.db, paymentId, { baseUrl: BASE });
     const out = sentSince(start);
-    expect(out.subjects.some(s => s.startsWith('Charter cancelled: KLAX → PHNL → KLAX'))).toBe(true);
+    expect(out.subjects.some(s => s.startsWith('Charter cancelled: LAX → HNL → LAX'))).toBe(true);
     expect(out.bodies.some(b => b.includes(`CANCELLED #${f.requestId}`))).toBe(true);
   });
 
@@ -137,7 +137,7 @@ describe('alerts', () => {
     const out = sentSince(start);
     expect(out.emails).toContain('sales@alpha.com');
     expect(out.emails).not.toContain('ops@alpha.com');
-    expect(out.subjects).toContain(`New charter request: KLAX → PHNL → KLAX (#${f.requestId})`);
+    expect(out.subjects).toContain(`New charter request: LAX → HNL → LAX (#${f.requestId})`);
   });
 });
 

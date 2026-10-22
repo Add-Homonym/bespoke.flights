@@ -31,13 +31,15 @@ const badge: Record<string, { variant: StatusVariant; label: string }> = {
   canceled: { variant: 'neutral', label: 'Canceled' },
 };
 
-export function PaymentStatus({ payment, returnedFromCheckout, title, receiptHref }: {
+export function PaymentStatus({ payment, returnedFromCheckout, title, receiptHref, policyText }: {
   payment: PaymentSummary;
   returnedFromCheckout: boolean;
   /** Card heading; defaults to "Receipt" once paid, otherwise "Payment". */
   title?: string;
   /** Link to the printable receipt, shown once paid. */
   receiptHref?: string;
+  /** The operator's cancellation policy, shown before the traveler pays. */
+  policyText?: string;
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -108,6 +110,9 @@ export function PaymentStatus({ payment, returnedFromCheckout, title, receiptHre
           <p className="text-body text-ink-muted">
             Bank payments take a few business days to clear. Your booking is confirmed once funds arrive.
           </p>
+        )}
+        {payNow && policyText && (
+          <p className="text-label text-ink-muted">{payment.companyName} cancellation policy: {policyText}</p>
         )}
         {payNow && payment.provider === 'stub' && (
           <p className="text-label text-ink-muted">Test mode: no card is charged.</p>

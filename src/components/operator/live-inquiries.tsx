@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowRight, Bot, CircleAlert, CircleCheck, Inbox, Plane, Users } from 'lucide-react';
-import { airportLabel } from '@/lib/airports';
+import { airportLabel, displayCode } from '@/lib/airports';
 import { formatTripDate } from '@/lib/trip-format';
 
 interface Inquiry {
@@ -37,7 +37,7 @@ const city = (code: string) => airportLabel(code).split(' · ')[0] || code;
 /** The traveler's side of the pair. */
 function InquiryCard({ r, now }: { r: Inquiry; now: number }) {
   const first = r.legs[0];
-  const stops = r.legs.length ? [r.legs[0]!.origin_code, ...r.legs.map(l => l.dest_code)] : [];
+  const stops = r.legs.length ? [r.legs[0]!.origin_code, ...r.legs.map(l => l.dest_code)].map(displayCode) : [];
   return (
     <div className="min-w-0 space-y-2 p-4">
       <p className="flex items-center justify-between gap-2 text-overline text-ink-muted">

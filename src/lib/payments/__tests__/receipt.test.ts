@@ -36,7 +36,7 @@ describe('receipt', () => {
     expect(r.receiptNumber).toBe(`BF-${new Date().getUTCFullYear()}-${String(paymentId).padStart(6, '0')}`);
     expect(r.operator).toEqual({ company: 'Alpha Air', certificate: 'ABCD123X', safetyRating: 'ARGUS Platinum' });
     expect(r.customer.email).toBe('cust@example.com');
-    expect(r.legs.map(l => `${l.from}-${l.to}`)).toEqual(['KLAX-PHNL', 'PHNL-KLAX']);
+    expect(r.legs.map(l => `${l.from}-${l.to}`)).toEqual(['LAX-HNL', 'HNL-LAX']);
     expect(r.charges).toHaveLength(1);
     expect(r.charges[0]).toMatchObject({ label: 'Charter booking', cents: 8_500_000, method: 'Test payment' });
     expect(r.refunds).toEqual([expect.objectContaining({ cents: 500_000, reason: 'Catering removed' })]);
@@ -47,7 +47,7 @@ describe('receipt', () => {
 
   it('the receipt email links to the printable receipt', () => {
     const { html } = paymentReceiptEmail({
-      requestId: 7, route: 'KLAX → PHNL', dateRange: '2026-12-01', legLines: [], specialRequests: null, passengerCount: 2,
+      requestId: 7, route: 'LAX → HNL', dateRange: '2026-12-01', legLines: [], specialRequests: null, passengerCount: 2,
       operatorCompany: 'Alpha Air', aircraft: null, amount: '$1.00', baseUrl: BASE,
     });
     expect(html).toContain(`${BASE}/requests/7/receipt`);
