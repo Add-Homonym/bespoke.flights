@@ -76,8 +76,16 @@ export async function seedDemoData(db: Db): Promise<boolean> {
     await aircraft(elite, 'N560EA', 'Cessna Citation X', 8, 3460, 2019);
     const global = await aircraft(skybridge, 'N900SB', 'Bombardier Global 7500', 17, 7700, 2023);
     await aircraft(skybridge, 'N350SB', 'Embraer Phenom 300E', 6, 2010, 2021);
-    await aircraft(pacific, 'N50PW', 'Dassault Falcon 50EX', 9, 3000, 2015);
-    await aircraft(pacific, 'N31PW', 'Learjet 31A', 6, 1400, 2012);
+    const falcon = await aircraft(pacific, 'N50PW', 'Dassault Falcon 50EX', 9, 3000, 2015);
+    const lear = await aircraft(pacific, 'N31PW', 'Learjet 31A', 6, 1400, 2012);
+
+    // ── Empty legs (Pacific Wings repositioning flights) ──
+    const emptyLeg = (aircraftId: number, from: string, to: string, date: string, time: string | null, flex: number, seats: number, price: number, notes: string | null) =>
+      tx.run('INSERT INTO empty_legs (operator_id, aircraft_id, origin_code, dest_code, departure_date, departure_time, flex_days, seats, price_cents, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [pacific, aircraftId, from, to, date, time, flex, seats, price, notes]);
+    await emptyLeg(lear, 'PHNL', 'PHOG', day(9), '10:30', 0, 6, 390_000, 'Returning to Kahului after a morning charter.');
+    await emptyLeg(falcon, 'PHKO', 'PHNL', day(16), null, 1, 9, 620_000, null);
+    await emptyLeg(lear, 'PHNL', 'KLAS', day(28), '07:00', 2, 6, 1_850_000, 'Mainland repositioning. Fuel stop in Oakland.');
 
     // ── Booking requests (departures in the future) ──
     const leg = (requestId: number, order: number, from: string, to: string, date: string, time: string) =>

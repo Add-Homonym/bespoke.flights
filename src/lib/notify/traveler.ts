@@ -133,6 +133,27 @@ export async function notifyQuoteWithdrawn(db: Db, quoteId: number, baseUrl: str
   }
 }
 
+/** The empty leg a traveler held a quote on was taken or withdrawn. */
+export async function notifyEmptyLegUnavailable(db: Db, requestId: number, baseUrl: string) {
+  try {
+    const to = await customerEmail(db, requestId);
+    if (!to) return;
+    await sendEmail({
+      to,
+      ...statusUpdateEmail({
+        requestId, route: await routeOf(db, requestId),
+        heading: 'That empty leg is no longer available',
+        text: 'The flight you selected was booked by another traveler or taken down by the operator. You have not been charged. Request quotes for the same route and operators will respond with full charter prices.',
+        url: `${baseUrl}/empty-legs`,
+        buttonLabel: 'See other empty legs',
+      }),
+      tags: tags('empty-leg-unavailable', requestId),
+    });
+  } catch (err) {
+    console.error('Empty leg unavailable email failed:', err);
+  }
+}
+
 /** Quotes expired overnight: one email to the traveler per request. */
 export async function notifyQuotesExpired(db: Db, requestId: number, companies: string[], baseUrl: string) {
   try {

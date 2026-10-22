@@ -28,6 +28,8 @@ interface InboundRFQ {
   legs: BookingLeg[];
   /** Autopilot draft waiting for review. */
   draft: QuoteDraft | null;
+  /** The operator's own listed empty legs that fit this request. */
+  empty_legs: { id: number; price_cents: number; departure_date: string; aircraft_type: string | null }[];
 }
 
 export default function OperatorInboundPage() {
@@ -155,6 +157,19 @@ function RFQCard({
     : '';
   const timeAgo = getTimeAgo(rfq.sent_at);
   const hasQuote = !!rfq.quote_id;
+  const [legError, setLegError] = useState('');
+  const [legBusy, setLegBusy] = useState(false);
+
+  const quoteWithListing = async (legId: number) => {
+    setLegBusy(true);
+    setLegError('');
+    const res = await fetch(`/api/operator/empty-legs/${legId}/quote`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestId: rfq.request_id }),
+    });
+    if (res.ok) onSubmitted();
+    else setLegError((await res.json().catch(() => ({}))).error ?? 'Could not quote with this listing');
+    setLegBusy(false);
+  };
 
   const quoteBadge: Record<string, 'confirmed' | 'warning' | 'danger' | 'neutral'> = {
     pending: 'warning',
@@ -220,6 +235,23 @@ function RFQCard({
           </span>
         ))}
       </div>
+
+      {/* A listed empty leg fits this request: quote it at the listed price in one click. */}
+      {!hasQuote && rfq.empty_legs.length > 0 && (
+        <div className="mt-4 rounded-md border border-brass bg-surface-sunken px-4 py-3">
+          <p className="text-label text-ink">You have an empty leg on this route.</p>
+          <ul className="mt-2 flex flex-wrap gap-2">
+            {rfq.empty_legs.map(l => (
+              <li key={l.id}>
+                <Button size="sm" variant="secondary" disabled={legBusy} onClick={() => quoteWithListing(l.id)}>
+                  Quote ${Math.round(l.price_cents / 100).toLocaleString()} · {l.departure_date}{l.aircraft_type ? ` · ${l.aircraft_type}` : ''}
+                </Button>
+              </li>
+            ))}
+          </ul>
+          {legError && <p role="alert" className="mt-2 text-label text-danger">Error: {legError}</p>}
+        </div>
+      )}
 
       {/* Inline quote form, with the private price worksheet */}
       {expanded && !hasQuote && (

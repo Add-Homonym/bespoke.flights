@@ -6,6 +6,7 @@ import { sendSms } from '@/lib/notify/sms';
 import { alertStaff } from '@/lib/staff/alerts';
 import { appBaseUrl } from '@/lib/payments/config';
 import { draftQuote } from '@/lib/quotes/autopilot';
+import { newReplyToken, replyAddress } from '@/lib/quotes/by-email';
 
 // Route distance estimates for range filtering (nm)
 const ROUTE_DISTANCES: Record<string, number> = {
@@ -208,6 +209,11 @@ No markup on your quoted price. Commission on confirmed booking only.
   return { subject, body };
 }
 
+/** Reply-by-email quoting is offered only when an inbound-email webhook can receive the replies. */
+function replyByEmailEnabled(): boolean {
+  return !!process.env.INBOUND_EMAIL_SECRET;
+}
+
 /**
  * Deliver an RFQ notification to an operator via their preferred method.
  * Uses Resend for email. SMS is stubbed for future Twilio integration.
@@ -222,6 +228,7 @@ async function deliverRFQ(
     notes: string | null;
     legDetails: string[];
     matchScore: number;
+    replyToken: string | null;
   }
 ): Promise<{ emailId: string | null; error: string | null }> {
   const method = op.contact_method || 'email';
@@ -235,13 +242,14 @@ async function deliverRFQ(
       const { subject, html } = rfqNotificationEmail({
         ...rfqData,
         operatorCompany: op.company_name,
+        replyToQuote: !!rfqData.replyToken,
       });
 
       const result = await sendEmail({
         to: toEmail,
         subject,
         html,
-        replyTo: 'quotes@bespoke.flights',
+        replyTo: replyAddress(rfqData.replyToken),
         tags: [
           { name: 'type', value: 'rfq-notification' },
           { name: 'request_id', value: String(rfqData.requestId) },
@@ -312,11 +320,13 @@ export async function dispatchOutreach(
     const method = op.contact_method || 'pending';
 
     // Log the outreach first as 'sent'; skip operators already contacted for this request
+    // The reply token lets the operator quote by replying to the RFQ email (src/lib/quotes/by-email.ts).
+    const replyToken = replyByEmailEnabled() ? newReplyToken() : null;
     const inserted = await db.run(`
-      INSERT INTO outreach_log (request_id, operator_id, method, match_score, rfq_subject, rfq_body, status)
-      VALUES (?, ?, ?, ?, ?, ?, 'sent')
+      INSERT INTO outreach_log (request_id, operator_id, method, match_score, rfq_subject, rfq_body, status, reply_token)
+      VALUES (?, ?, ?, ?, ?, ?, 'sent', ?)
       ON CONFLICT (request_id, operator_id) DO NOTHING
-    `, [requestId, op.id, method, match.score, subject, body]);
+    `, [requestId, op.id, method, match.score, subject, body, replyToken]);
     if (inserted === 0) continue;
     dispatched++;
 
@@ -332,6 +342,7 @@ export async function dispatchOutreach(
         notes,
         legDetails,
         matchScore: match.score,
+        replyToken,
       })).then(async result => {
         if (result.emailId && !result.error) {
           await db.run("UPDATE outreach_log SET status = 'delivered' WHERE request_id = ? AND operator_id = ?", [requestId, op.id]);

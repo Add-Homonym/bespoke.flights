@@ -134,6 +134,10 @@ Routes are classified into one of 10 markets based on ICAO airport codes:
 
 Matched operators receive a branded HTML email via Resend containing the full itinerary, passenger count, notes, and a link to submit their quote. Operators whose contact method is `text` or `both` also get a text through Twilio. Without a `RESEND_API_KEY`, emails are logged to stdout. Without Twilio credentials, or in test mode, texts are logged instead.
 
+### Quoting by replying to the RFQ email
+
+When `INBOUND_EMAIL_SECRET` is set, each RFQ email gets a `Reply-To` of `quotes+<token>@<domain>` (`outreach_log.reply_token`; the domain is `EMAIL_REPLY_DOMAIN`, else the domain of `EMAIL_FROM`) and tells the operator they can reply with a price. Point the email provider's inbound webhook at `POST /api/webhooks/inbound-email` with `Authorization: Bearer $INBOUND_EMAIL_SECRET`; the body is `{from, to, subject, text, html}` or `{data: {...}}`. The first dollar amount in the reply's own text (above any quoted original) is the all-in price; an N-number matching the operator's fleet sets the aircraft and `valid 2026-11-01` sets the validity; the rest of the reply is the message shown to the traveler. The token is the credential, and the sender must be the operator's contact or sign-in address. The quote is created through the same path as the dashboard (`quotes.source = 'email'`), the traveler is notified, and the operator gets a confirmation or a "quote not recorded" email with the reason. `src/lib/quotes/by-email.ts`.
+
 ---
 
 ## Operator Discovery Pipeline
@@ -220,6 +224,16 @@ On a booked trip the traveler can **Request a change** (new legs, guest count, s
 
 Routes: `GET/POST /api/booking-requests/[id]/changes`, `PATCH /api/change-requests/[id]` with `{action: 'accept' | 'decline' | 'withdraw', newPriceCents?, note?}`. Staff alerts of kind `change` go to staff subscribed to **Change requested**.
 
+### Empty legs
+
+Operators list repositioning flights at `/operator/empty-legs` (`empty_legs` table): aircraft from the fleet, route, date, optional time, date flexibility (±0–7 days), seats, an all-in price for the whole aircraft and a note. Listings are public at `/empty-legs` (filter `?from=HNL&to=OGG`, IATA or ICAO) and show the operator's legal name, certificate and safety rating.
+
+- **Booking.** "Book this flight" creates a request in status `quoted` with one leg and a pending quote at the listed price (`quotes.is_empty_leg = 1`, `quotes.empty_leg_id`, valid until the departure date) and opens the trip page, where the traveler pays through the normal checkout. A visitor's choice is kept in the `bf_empty_leg` cookie and booked right after sign-in or sign-up. Several travelers may hold a quote on the same listing; the first payment to clear marks the listing `booked`, withdraws the other quotes and emails those travelers. Checkout and fulfillment refuse a listing that is no longer `listed`, so a late payment is refunded automatically. A cancelled booking puts the listing back on the market if its date has not passed. The empty-leg commission from the business model applies.
+- **On requests.** A traveler's open request shows listed empty legs that fit its single leg (same route, date within the listing's flex window, enough seats). The operator's inbound RFQ card shows its own matching listings with a one-click quote at the listed price (`POST /api/operator/empty-legs/[id]/quote`).
+- **Lifecycle.** Operators change the price or withdraw a listing (pending quotes made from it are withdrawn, travelers emailed); the daily lifecycle job expires listings whose date has passed.
+
+Routes: `GET /api/empty-legs` (public), `POST /api/empty-legs/[id]/book`, `GET/POST /api/operator/empty-legs`, `PATCH /api/operator/empty-legs/[id]`, `GET /api/booking-requests/[id]/empty-legs`. Service: `src/lib/empty-legs/service.ts`.
+
 ### Messaging
 
 Travelers and operators talk in the app instead of by phone or email. One thread exists per (request, operator) once that operator has quoted (`messages` table, ≤ 2000 characters per message). On the trip page each quote has **Message operator** (expanded for the accepted quote); the operator's request page has the conversation with the traveler. Threads poll every 15 seconds. Phone numbers and email addresses are never part of the thread payload.
@@ -278,7 +292,7 @@ To go live: remove `APP_TEST_MODE`, set the Stripe variables, and delete the dem
 
 - **Withdraw**: an operator withdraws a pending quote (`PATCH /api/quotes/[id] {status:'withdrawn'}`) from the request page; the traveler is emailed and the operator may quote again (the partial unique index only counts pending and accepted quotes).
 - **Revise**: an operator changes the price, message, valid-until date or aircraft of a pending quote (`PATCH /api/quotes/[id] {priceCents?, message?, validUntil?, aircraftId?}`). The old price is kept in `quotes.previous_price_cents` and `revised_at` is set; the traveler receives a "Quote revised" email and the quote card shows the previous price.
-- **Daily lifecycle** (`GET /api/cron/daily-lifecycle`, 10:00 UTC via `vercel.json`, bearer `CRON_SECRET`, or `POST` as an admin): `expireQuotes` sets pending quotes past `valid_until` to `expired` (one email per request to the traveler) and `completeTrips` sets booked requests whose last leg is before today to `completed` (traveler emailed with a receipt link). `src/lib/lifecycle.ts`. The `quotes.status` CHECK constraint gains `expired` through a guarded `DO` block in `SCHEMA_BLOCKS` that runs once per database.
+- **Daily lifecycle** (`GET /api/cron/daily-lifecycle`, 10:00 UTC via `vercel.json`, bearer `CRON_SECRET`, or `POST` as an admin): `expireQuotes` sets pending quotes past `valid_until` to `expired` (one email per request to the traveler), `completeTrips` sets booked requests whose last leg is before today to `completed` (traveler emailed with a receipt link), and `expireEmptyLegs` sets listed empty legs whose date has passed to `expired`. `src/lib/lifecycle.ts`. The `quotes.status` CHECK constraint gains `expired` through a guarded `DO` block in `SCHEMA_BLOCKS` that runs once per database.
 
 ## Email System
 
@@ -446,6 +460,8 @@ Created by `npm run seed` locally, or automatically in [test mode](#test-mode). 
 | `NEON_AUTH_COOKIE_SECRET` | Production | Signs Neon Auth session cookies (32+ random characters). |
 | `JWT_SECRET` | Development | Signs the development session cookie. Must be 16+ characters and not `change-me`; without it, development uses a random per-process key (sessions end on restart) and production refuses to sign. |
 | `RESEND_API_KEY` | No | Resend API key. Without it, emails log to stdout. |
+| `INBOUND_EMAIL_SECRET` | No | Bearer token for `POST /api/webhooks/inbound-email`. When set, RFQ emails offer reply-by-email quoting. |
+| `EMAIL_REPLY_DOMAIN` | No | Domain for `quotes+<token>@` reply addresses. Defaults to the domain of `EMAIL_FROM`. |
 | `EMAIL_FROM` | No | Verified sender address (default: `hello@bespoke.flights`) |
 | `CRON_SECRET` | Production | Secures the `/api/cron/weekly-discovery` and `/api/cron/daily-lifecycle` endpoints |
 | `STRIPE_SECRET_KEY` | Production | Stripe secret key. Without it, payments run in stub mode (development) or are disabled (production). |

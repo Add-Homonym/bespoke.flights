@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { legsByRequest } from '@/lib/db/queries';
 import { parseAutopilot, type QuoteDraftRow } from '@/lib/quotes/autopilot';
+import { emptyLegsForRequest } from '@/lib/empty-legs/service';
 import type { Operator } from '@/lib/types';
 
 export async function GET() {
@@ -63,12 +64,20 @@ export async function GET() {
     "SELECT * FROM quote_drafts WHERE operator_id = ? AND status = 'draft'", [operator.id])).map(d => [d.request_id, d]));
   const planes = new Map((await db.query<{ id: number; type: string; tail_number: string }>(
     'SELECT id, type, tail_number FROM aircraft WHERE operator_id = ?', [operator.id])).map(a => [a.id, a]));
+  // The operator's own listed empty legs that fit each unquoted open request.
+  const matches = new Map<number, { id: number; price_cents: number; departure_date: string; aircraft_type: string | null }[]>();
+  for (const item of inbound) {
+    if (item.quote_id || !['open', 'quoted'].includes(item.request_status)) continue;
+    const fits = (await emptyLegsForRequest(db, item.request_id)).filter(l => l.operator_id === operator.id);
+    if (fits.length) matches.set(item.request_id, fits.map(l => ({ id: l.id, price_cents: l.price_cents, departure_date: l.departure_date, aircraft_type: l.aircraft_type })));
+  }
   const result = inbound.map(item => {
     const d = drafts.get(item.request_id);
     const plane = d?.aircraft_id ? planes.get(d.aircraft_id) : undefined;
     return {
       ...item,
       legs: legs.get(item.request_id) ?? [],
+      empty_legs: matches.get(item.request_id) ?? [],
       draft: d && !item.quote_id ? {
         id: d.id, aircraftId: d.aircraft_id, priceCents: Number(d.price_cents), message: d.message,
         validUntil: d.valid_until, worksheet: JSON.parse(d.worksheet), flags: JSON.parse(d.flags),

@@ -105,9 +105,30 @@ export interface Quote {
   status: 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'expired';
   valid_until: string | null;
   is_empty_leg: number;  // 1 = repositioning flight, charged the empty-leg commission
+  empty_leg_id: number | null;  // the listing this quote was booked from
+  source: 'app' | 'email';      // how the operator submitted it
   previous_price_cents: number | null;
   revised_at: string | null;
   created_at: string;
+}
+
+export interface EmptyLeg {
+  id: number;
+  operator_id: number;
+  aircraft_id: number | null;
+  origin_code: string;
+  dest_code: string;
+  departure_date: string;
+  departure_time: string | null;
+  flex_days: number;
+  seats: number;
+  price_cents: number;
+  currency: string;
+  notes: string | null;
+  status: 'listed' | 'booked' | 'withdrawn' | 'expired';
+  booked_request_id: number | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface OutreachLog {

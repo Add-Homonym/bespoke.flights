@@ -10,6 +10,7 @@
 
 import { z } from 'zod';
 import type { Db } from '@/lib/db';
+import { relistAfterCancellation } from '@/lib/empty-legs/service';
 import { sendEmail } from '@/lib/email/resend';
 import { bookingCancelledEmail } from '@/lib/email/templates';
 import { appBaseUrl, formatMoney } from '@/lib/payments/config';
@@ -181,6 +182,7 @@ export async function cancelPaidBooking(
   const changed = await db.run(
     "UPDATE booking_requests SET status = 'cancelled', updated_at = now() WHERE id = ? AND status <> 'cancelled'", [request.id]);
   await db.run("UPDATE quotes SET status = 'rejected' WHERE request_id = ? AND status = 'pending'", [request.id]);
+  await relistAfterCancellation(db, request.id);
 
   const payment = (await db.one<Payment>('SELECT * FROM payments WHERE id = ?', [preview.paymentId]))!;
   if (changed) {

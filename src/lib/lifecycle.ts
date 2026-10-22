@@ -3,6 +3,7 @@
  *
  *   expireQuotes: pending quotes whose valid_until is before today → 'expired'
  *   completeTrips: booked requests whose last leg is before today → 'completed'
+ *   expireEmptyLegs: listed empty legs whose departure date is before today → 'expired'
  *
  * Both are idempotent and email the traveler about what changed.
  */
@@ -10,6 +11,7 @@
 import type { Db } from '@/lib/db';
 import { notifyQuotesExpired, notifyTripCompleted } from '@/lib/notify/traveler';
 import { appBaseUrl } from '@/lib/payments/config';
+import { expireEmptyLegs } from '@/lib/empty-legs/service';
 
 export function todayUtc(now = new Date()): string {
   return now.toISOString().slice(0, 10);
@@ -18,6 +20,7 @@ export function todayUtc(now = new Date()): string {
 export interface LifecycleResult {
   expiredQuotes: number;
   completedTrips: number;
+  expiredEmptyLegs: number;
 }
 
 export async function expireQuotes(db: Db, options: { today?: string; baseUrl?: string } = {}): Promise<number> {
@@ -58,5 +61,6 @@ export async function runDailyLifecycle(db: Db, options: { today?: string; baseU
   return {
     expiredQuotes: await expireQuotes(db, options),
     completedTrips: await completeTrips(db, options),
+    expiredEmptyLegs: await expireEmptyLegs(db, options.today ?? todayUtc()),
   };
 }

@@ -18,11 +18,13 @@ const OPERATORS_LINK = { href: '/operators/terms', label: 'Operators' };
 const links = {
   guest: [
     { href: '/book', label: 'Request quotes' },
+    { href: '/empty-legs', label: 'Empty legs' },
     OPERATORS_LINK,
     { href: '/login', label: 'Sign in' },
   ],
   customer: [
     { href: '/book', label: 'Request quotes' },
+    { href: '/empty-legs', label: 'Empty legs' },
     { href: '/requests', label: 'My requests' },
     OPERATORS_LINK,
   ],
@@ -32,6 +34,7 @@ const links = {
     { href: '/operator/requests', label: 'All demand' },
     { href: '/operator/quotes', label: 'My quotes' },
     { href: '/operator/fleet', label: 'Fleet' },
+    { href: '/operator/empty-legs', label: 'Empty legs' },
     { href: '/operator/autopilot', label: 'Autopilot' },
     { href: '/operator/team', label: 'Team' },
     { href: '/operator/settings', label: 'Settings' },
