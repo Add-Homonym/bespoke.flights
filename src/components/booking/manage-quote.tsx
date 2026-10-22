@@ -6,8 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Notice } from '@/components/ui/notice';
 import { Calculator } from 'lucide-react';
+import { readApiFailure, summaryLine } from '@/lib/api/form-errors';
 import { QuoteWorksheet } from '@/components/booking/quote-worksheet';
-import type { QuoteLeg } from '@/components/booking/submit-quote-form';
+import { FIELD_LABELS, type QuoteLeg } from '@/components/booking/submit-quote-form';
+import { validityWindow } from '@/lib/quotes/validity';
+import { priceProblem } from '@/lib/quotes/price';
 import { defaultWorksheet, type WorksheetInputs } from '@/lib/quotes/worksheet';
 import type { Aircraft } from '@/lib/types';
 
@@ -28,10 +31,12 @@ export function ManageQuote({
   const [mode, setMode] = useState<'idle' | 'revise' | 'withdraw'>('idle');
   const [price, setPrice] = useState((priceCents / 100).toFixed(2));
   const [note, setNote] = useState(message ?? '');
+  const validity = validityWindow(legs[0]?.departure_date ?? '9999-12-31');
   const [until, setUntil] = useState(validUntil ?? '');
   const [plane, setPlane] = useState(aircraftId ? String(aircraftId) : '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [fields, setFields] = useState<Record<string, string>>({});
   const [done, setDone] = useState('');
   const [sheet, setSheet] = useState<WorksheetInputs | null>(null);
   const [sheetLoaded, setSheetLoaded] = useState(false);
@@ -55,21 +60,24 @@ export function ManageQuote({
   const patch = async (body: unknown) => {
     setBusy(true);
     setError('');
+    setFields({});
     const res = await fetch(`/api/quotes/${quoteId}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     });
-    const data = await res.json().catch(() => ({}));
     setBusy(false);
     if (!res.ok) {
-      setError(typeof data.error === 'string' ? data.error : 'Could not update the quote.');
+      const failure = await readApiFailure(res, 'Could not update the quote.');
+      setFields(failure.fields);
+      setError(Object.keys(failure.fields).length ? summaryLine(failure.fields, FIELD_LABELS) : failure.message);
       return false;
     }
     return true;
   };
 
   const revise = async () => {
+    const problem = priceProblem(price);
+    if (problem) { setFields({ priceCents: problem }); setError('Fix 1 field: Price.'); return; }
     const cents = Math.round(Number(price) * 100);
-    if (!Number.isFinite(cents) || cents < 50) { setError('Enter a valid price.'); return; }
     const body: Record<string, unknown> = { priceCents: cents };
     if (note.trim() !== (message ?? '')) body.message = note.trim();
     if (until && until !== validUntil) body.validUntil = until;
@@ -97,7 +105,7 @@ export function ManageQuote({
     return (
       <div className="mt-4 space-y-3">
         <p className="text-body text-ink-muted">The traveler is told the quote is withdrawn. You can quote again afterwards.</p>
-        {error && <p role="alert" className="text-label text-danger">Error: {error}</p>}
+        {error && <Notice tone="danger">{error}</Notice>}
         <div className="flex gap-2">
           <Button variant="danger" size="sm" onClick={withdraw} disabled={busy}>Confirm withdrawal</Button>
           <Button variant="quiet" size="sm" onClick={() => setMode('idle')} disabled={busy}>Keep quote</Button>
@@ -109,8 +117,8 @@ export function ManageQuote({
   return (
     <div className="mt-4 space-y-4 border-t border-hairline pt-4">
       <div className="grid gap-3 sm:grid-cols-2">
-        <Input label="All-in price (USD)" type="number" step="0.01" min="0.50" value={price} onChange={e => setPrice(e.target.value)} />
-        <Input label="Valid until" type="date" value={until} onChange={e => setUntil(e.target.value)} />
+        <Input label="All-in price (USD)" type="number" step="0.01" min="100" value={price} onChange={e => setPrice(e.target.value)} error={fields.priceCents} />
+        <Input label="Valid until" type="date" min={validity.min} max={validity.max} value={until} onChange={e => setUntil(e.target.value)} error={fields.validUntil} />
       </div>
       {aircraft.length > 0 && (
         <div className="space-y-2">
@@ -149,7 +157,7 @@ export function ManageQuote({
           className="block w-full rounded-md border border-border-control bg-surface-raised px-4 py-3 text-body text-ink"
         />
       </div>
-      {error && <p role="alert" className="text-label text-danger">Error: {error}</p>}
+      {error && <Notice tone="danger">{error}</Notice>}
       <div className="flex gap-2">
         <Button size="sm" onClick={revise} disabled={busy}>Save revision</Button>
         <Button variant="quiet" size="sm" onClick={() => setMode('idle')} disabled={busy}>Cancel</Button>

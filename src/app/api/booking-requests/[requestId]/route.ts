@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
+import { validationResponse } from '@/lib/api/validation';
 import { z } from 'zod';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { toId } from '@/lib/db/queries';
-import { canManageRequest, requestAccess } from '@/lib/access';
+import { canManageRequest, requestAccess, withholdTravelerText } from '@/lib/access';
 import { alertStaff, bookedOperatorId } from '@/lib/staff/alerts';
 import { appBaseUrl } from '@/lib/payments/config';
 import { notifyRequestWithdrawn } from '@/lib/notify/traveler';
@@ -17,6 +18,16 @@ export async function GET(_req: Request, { params }: { params: Promise<{ request
   const db = getDb();
   const request = await db.one<BookingRequest>('SELECT * FROM booking_requests WHERE id = ?', [toId(requestId)]);
   if (!request) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  // An operator awaiting approval may look at open demand, without anything the traveler typed.
+  if (session.role === 'operator') {
+    const operator = await db.one<{ status: string }>('SELECT status FROM operators WHERE user_id = ?', [session.userId]);
+    if (operator && withholdTravelerText(operator.status)) {
+      if (operator.status !== 'pending' || !['open', 'quoted'].includes(request.status)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      const legs = await db.query<BookingLeg>('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order', [request.id]);
+      return NextResponse.json({ id: request.id, status: request.status, passenger_count: request.passenger_count, created_at: request.created_at, legs, customer: null });
+    }
+  }
 
   const access = await requestAccess(db, session, request);
   if (!access.canView) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -41,7 +52,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ reques
   const { requestId } = await params;
   const body = await req.json().catch(() => null);
   const parsed = patchSchema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
+  if (!parsed.success) return validationResponse(parsed.error);
 
   const db = getDb();
   const request = await db.one<BookingRequest>('SELECT * FROM booking_requests WHERE id = ?', [toId(requestId)]);

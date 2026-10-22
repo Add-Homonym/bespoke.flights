@@ -47,7 +47,7 @@ export default async function RequestsPage() {
                         <p className="mt-2 text-label text-ink-muted tabular-nums">{quoteCount} {quoteCount !== 1 ? 'quotes' : 'quote'} received</p>
                       )}
                     </div>
-                    <RequestStatusBadge status={req.status} />
+                    <RequestStatusBadge status={req.status} emptyLeg={req.empty_leg_id != null} />
                   </Card>
                 </Link>
               </li>

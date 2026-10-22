@@ -5,6 +5,8 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Notice } from '@/components/ui/notice';
+import { readApiFailure } from '@/lib/api/form-errors';
+import { cancelBanner } from '@/lib/bookings/cancel-text';
 
 export interface CancelPreview {
   tier: 'full' | 'partial' | 'none';
@@ -25,7 +27,7 @@ export function CancelTrip({ requestId, preview }: { requestId: number; preview:
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [done, setDone] = useState<string | null>(null);
+  const [done, setDone] = useState<{ headline: string; detail?: string } | null>(null);
 
   const confirm = async () => {
     setBusy(true);
@@ -37,17 +39,24 @@ export function CancelTrip({ requestId, preview }: { requestId: number; preview:
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'cancelled' }),
         });
-    const data = await res.json().catch(() => ({}));
     setBusy(false);
     if (!res.ok) {
-      setError(typeof data.error === 'string' ? data.error : 'Could not cancel the trip.');
+      setError((await readApiFailure(res, 'Could not cancel the trip.')).message);
       return;
     }
-    setDone(preview ? (data.refundCents > 0 ? `Trip cancelled. ${data.refund} is being refunded.` : 'Trip cancelled. No refund is due under the policy.') : 'Request cancelled.');
+    const data = await res.json().catch(() => ({}));
+    setDone(preview ? cancelBanner(data) : { headline: 'Request cancelled.' });
     router.refresh();
   };
 
-  if (done) return <Notice tone="info" className="mb-8">{done}</Notice>;
+  if (done) {
+    return (
+      <Notice tone="info" className="mb-8">
+        <span className="block">{done.headline}</span>
+        {done.detail && <span className="mt-1 block text-label">{done.detail}</span>}
+      </Notice>
+    );
+  }
 
   if (!open) {
     return (
@@ -79,7 +88,7 @@ export function CancelTrip({ requestId, preview }: { requestId: number; preview:
       ) : (
         <p className="text-body text-ink-muted">Your request is withdrawn and any open quotes are declined. Nothing has been charged.</p>
       )}
-      {error && <p role="alert" className="text-label text-danger">Error: {error}</p>}
+      {error && <Notice tone="danger">{error}</Notice>}
       <div className="flex flex-wrap gap-2">
         <Button variant="danger" size="sm" onClick={confirm} disabled={busy}>Confirm cancellation</Button>
         <Button variant="quiet" size="sm" onClick={() => setOpen(false)} disabled={busy}>Keep trip</Button>

@@ -14,8 +14,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ payment
 
   const { paymentId } = await params;
   try {
-    const outcome = await simulateStubPayment(getDb(), toId(paymentId), session.userId, appBaseUrl(req));
-    return NextResponse.json({ outcome });
+    const db = getDb();
+    const outcome = await simulateStubPayment(db, toId(paymentId), session.userId, appBaseUrl(req));
+    const current = await db.one<{ status: string }>('SELECT status FROM payments WHERE id = ?', [toId(paymentId)]);
+    return NextResponse.json({ outcome, status: current?.status ?? null });
   } catch (err) {
     if (err instanceof PaymentError) {
       return NextResponse.json({ error: err.message }, { status: err.status });

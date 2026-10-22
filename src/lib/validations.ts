@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { worksheetSchema } from '@/lib/quotes/worksheet';
 import { autopilotSchema } from '@/lib/quotes/autopilot';
+import { MIN_QUOTE_CENTS } from '@/lib/quotes/price';
 
 export const registerSchema = z.object({
   email: z.string().email(),
@@ -20,11 +21,11 @@ export const loginSchema = z.object({
 });
 
 export const legSchema = z.object({
-  originCode: z.string().min(3).max(4),
+  originCode: z.string().min(3, 'Enter an airport code').max(4, 'Enter an airport code'),
   originName: z.string().optional(),
-  destCode: z.string().min(3).max(4),
+  destCode: z.string().min(3, 'Enter an airport code').max(4, 'Enter an airport code'),
   destName: z.string().optional(),
-  departureDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  departureDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter a date'),
   departureTime: z.string().optional(),
 });
 
@@ -38,13 +39,15 @@ export const bookingRequestSchema = z.object({
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+
 export const quoteSchema = z.object({
   aircraftId: z.number().int().positive().optional(),
-  // Cents, up to $10,000,000.
-  priceCents: z.number().int().min(50).max(1_000_000_000),
+  // Whole cents, $100 to $10,000,000.
+  priceCents: z.number().int('Enter dollars and cents, no fractions of a cent')
+    .min(MIN_QUOTE_CENTS, 'Enter a price of at least $100').max(1_000_000_000, 'Enter a price of $10,000,000 or less'),
   currency: z.enum(['USD']).default('USD'),
   message: z.string().max(2000).optional(),
-  validUntil: z.string().regex(ISO_DATE).optional()
+  validUntil: z.string().regex(ISO_DATE, 'Enter a date').optional()
     .refine(d => !d || d >= new Date().toISOString().slice(0, 10), { message: 'Valid-until date is in the past' }),
   /** The operator's private working for the price. Never shown to the traveler. */
   worksheet: worksheetSchema.optional().nullable(),
@@ -68,6 +71,10 @@ export const emptyLegSchema = z.object({
 export const emptyLegPatchSchema = z.object({
   priceCents: z.number().int().min(50).max(1_000_000_000).optional(),
   seats: z.number().int().min(1).max(100).optional(),
+  departureDate: z.string().regex(ISO_DATE, 'Enter a date')
+    .refine(d => d >= new Date().toISOString().slice(0, 10), { message: 'Departure date is in the past' }).optional(),
+  departureTime: z.string().regex(/^\d{2}:\d{2}$/, 'Enter a time').optional().nullable(),
+  flexDays: z.number().int().min(0).max(7).optional(),
   notes: z.string().trim().max(1000).optional().nullable(),
   status: z.enum(['withdrawn']).optional(),
 }).strict();
@@ -115,7 +122,8 @@ export const operatorSettingsSchema = z.object({
   cancellation_policy: z.object({
     full_refund_hours: z.number().int().min(0).max(24 * 365),
     partial_refund_hours: z.number().int().min(0).max(24 * 365),
-    partial_refund_bps: z.number().int().min(0).max(10_000),
+    partial_refund_bps: z.number().int().min(0).max(10_000)
+      .refine(v => v % 100 === 0, { message: 'Enter a whole percentage from 0 to 100' }),
   }).refine(p => p.partial_refund_hours <= p.full_refund_hours, {
     message: 'The partial refund window must end before the full refund window',
     path: ['partial_refund_hours'],

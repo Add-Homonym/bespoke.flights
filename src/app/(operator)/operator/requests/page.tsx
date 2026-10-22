@@ -1,5 +1,7 @@
 import Link from 'next/link';
+import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
+import { withholdTravelerText } from '@/lib/access';
 import { legsByRequest, quoteCountsByRequest } from '@/lib/db/queries';
 import { Card } from '@/components/ui/card';
 import { TripDetails } from '@/components/booking/trip-details';
@@ -9,6 +11,9 @@ import type { BookingRequest } from '@/lib/types';
 
 export default async function OperatorRequestsPage() {
   const db = getDb();
+  const session = await getSession();
+  const operator = await db.one<{ status: string }>('SELECT status FROM operators WHERE user_id = ?', [session!.userId]);
+  const hideText = withholdTravelerText(operator?.status);
 
   const requests = await db.query<BookingRequest>("SELECT * FROM booking_requests WHERE status IN ('open', 'quoted') ORDER BY created_at DESC");
 
@@ -20,6 +25,7 @@ export default async function OperatorRequestsPage() {
       <div className="mb-10">
         <h1 className="font-display text-3xl text-ink mb-2">Flight Demand</h1>
         <p className="text-ink-muted">Browse open booking requests and submit competitive quotes.</p>
+        {hideText && <p className="mt-2 text-label text-ink-muted">Special requests and notes from travelers show once your account is approved.</p>}
       </div>
 
       {requests.length === 0 ? (
@@ -37,7 +43,7 @@ export default async function OperatorRequestsPage() {
               <Link key={req.id} href={`/operator/requests/${req.id}`}>
                 <Card hover className="flex items-start justify-between gap-4">
                   <div>
-                    <TripDetails compact legs={fromDbLegs(legs)} passengerCount={req.passenger_count} notes={req.notes} />
+                    <TripDetails compact legs={fromDbLegs(legs)} passengerCount={req.passenger_count} notes={hideText ? null : req.notes} />
                     <p className="text-ink-subtle text-xs mt-2">Posted {timeAgo}</p>
                   </div>
                   <div className="text-right">

@@ -6,6 +6,7 @@ import {
   bookEmptyLeg, createEmptyLeg, EmptyLegError, emptyLegsForRequest, expireEmptyLegs, listEmptyLegs,
   quoteRequestFromListing, updateEmptyLeg, withdrawEmptyLeg,
 } from './service';
+import { migrate } from '@/lib/db';
 import type { BookingRequest, EmptyLeg, Quote } from '@/lib/types';
 
 const BASE = 'https://bespoke.flights';
@@ -57,6 +58,21 @@ describe('listing', () => {
     expect(await expireEmptyLegs(f.db)).toBe(1);
     expect((await leg(id)).status).toBe('expired');
     expect(await expireEmptyLegs(f.db)).toBe(0);
+  });
+});
+
+describe('migration', () => {
+  it('moves \"Empty leg #N\" out of old special requests and into the empty_leg_id link', async () => {
+    const id = await listing();
+    const { requestId, quoteId } = await bookEmptyLeg(f.db, id, f.customerId, { passengerCount: 2 });
+    const old = (await f.db.one<{ id: number }>(
+      "INSERT INTO booking_requests (customer_id, status, passenger_count, notes, form_variant) VALUES (?, 'quoted', 2, ?, 'empty_leg') RETURNING id",
+      [f.customerId, `Two surfboards\nEmpty leg #${id}`]))!.id;
+    await f.db.run('UPDATE quotes SET request_id = ? WHERE id = ?', [old, quoteId]);
+    await f.db.run('UPDATE booking_requests SET empty_leg_id = NULL WHERE id = ?', [old]);
+    await migrate(f.db);
+    expect(await row<BookingRequest>(f.db, 'SELECT * FROM booking_requests WHERE id = ?', old)).toMatchObject({ notes: 'Two surfboards', empty_leg_id: id });
+    expect(requestId).not.toBe(old);
   });
 });
 

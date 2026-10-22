@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { validationResponse } from '@/lib/api/validation';
 import { getDb } from '@/lib/db';
 import { registerSchema } from '@/lib/validations';
 import { registerUser } from '@/lib/auth';
@@ -14,7 +15,7 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => null);
     const parsed = registerSchema.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
+      return validationResponse(parsed.error);
     }
 
     const { email, phone, password, name, role, companyName } = parsed.data;
@@ -22,7 +23,7 @@ export async function POST(req: Request) {
 
     const userId = await registerUser(db, { email, phone, password, name, role, companyName });
     if (userId === null) {
-      return NextResponse.json({ error: { email: ['Email already registered'] } }, { status: 409 });
+      return NextResponse.json({ error: 'Check the highlighted fields.', fieldErrors: { email: ['That email is already registered. Sign in instead.'] } }, { status: 409 });
     }
 
     // A traveler who built a trip before signing up: submit it now.

@@ -85,7 +85,7 @@ export function CompanyBoard({ source, linkTrips }: { source: string; linkTrips:
       <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
         <div className="flex flex-wrap gap-2">
           {SECTIONS.map(s => (
-            <a key={s.key} href={`#${s.key}`} className="rounded-full border border-hairline px-3 py-1 text-xs text-ink hover:border-border-control">
+            <a key={s.key} href={`#${s.key}`} className="inline-flex min-h-11 items-center rounded-full border border-hairline px-4 text-xs text-ink hover:border-border-control">
               {s.title} <span className="text-royal">{(board[s.key] ?? []).length}</span>
             </a>
           ))}
@@ -118,7 +118,7 @@ export function CompanyBoard({ source, linkTrips }: { source: string; linkTrips:
                       <div className="flex items-center justify-between gap-2 mb-3">
                         {linkTrips
                           // The whole card is the link (stretched), so the phone link inside it stays a separate link.
-                          ? <Link href={`/operator/requests/${trip.requestId}`} className="text-xs text-ink-muted after:absolute after:inset-0 after:rounded-lg after:content-['']">#{trip.requestId}<span className="sr-only"> — open trip</span></Link>
+                          ? <Link href={`/operator/requests/${trip.requestId}`} className="inline-flex min-h-11 items-center text-xs text-ink-muted after:absolute after:inset-0 after:rounded-lg after:content-['']">#{trip.requestId}<span className="sr-only"> — open trip</span></Link>
                           : <span className="text-xs text-ink-muted">#{trip.requestId}</span>}
                         <div className="flex gap-1.5">
                           {isNew && <StatusBadge variant="brass">{s.key === 'upcoming' || s.key === 'cancelled' ? 'Updated' : 'New'}</StatusBadge>}

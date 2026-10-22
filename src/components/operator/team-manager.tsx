@@ -1,5 +1,6 @@
 'use client';
 
+import { Checkbox } from '@/components/ui/checkbox';
 import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -46,10 +47,7 @@ const EVENTS: { key: 'on_booking' | 'on_cancellation' | 'on_new_request' | 'on_c
 
 function Check({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
-    <label className="flex items-center gap-2 text-sm text-ink cursor-pointer">
-      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} className="accent-ink" />
-      {label}
-    </label>
+    <Checkbox label={label} checked={checked} onChange={e => onChange(e.target.checked)} />
   );
 }
 

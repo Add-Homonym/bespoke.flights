@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { validationResponse } from '@/lib/api/validation';
 import { getDb } from '@/lib/db';
 import { aircraftPatchSchema } from '@/lib/validations';
 import { currentOperator, notFound, ownedAircraft, presentFleet } from '@/lib/fleet';
@@ -31,7 +32,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
 
   const parsed = aircraftPatchSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
+    return validationResponse(parsed.error);
   }
 
   const sets: string[] = [];

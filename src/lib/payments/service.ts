@@ -31,7 +31,10 @@ import { sendEmail } from '@/lib/email/resend';
 import { alertStaff } from '@/lib/staff/alerts';
 import { paymentReceiptEmail, bookingConfirmedOperatorEmail } from '@/lib/email/templates';
 import type { Payment, Quote, BookingRequest, Operator, BookingLeg } from '@/lib/types';
+import { displayCode } from '@/lib/airports';
 import { fromDbLegs, legLine } from '@/lib/trip-format';
+import { describePolicy, parsePolicy } from '@/lib/bookings/policy';
+import { closeCancelledBooking } from '@/lib/bookings/close';
 import { listingAvailable, markListingBooked, relistAfterCancellation } from '@/lib/empty-legs/service';
 import { notifyEmptyLegUnavailable } from '@/lib/notify/traveler';
 
@@ -154,7 +157,7 @@ export async function createCheckout(
           unit_amount: fees.amountCents,
           product_data: {
             name: `Private charter: ${route}`,
-            description: checkoutDescription(operator.company_name, request, legs),
+            description: checkoutDescription(operator.company_name, request, legs, describePolicy(parsePolicy(operator.cancellation_policy))),
           },
         },
       }],
@@ -242,7 +245,7 @@ export async function markPaymentSucceeded(
       // A succeeded payment whose quote never got accepted is a conflict whose
       // refund has not gone through yet (e.g. Stripe error, webhook retried).
       if (payment.change_request_id) return payment.status === 'succeeded' ? 'change_paid' : 'duplicate';
-      return payment.status === 'succeeded' && quote.status !== 'accepted' ? 'conflict' : 'duplicate';
+      return payment.status === 'succeeded' && !['accepted', 'cancelled'].includes(quote.status) ? 'conflict' : 'duplicate';
     }
 
     await tx.run(`
@@ -319,6 +322,7 @@ export async function applyRefundTotal(db: Db, paymentId: number, refundedCents:
           WHERE id = ? AND status = 'booked'
         `, [payment.request_id]);
         if (changed) {
+          await closeCancelledBooking(tx, payment.request_id, { tier: 'full', refundCents: total });
           await relistAfterCancellation(tx, payment.request_id);
           return { requestId: payment.request_id, operatorId: payment.operator_id };
         }
@@ -446,17 +450,20 @@ export async function simulateStubPayment(
   if (!payment || payment.customer_id !== customerId || payment.provider !== 'stub') {
     throw new PaymentError('Payment not found', 404);
   }
-  if (payment.status !== 'pending') throw new PaymentError(`Payment is ${payment.status}`, 409);
+  // Tapping Pay twice, or on a page that went stale, is not an error: report where the payment stands.
+  if ((SETTLED_STATUSES as readonly string[]).includes(payment.status)) return 'duplicate';
+  if (payment.status !== 'pending') throw new PaymentError('This payment can no longer be completed. Go back to the quote and book again.', 409);
   return fulfillPayment(db, paymentId, { paymentIntentId: null, baseUrl });
 }
 
 /** Full trip details for the Stripe Checkout line item, so the customer sees exactly what they pay for. */
-export function checkoutDescription(company: string, request: Pick<BookingRequest, 'id' | 'passenger_count' | 'notes'>, legs: BookingLeg[]): string {
+export function checkoutDescription(company: string, request: Pick<BookingRequest, 'id' | 'passenger_count' | 'notes'>, legs: BookingLeg[], policyText?: string): string {
   const parts = [
     `${company} · Request #${request.id}`,
     ...fromDbLegs(legs).map(legLine),
     `${request.passenger_count} passenger${request.passenger_count !== 1 ? 's' : ''}`,
     `Special requests: ${request.notes?.trim() || 'none'}`,
+    ...(policyText ? [`Cancellation: ${policyText}`] : []),
   ];
   const text = parts.join(' | ');
   return text.length > 1000 ? text.slice(0, 997) + '...' : text;
@@ -464,7 +471,7 @@ export function checkoutDescription(company: string, request: Pick<BookingReques
 
 async function routeLabel(db: Db, requestId: number): Promise<string> {
   const legs = await db.query<BookingLeg>('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order', [requestId]);
-  return legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).join(' → ');
+  return legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).map(displayCode).join(' → ');
 }
 
 async function sendBookingEmails(db: Db, paymentId: number, baseUrl: string) {
@@ -615,6 +622,21 @@ async function paymentForIntent(db: Db, intent: string | Stripe.PaymentIntent | 
   return db.one<Payment>('SELECT * FROM payments WHERE stripe_payment_intent_id = ?', [id]);
 }
 
+/** Remember "card ending 4242" so a later refund can say where the money goes. Best effort. */
+async function recordPaymentMethod(db: Db, paymentId: number, paymentIntentId: string | null) {
+  if (!paymentIntentId) return;
+  try {
+    const intent = await getStripe().paymentIntents.retrieve(paymentIntentId, { expand: ['latest_charge'] });
+    const charge = typeof intent.latest_charge === 'object' ? intent.latest_charge : null;
+    const details = charge?.payment_method_details;
+    const label = details?.card?.last4 ? `card ending ${details.card.last4}`
+      : details?.us_bank_account?.last4 ? `bank account ending ${details.us_bank_account.last4}` : null;
+    if (label) await db.run('UPDATE payments SET payment_method_label = ? WHERE id = ?', [label, paymentId]);
+  } catch (err) {
+    console.error('Could not read the payment method:', err instanceof Error ? err.message : err);
+  }
+}
+
 function intentId(intent: string | Stripe.PaymentIntent | null): string | null {
   return typeof intent === 'string' ? intent : intent?.id ?? null;
 }
@@ -645,6 +667,7 @@ export async function handleStripeEvent(
       if (!payment) break;
       if (session.payment_status === 'paid' || session.payment_status === 'no_payment_required') {
         await fulfillPayment(db, payment.id, { paymentIntentId: intentId(session.payment_intent), baseUrl });
+        await recordPaymentMethod(db, payment.id, intentId(session.payment_intent));
       } else {
         // ACH and other delayed methods: funds not yet confirmed.
         await markPaymentProcessing(db, payment.id, intentId(session.payment_intent));

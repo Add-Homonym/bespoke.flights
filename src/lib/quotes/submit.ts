@@ -8,6 +8,7 @@ import { saveWorksheet } from '@/lib/quotes/worksheet-store';
 import { learnFromQuote } from '@/lib/quotes/learning';
 import { refreshDrafts } from '@/lib/quotes/autopilot';
 import { notifyNewQuote } from '@/lib/notify/traveler';
+import { resolveValidUntil } from '@/lib/quotes/validity';
 import type { WorksheetInputs } from '@/lib/quotes/worksheet';
 import type { Operator } from '@/lib/types';
 
@@ -46,6 +47,10 @@ export async function submitQuote(db: Db, operator: Operator, input: QuoteInput,
     if (!owned) throw new QuoteError('Aircraft not in your fleet', 400, 'aircraftId');
   }
 
+  const first = await db.one<{ departure_date: string }>('SELECT departure_date FROM booking_legs WHERE request_id = ? ORDER BY leg_order LIMIT 1', [request.id]);
+  const validity = resolveValidUntil(input.validUntil, first?.departure_date ?? null);
+  if ('error' in validity) throw new QuoteError(validity.error, 400, 'validUntil');
+
   const existing = await db.one(
     "SELECT id FROM quotes WHERE request_id = ? AND operator_id = ? AND status IN ('pending','accepted')", [request.id, operator.id]);
   if (existing) throw new QuoteError('You have already quoted this request', 409);
@@ -55,7 +60,7 @@ export async function submitQuote(db: Db, operator: Operator, input: QuoteInput,
     quoteId = await db.transaction(async tx => {
       const { id } = (await tx.one<{ id: number }>(
         'INSERT INTO quotes (request_id, operator_id, aircraft_id, price_cents, currency, message, valid_until, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
-        [request.id, operator.id, input.aircraftId || null, input.priceCents, input.currency ?? 'USD', input.message || null, input.validUntil || null, input.source ?? 'app']
+        [request.id, operator.id, input.aircraftId || null, input.priceCents, input.currency ?? 'USD', input.message || null, validity.value, input.source ?? 'app']
       ))!;
       await tx.run("UPDATE booking_requests SET status = 'quoted', updated_at = now() WHERE id = ? AND status = 'open'", [request.id]);
       await tx.run("UPDATE outreach_log SET status = 'responded', responded_at = now() WHERE request_id = ? AND operator_id = ?", [request.id, operator.id]);

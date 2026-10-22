@@ -9,8 +9,12 @@ import { Input } from '@/components/ui/input';
 import { Notice } from '@/components/ui/notice';
 import { RouteField } from '@/components/ui/route-field';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { readApiFailure, summaryLine } from '@/lib/api/form-errors';
+import { displayCode } from '@/lib/airports';
 import { formatTripDate, formatTripTime } from '@/lib/trip-format';
 import type { DraftLeg } from '@/lib/bookings/draft';
+
+const CHANGE_LABELS: Record<string, string> = { passengerCount: 'Guests', notes: 'Special requests', legs: 'Itinerary' };
 
 export interface ChangeRequestView {
   id: number;
@@ -22,6 +26,7 @@ export interface ChangeRequestView {
   new_price_cents: number | null;
   previous_price_cents: number | null;
   applied_at: string | null;
+  closed_reason?: string | null;
   created_at: string;
   /** Formatted new price, when the operator set one. */
   newPrice?: string | null;
@@ -44,7 +49,7 @@ export function ProposedItinerary({ cr }: { cr: ChangeRequestView }) {
         {cr.proposed_legs.map((l, i) => (
           <li key={i} className="flex flex-wrap items-baseline gap-x-3">
             <span className="text-ink-muted w-12 shrink-0">Leg {i + 1}</span>
-            <span className="text-ink tabular-nums">{l.originCode} → {l.destCode}</span>
+            <span className="text-ink tabular-nums">{displayCode(l.originCode)} → {displayCode(l.destCode)}</span>
             <span className="text-ink">{formatTripDate(l.departureDate) || l.departureDate}</span>
             <span className="text-ink-muted">{formatTripTime(l.departureTime ?? '') || 'Any time'}</span>
           </li>
@@ -72,6 +77,9 @@ export function ChangeRequestSummary({ cr, children }: { cr: ChangeRequestView; 
         <p className="text-label text-ink-muted">New all-in price: <span className="text-ink tabular-nums">{cr.newPrice}</span></p>
       )}
       {cr.operator_note && <p className="text-body text-ink-muted italic">&ldquo;{cr.operator_note}&rdquo;</p>}
+      {cr.status === 'withdrawn' && cr.closed_reason === 'trip_cancelled' && (
+        <p className="text-body text-ink">Change request closed because the trip was cancelled.</p>
+      )}
       {cr.status === 'accepted' && !cr.applied_at && cr.paymentDue && (
         <p className="text-body text-ink">Pay {cr.paymentDue.amount} to apply this change.</p>
       )}
@@ -100,6 +108,7 @@ export function TravelerChangeRequests({
   const [note, setNote] = useState(notes);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [fields, setFields] = useState<Record<string, string>>({});
   const [done, setDone] = useState('');
   const pending = changes.find(c => c.status === 'pending');
 
@@ -116,6 +125,7 @@ export function TravelerChangeRequests({
   const submit = async () => {
     setBusy(true);
     setError('');
+    setFields({});
     const res = await fetch(`/api/booking-requests/${requestId}/changes`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -125,10 +135,11 @@ export function TravelerChangeRequests({
         notes: note || undefined,
       }),
     });
-    const data = await res.json().catch(() => ({}));
     setBusy(false);
     if (!res.ok) {
-      setError(typeof data.error === 'string' ? data.error : 'Check each leg has an airport code and a date.');
+      const failure = await readApiFailure(res, 'Check each leg has an airport code and a date.');
+      setFields(failure.fields);
+      setError(Object.keys(failure.fields).length ? summaryLine(failure.fields, CHANGE_LABELS) : failure.message);
       return;
     }
     setOpen(false);
@@ -183,9 +194,12 @@ export function TravelerChangeRequests({
                 onDestinationChange={v => updateLeg(i, 'destCode', v)}
                 onSwap={() => setLegs(prev => prev.map((l, j) => (j === i ? { ...l, originCode: l.destCode, destCode: l.originCode } : l)))}
               />
+              {(fields[`legs.${i}.originCode`] || fields[`legs.${i}.destCode`]) && (
+                <p className="text-label text-danger">{fields[`legs.${i}.originCode`] ? `From: ${fields[`legs.${i}.originCode`]}` : `To: ${fields[`legs.${i}.destCode`]}`}</p>
+              )}
               <div className="grid grid-cols-2 gap-3">
-                <Input label="Date" type="date" value={leg.departureDate} onChange={e => updateLeg(i, 'departureDate', e.target.value)} required />
-                <Input label="Time (optional)" type="time" value={leg.departureTime} onChange={e => updateLeg(i, 'departureTime', e.target.value)} />
+                <Input label="Date" type="date" value={leg.departureDate} onChange={e => updateLeg(i, 'departureDate', e.target.value)} required error={fields[`legs.${i}.departureDate`]} />
+                <Input label="Time (optional)" type="time" value={leg.departureTime} onChange={e => updateLeg(i, 'departureTime', e.target.value)} error={fields[`legs.${i}.departureTime`]} />
               </div>
             </div>
           ))}
@@ -193,7 +207,7 @@ export function TravelerChangeRequests({
             <Button variant="quiet" size="sm" onClick={addLeg}><Plus size={16} aria-hidden="true" /> Add leg</Button>
           )}
           <div className="grid grid-cols-2 gap-3">
-            <Input label="Guests" type="number" min={1} max={19} value={pax} onChange={e => setPax(Number(e.target.value))} />
+            <Input label="Guests" type="number" min={1} max={19} value={pax} onChange={e => setPax(Number(e.target.value))} error={fields.passengerCount} />
           </div>
           <div className="space-y-2">
             <label htmlFor="change-notes" className="block text-label text-ink-muted">Special requests</label>
@@ -205,7 +219,7 @@ export function TravelerChangeRequests({
               className="block w-full rounded-md border border-border-control bg-surface-raised px-4 py-3 text-body text-ink placeholder:text-ink-subtle"
             />
           </div>
-          {error && <p role="alert" className="text-label text-danger">Error: {error}</p>}
+          {error && <Notice tone="danger">{error}</Notice>}
           <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={submit} disabled={busy}>Send change request</Button>
             <Button variant="quiet" size="sm" onClick={() => setOpen(false)} disabled={busy}>Cancel</Button>

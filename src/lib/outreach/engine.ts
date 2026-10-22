@@ -1,6 +1,7 @@
 import type { Db } from '@/lib/db';
 import type { BookingLeg, Operator, MarketKey } from '@/lib/types';
 import { sendEmail } from '@/lib/email/resend';
+import { displayCode } from '@/lib/airports';
 import { rfqNotificationEmail, rfqSmsBody } from '@/lib/email/templates';
 import { sendSms } from '@/lib/notify/sms';
 import { alertStaff } from '@/lib/staff/alerts';
@@ -171,7 +172,7 @@ export function generateRFQ(
   notes: string | null,
   requestId: number
 ): { subject: string; body: string } {
-  const route = legs.map(l => l.origin_code).join(' → ') + ' → ' + legs[legs.length - 1].dest_code;
+  const route = legs.map(l => displayCode(l.origin_code)).join(' → ') + ' → ' + displayCode(legs[legs.length - 1].dest_code);
   const dateRange = legs.length > 1
     ? `${legs[0].departure_date} — ${legs[legs.length - 1].departure_date}`
     : legs[0].departure_date;
@@ -179,7 +180,7 @@ export function generateRFQ(
   const subject = `Charter Quote Request #${requestId} — ${route}`;
 
   const legDetails = legs.map((l, i) =>
-    `  Leg ${i + 1}: ${l.origin_code} → ${l.dest_code} | ${l.departure_date}${l.departure_time ? ` @ ${l.departure_time}` : ''}`
+    `  Leg ${i + 1}: ${displayCode(l.origin_code)} → ${displayCode(l.dest_code)} | ${l.departure_date}${l.departure_time ? ` @ ${l.departure_time}` : ''}`
   ).join('\n');
 
   const body = `New charter request from Bespoke Flights.
@@ -304,12 +305,12 @@ export async function dispatchOutreach(
   const matches = await matchOperators(db, requestId, legs, passengerCount);
   const { subject, body } = generateRFQ(legs, passengerCount, notes, requestId);
 
-  const route = legs.map(l => l.origin_code).join(' → ') + ' → ' + legs[legs.length - 1].dest_code;
+  const route = legs.map(l => displayCode(l.origin_code)).join(' → ') + ' → ' + displayCode(legs[legs.length - 1].dest_code);
   const dateRange = legs.length > 1
     ? `${legs[0].departure_date} — ${legs[legs.length - 1].departure_date}`
     : legs[0].departure_date;
   const legDetails = legs.map((l, i) =>
-    `Leg ${i + 1}: ${l.origin_code} → ${l.dest_code} | ${l.departure_date}${l.departure_time ? ` @ ${l.departure_time}` : ''}`
+    `Leg ${i + 1}: ${displayCode(l.origin_code)} → ${displayCode(l.dest_code)} | ${l.departure_date}${l.departure_time ? ` @ ${l.departure_time}` : ''}`
   );
 
   let dispatched = 0;

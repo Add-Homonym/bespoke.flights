@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { validationResponse } from '@/lib/api/validation';
 import { getDb } from '@/lib/db';
 import { adminCreateOperatorSchema } from '@/lib/validations';
 import { adminErrorResponse, requireAdmin } from '@/lib/admin/guard';
@@ -9,7 +10,7 @@ export async function POST(req: Request) {
   const me = await requireAdmin();
   if ('error' in me) return me.error;
   const parsed = adminCreateOperatorSchema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
+  if (!parsed.success) return validationResponse(parsed.error);
   const d = parsed.data;
   const db = getDb();
   try {

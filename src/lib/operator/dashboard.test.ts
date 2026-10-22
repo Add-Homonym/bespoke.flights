@@ -48,7 +48,7 @@ describe('buildDashboard', () => {
     const d = await buildDashboard(f.db, await op(f.operatorA), now);
     expect(d.fleet).toEqual({ count: 3, seats: 27, withoutPhotos: 2, registryFlags: 1 });
     expect(d.team).toEqual({ active: 2, emailAlerts: 1, smsAlerts: 1 });
-    expect(d.settings).toEqual({ profileComplete: true, payoutsReady: true });
+    expect(d.settings).toEqual({ profileComplete: true, profileMissing: [], payoutsReady: true });
   });
 
   it('is empty for an operator with nothing yet', async () => {

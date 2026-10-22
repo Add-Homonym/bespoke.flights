@@ -109,7 +109,7 @@ export async function loadTripSheet(db: Db, token: string): Promise<TripSheet | 
     JOIN booking_requests br ON br.id = s.request_id
     JOIN operators o ON o.id = s.operator_id
     JOIN users u ON u.id = br.customer_id
-    LEFT JOIN quotes q ON q.request_id = br.id AND q.operator_id = s.operator_id AND q.status = 'accepted'
+    LEFT JOIN quotes q ON q.request_id = br.id AND q.operator_id = s.operator_id AND q.status IN ('accepted', 'cancelled')
     LEFT JOIN aircraft a ON a.id = q.aircraft_id
     WHERE s.token = ? AND s.revoked_at IS NULL AND s.expires_at > now()
   `, [token]);

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { validationResponse } from '@/lib/api/validation';
 import { z } from 'zod';
 import { getDb } from '@/lib/db';
 import { currentOperator, notFound, ownedAircraft, photoList, setPhotoOrder } from '@/lib/fleet';
@@ -28,7 +29,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
   const r = await load(ctx);
   if (!r.ok) return r.error;
   const parsed = patchSchema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
+  if (!parsed.success) return validationResponse(parsed.error);
 
   if (parsed.data.cover) {
     await setPhotoOrder(r.db, r.aircraft.id, [r.photo.id, ...r.photos.filter(p => p.id !== r.photo.id).map(p => p.id)]);

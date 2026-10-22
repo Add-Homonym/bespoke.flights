@@ -97,8 +97,8 @@ describe('trip sheet contents', () => {
       leadPassenger: { name: 'Customer', email: 'cust@example.com', phone: '+1-808-555-0100' },
     });
     expect(sheet.legs).toEqual([
-      expect.objectContaining({ from: 'KLAX', to: 'PHNL', time: '09:30' }),
-      expect.objectContaining({ from: 'PHNL', to: 'KLAX', time: '' }),
+      expect.objectContaining({ from: 'LAX', to: 'HNL', time: '09:30' }),
+      expect.objectContaining({ from: 'HNL', to: 'LAX', time: '' }),
     ]);
   });
 });
@@ -141,8 +141,8 @@ describe('calendar file', () => {
   const sheet = {
     requestId: 12, status: 'booked', operatorId: 1, operatorCompany: 'Alpha Air', aircraft: 'Gulfstream G650 (N650EA)',
     legs: [
-      { from: 'KLAX', to: 'PHNL', date: '2026-12-01', time: '09:30' },
-      { from: 'PHNL', to: 'KLAX', date: '2026-12-31', time: '' },
+      { from: 'LAX', to: 'HNL', date: '2026-12-01', time: '09:30' },
+      { from: 'HNL', to: 'LAX', date: '2026-12-31', time: '' },
     ],
     passengerCount: 3, specialRequests: 'Dog; vegan, please\nthanks',
     leadPassenger: { name: 'Ada', email: 'ada@x.com', phone: '+1-555' }, expiresAt: '2027-01-30T00:00:00.000Z',

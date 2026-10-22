@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
+import { withholdTravelerText } from '@/lib/access';
 import { legsByRequest } from '@/lib/db/queries';
 import { parseAutopilot, type QuoteDraftRow } from '@/lib/quotes/autopilot';
 import { emptyLegsForRequest } from '@/lib/empty-legs/service';
@@ -71,11 +72,15 @@ export async function GET() {
     const fits = (await emptyLegsForRequest(db, item.request_id)).filter(l => l.operator_id === operator.id);
     if (fits.length) matches.set(item.request_id, fits.map(l => ({ id: l.id, price_cents: l.price_cents, departure_date: l.departure_date, aircraft_type: l.aircraft_type })));
   }
+  const hideText = withholdTravelerText(operator.status);
   const result = inbound.map(item => {
     const d = drafts.get(item.request_id);
     const plane = d?.aircraft_id ? planes.get(d.aircraft_id) : undefined;
     return {
       ...item,
+      // The RFQ text carries the traveler's special requests, so it waits for approval too.
+      request_notes: hideText ? null : item.request_notes,
+      rfq_body: hideText ? '' : item.rfq_body,
       legs: legs.get(item.request_id) ?? [],
       empty_legs: matches.get(item.request_id) ?? [],
       draft: d && !item.quote_id ? {

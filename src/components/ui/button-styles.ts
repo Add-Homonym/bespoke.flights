@@ -14,10 +14,10 @@ const variants: Record<ButtonVariant, string> = {
   danger: 'bg-transparent border border-danger text-danger hover:bg-danger-tint',
 };
 
-// The sm button is 40px tall; the pseudo-element extends its hit area to 44px.
+// Every button is at least 44px tall.
 const sizes: Record<ButtonSize, string> = {
   md: 'h-[52px] px-6 text-[15px] leading-[22px]',
-  sm: 'h-10 px-4 text-[13px] leading-[18px] after:absolute after:inset-x-0 after:-inset-y-0.5 after:content-[""]',
+  sm: 'h-11 px-4 text-[13px] leading-[18px]',
 };
 
 export function buttonStyles({

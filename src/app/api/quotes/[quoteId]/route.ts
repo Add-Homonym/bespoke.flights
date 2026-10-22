@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { validationResponse } from '@/lib/api/validation';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { toId } from '@/lib/db/queries';
 import { appBaseUrl } from '@/lib/payments/config';
 import { notifyNewQuote, notifyQuoteDeclined, notifyQuoteWithdrawn } from '@/lib/notify/traveler';
 import { quoteSchema } from '@/lib/validations';
+import { resolveValidUntil } from '@/lib/quotes/validity';
 import { saveWorksheet } from '@/lib/quotes/worksheet-store';
 import { learnFromQuote } from '@/lib/quotes/learning';
 import { refreshDrafts } from '@/lib/quotes/autopilot';
@@ -19,19 +21,21 @@ import type { Quote, BookingRequest, Operator } from '@/lib/types';
  *                            the owning operator revises a pending quote
  * Acceptance happens only through payment: POST /api/payments/checkout.
  */
-const patchSchema = z.union([
-  z.object({ status: z.enum(['rejected', 'withdrawn']) }),
-  quoteSchema.partial().omit({ currency: true }).refine(d => Object.keys(d).length > 0, { message: 'Nothing to change' }),
-]);
+const statusSchema = z.object({ status: z.enum(['rejected', 'withdrawn']) });
+const reviseSchema = quoteSchema.partial().omit({ currency: true }).refine(d => Object.keys(d).length > 0, { message: 'Nothing to change' });
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ quoteId: string }> }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { quoteId } = await params;
-  const parsed = patchSchema.safeParse(await req.json().catch(() => null));
+  const body = await req.json().catch(() => null);
+  const isStatusChange = typeof body === 'object' && body !== null && 'status' in body;
+  const parsed = isStatusChange ? statusSchema.safeParse(body) : reviseSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: 'Invalid request. Accept a quote by paying for it.' }, { status: 400 });
+    return isStatusChange
+      ? NextResponse.json({ error: 'Invalid request. Accept a quote by paying for it.' }, { status: 400 })
+      : validationResponse(parsed.error);
   }
 
   const db = getDb();
@@ -65,6 +69,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ quoteI
     return NextResponse.json({ error: `This request is ${request.status}` }, { status: 409 });
   }
   const { priceCents, message, validUntil, aircraftId, worksheet } = parsed.data;
+  if (validUntil) {
+    const first = await db.one<{ departure_date: string }>('SELECT departure_date FROM booking_legs WHERE request_id = ? ORDER BY leg_order LIMIT 1', [request.id]);
+    const validity = resolveValidUntil(validUntil, first?.departure_date ?? null);
+    if ('error' in validity) {
+      return NextResponse.json({ error: 'Check the highlighted fields.', fieldErrors: { validUntil: [validity.error] } }, { status: 400 });
+    }
+  }
   if (worksheet) {
     await saveWorksheet(db, quote.id, operator.id, worksheet);
     await learnFromQuote(db, operator.id, { ...worksheet, aircraftId: worksheet.aircraftId ?? aircraftId ?? quote.aircraft_id }, priceCents ?? quote.price_cents);
@@ -76,7 +87,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ quoteI
   }
   if (aircraftId) {
     const owned = await db.one('SELECT id FROM aircraft WHERE id = ? AND operator_id = ?', [aircraftId, operator.id]);
-    if (!owned) return NextResponse.json({ error: { aircraftId: ['Aircraft not in your fleet'] } }, { status: 400 });
+    if (!owned) return NextResponse.json({ error: 'Check the highlighted fields.', fieldErrors: { aircraftId: ['Aircraft not in your fleet'] } }, { status: 400 });
   }
   const priceChanged = priceCents != null && priceCents !== quote.price_cents;
   await db.run(`

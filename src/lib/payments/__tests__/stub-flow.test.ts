@@ -141,11 +141,11 @@ describe('payment success', () => {
     expect((await row<{ c: number }>(f.db, 'SELECT COUNT(*) c FROM refunds')).c).toBe(0);
   });
 
-  it('cannot be simulated by another customer or twice', async () => {
+  it('cannot be simulated by another customer, and a second tap is a no-op', async () => {
     const { paymentId } = await createCheckout(f.db, { quoteId: f.quoteA, customerId: f.customerId, baseUrl: BASE });
     await expectError(simulateStubPayment(f.db, paymentId, f.otherCustomerId, BASE), 404);
     await simulateStubPayment(f.db, paymentId, f.customerId, BASE);
-    await expectError(simulateStubPayment(f.db, paymentId, f.customerId, BASE), 409);
+    expect(await simulateStubPayment(f.db, paymentId, f.customerId, BASE)).toBe('duplicate');
   });
 
   it('refunds automatically when a superseded checkout is paid after another booked', async () => {

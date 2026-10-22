@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { validationResponse } from '@/lib/api/validation';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { toId } from '@/lib/db/queries';
@@ -13,7 +14,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ legId: 
   if (session.role !== 'customer') return NextResponse.json({ error: 'Only travelers can book a flight' }, { status: 403 });
 
   const parsed = emptyLegBookSchema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
+  if (!parsed.success) return validationResponse(parsed.error);
 
   const limited = await rateLimited('bookingCreate', session.userId);
   if (limited) return limited;

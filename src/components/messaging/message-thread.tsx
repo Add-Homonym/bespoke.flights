@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Notice } from '@/components/ui/notice';
 import type { ThreadMessage } from '@/lib/messaging/messages';
 
 const POLL_MS = 15_000;
@@ -32,6 +33,7 @@ export function MessageThread({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [badge, setBadge] = useState(unread);
+  const [closed, setClosed] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const source = `/api/booking-requests/${requestId}/messages?operatorId=${operatorId}`;
 
@@ -41,6 +43,7 @@ export function MessageThread({
       if (!res.ok) { setError('Could not load messages.'); return; }
       const data = await res.json();
       setMessages(data.messages);
+      setClosed(!!data.closed);
       setBadge(0);
       setError('');
     } catch {
@@ -71,7 +74,11 @@ export function MessageThread({
     });
     const data = await res.json().catch(() => ({}));
     setBusy(false);
-    if (!res.ok) { setError(typeof data.error === 'string' ? data.error : 'Could not send the message.'); return; }
+    if (!res.ok) {
+      if (res.status === 409) setClosed(true);
+      setError(typeof data.error === 'string' ? data.error : 'Could not send the message.');
+      return;
+    }
     setDraft('');
     setMessages(prev => [...(prev ?? []), data as ThreadMessage]);
   };
@@ -114,7 +121,9 @@ export function MessageThread({
         <div ref={endRef} />
       </div>
 
-      {viewer !== 'admin' && (
+      {closed && <p className="text-body text-ink-muted">This trip was cancelled, so this conversation is read-only.</p>}
+
+      {viewer !== 'admin' && !closed && (
         <div className="space-y-2">
           <label htmlFor={`draft-${operatorId}`} className="sr-only">Your message</label>
           <textarea
@@ -133,7 +142,7 @@ export function MessageThread({
           </div>
         </div>
       )}
-      {error && <p role="alert" className="text-label text-danger">Error: {error}</p>}
+      {error && <Notice tone="danger">{error}</Notice>}
     </section>
   );
 }

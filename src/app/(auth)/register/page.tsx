@@ -7,6 +7,9 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Notice } from '@/components/ui/notice';
 import { Segmented } from '@/components/ui/segmented';
+import { readApiFailure, summaryLine } from '@/lib/api/form-errors';
+
+const FIELD_LABELS: Record<string, string> = { name: 'Full name', email: 'Email', phone: 'Phone number', password: 'Password', companyName: 'Company name' };
 
 function RegisterForm() {
   const router = useRouter();
@@ -15,11 +18,13 @@ function RegisterForm() {
 
   const [role, setRole] = useState<'customer' | 'operator'>(defaultRole);
   const [error, setError] = useState('');
+  const [fields, setFields] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
+    setFields({});
     setLoading(true);
 
     const formData = new FormData(e.currentTarget);
@@ -40,14 +45,9 @@ function RegisterForm() {
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        const errors = data.error;
-        if (typeof errors === 'object') {
-          const firstError = Object.values(errors).flat()[0];
-          setError(String(firstError));
-        } else {
-          setError(errors || 'Registration failed');
-        }
+        const failure = await readApiFailure(res, 'Registration failed');
+        setFields(failure.fields);
+        setError(Object.keys(failure.fields).length ? summaryLine(failure.fields, FIELD_LABELS) : failure.message);
         return;
       }
 
@@ -82,12 +82,12 @@ function RegisterForm() {
       {error && <Notice tone="danger" className="mb-6">{error}</Notice>}
 
       <form onSubmit={handleSubmit} className="space-y-5">
-        <Input name="name" label="Full name" placeholder="John Doe" required autoComplete="name" />
-        <Input name="email" label="Email" type="email" placeholder="you@example.com" required autoComplete="email" />
-        <Input name="phone" label="Phone number" type="tel" placeholder="+1 (555) 123-4567" autoComplete="tel" />
-        <Input name="password" label="Password" type="password" placeholder="At least 8 characters" required minLength={8} autoComplete="new-password" />
+        <Input name="name" label="Full name" placeholder="John Doe" required autoComplete="name" error={fields.name} />
+        <Input name="email" label="Email" type="email" placeholder="you@example.com" required autoComplete="email" error={fields.email} />
+        <Input name="phone" label="Phone number" type="tel" placeholder="+1 (555) 123-4567" autoComplete="tel" error={fields.phone} />
+        <Input name="password" label="Password" type="password" placeholder="At least 8 characters" required minLength={8} autoComplete="new-password" error={fields.password} />
         {role === 'operator' && (
-          <Input name="companyName" label="Company name" placeholder="Your charter company" required />
+          <Input name="companyName" label="Company name" placeholder="Your charter company" required error={fields.companyName} />
         )}
         <Button type="submit" disabled={loading} block>
           {loading ? 'Creating account…' : 'Create account'}

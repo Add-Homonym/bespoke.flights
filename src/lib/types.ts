@@ -80,6 +80,13 @@ export interface BookingRequest {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  /** Set when a paid booking is cancelled. */
+  cancelled_at?: string | null;
+  /** Refund tier applied at cancellation: full, partial or none. */
+  cancel_tier?: 'full' | 'partial' | 'none' | null;
+  cancel_refund_cents?: number | null;
+  /** The empty-leg listing this request was booked from. */
+  empty_leg_id?: number | null;
 }
 
 export interface BookingLeg {
@@ -102,7 +109,7 @@ export interface Quote {
   price_cents: number;
   currency: string;
   message: string | null;
-  status: 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'expired';
+  status: 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'expired' | 'cancelled';
   valid_until: string | null;
   is_empty_leg: number;  // 1 = repositioning flight, charged the empty-leg commission
   empty_leg_id: number | null;  // the listing this quote was booked from
@@ -169,6 +176,8 @@ export interface Payment {
   dispute_status: string | null;
   /** Set on a price-difference payment for an accepted change request. */
   change_request_id: number | null;
+  /** "card ending 4242" once known; null for test payments. */
+  payment_method_label?: string | null;
   created_at: string;
   updated_at: string;
   paid_at: string | null;

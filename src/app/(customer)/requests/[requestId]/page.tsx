@@ -14,11 +14,14 @@ import { RequestStatusBadge } from '@/components/booking/request-status';
 import { OutreachStatus } from '@/components/operator/outreach-status';
 import { PaymentStatus } from '@/components/booking/payment-status';
 import { CancelTrip } from '@/components/booking/cancel-trip';
-import { TravelerChangeRequests } from '@/components/booking/change-request';
+import { ChangeRequestSummary, TravelerChangeRequests } from '@/components/booking/change-request';
 import { changeRequestViews } from '@/lib/bookings/changes';
 import { MessageThread } from '@/components/messaging/message-thread';
 import { unreadByOperator } from '@/lib/messaging/messages';
-import { previewCancellation } from '@/lib/bookings/cancellation';
+import { cancellationSummary, previewCancellation } from '@/lib/bookings/cancellation';
+import { describePolicy, parsePolicy } from '@/lib/bookings/policy';
+import { cancelBanner } from '@/lib/bookings/cancel-text';
+import { plural } from '@/lib/plural';
 import { formatMoney, getPaymentsMode } from '@/lib/payments/config';
 import { emptyLegsForRequest } from '@/lib/empty-legs/service';
 import { EmptyLegCard } from '@/components/empty-legs/empty-leg-card';
@@ -50,8 +53,8 @@ export default async function RequestDetailPage({
 
   const legs = await db.query<BookingLeg>('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order', [request.id]);
 
-  const quotes = await db.query<Quote & { company_name: string; certificate: string | null; safety_rating: string | null; stripe_charges_enabled: number; aircraft_type?: string; aircraft_capacity?: number; tail_number?: string; aircraft_year?: number }>(`
-    SELECT q.*, o.company_name, o.certificate, o.safety_rating, o.stripe_charges_enabled, a.type as aircraft_type, a.capacity as aircraft_capacity, a.tail_number, a.year as aircraft_year
+  const quotes = await db.query<Quote & { company_name: string; cancellation_policy: string | null; certificate: string | null; safety_rating: string | null; stripe_charges_enabled: number; aircraft_type?: string; aircraft_capacity?: number; tail_number?: string; aircraft_year?: number }>(`
+    SELECT q.*, o.company_name, o.cancellation_policy, o.certificate, o.safety_rating, o.stripe_charges_enabled, a.type as aircraft_type, a.capacity as aircraft_capacity, a.tail_number, a.year as aircraft_year
     FROM quotes q
     JOIN operators o ON o.id = q.operator_id
     LEFT JOIN aircraft a ON a.id = q.aircraft_id
@@ -61,8 +64,8 @@ export default async function RequestDetailPage({
   `, [request.id]);
 
   // Most relevant payment: settled or in flight first, then the latest failure.
-  const payment = await db.one<(Payment & { company_name: string })>(`
-    SELECT p.*, o.company_name FROM payments p
+  const payment = await db.one<(Payment & { company_name: string; cancellation_policy: string | null })>(`
+    SELECT p.*, o.company_name, o.cancellation_policy FROM payments p
     JOIN operators o ON o.id = p.operator_id
     WHERE p.request_id = ? AND p.status != 'canceled' AND p.change_request_id IS NULL
     ORDER BY CASE p.status
@@ -91,6 +94,14 @@ export default async function RequestDetailPage({
     return { code: airport?.iata ?? code ?? '', city: airport?.city ?? '' };
   };
   const acceptedQuote = quotes.find(q => q.status === 'accepted');
+  // Aircraft: the booked quote's, else the one aircraft the open quotes name, else not yet known.
+  const bookedQuote = acceptedQuote ?? quotes.find(q => q.status === 'cancelled');
+  const quotedTypes = [...new Set(quotes.filter(q => q.status === 'pending' && q.aircraft_type).map(q => q.aircraft_type!))];
+  const aircraftLabel = bookedQuote?.aircraft_type
+    ? [bookedQuote.aircraft_type, bookedQuote.tail_number].filter(Boolean).join(' · ')
+    : quotedTypes.length === 1 ? quotedTypes[0]!
+    : quotedTypes.length > 1 ? `${quotedTypes.length} aircraft quoted`
+    : 'To be assigned';
   const confirmed = request.status === 'booked' || request.status === 'completed';
 
   // One "Best value" per list: the lowest price still open to book, when there is a choice.
@@ -100,17 +111,22 @@ export default async function RequestDetailPage({
   // Cancellation: paid bookings refund per the operator's policy; unpaid requests are simply withdrawn.
   const canCancel = session.role === 'customer' && ['open', 'quoted', 'booked'].includes(request.status) && !(payment && payment.status === 'processing');
   const cancelPreview = canCancel && request.status === 'booked' ? await previewCancellation(db, request) : null;
-  const changes = request.status === 'booked' || request.status === 'completed' ? await changeRequestViews(db, request.id, payment?.currency) : [];
+  const cancelled = request.status === 'cancelled' ? await cancellationSummary(db, request.id) : null;
+  const changes = ['booked', 'completed', 'cancelled'].includes(request.status) ? await changeRequestViews(db, request.id, payment?.currency) : [];
   const unread = quotes.length ? await unreadByOperator(db, request.id, request.customer_id) : new Map<number, number>();
   // Listed empty legs that fit this trip, offered while the request is still open.
   const emptyLegs = session.role === 'customer' && ['open', 'quoted'].includes(request.status) && !paymentInFlight ? await emptyLegsForRequest(db, request.id) : [];
   const isEmptyLegBooking = quotes.some(q => q.empty_leg_id);
+  // An empty leg is held, not booked, until its payment clears.
+  const awaitingPayment = request.empty_leg_id != null && ['open', 'quoted'].includes(request.status);
 
   return (
     <div className={`mx-auto max-w-3xl ${payment?.status === 'pending' || changePayment?.status === 'pending' ? 'pb-28' : ''}`}>
       <div className="mb-6">
         {confirmed ? (
           <h1 className="text-display sm:text-display-xl text-ink">Booking confirmed</h1>
+        ) : request.status === 'cancelled' ? (
+          <h1 className="text-display text-ink">Trip cancelled</h1>
         ) : (
           <h1 className="text-display text-ink">Your trip</h1>
         )}
@@ -119,15 +135,22 @@ export default async function RequestDetailPage({
       {first && last && (
         <div className="mb-8">
           <TripSummary
-            status={<RequestStatusBadge status={request.status} />}
+            status={<RequestStatusBadge status={request.status} emptyLeg={awaitingPayment} />}
             reference={`Request #${request.id}`}
             origin={place(first.origin_code)}
             destination={place(last.dest_code)}
             depart={formatDeparture(first.departure_date, first.departure_time ?? '') || first.departure_date}
             guests={request.passenger_count}
-            aircraft={acceptedQuote?.aircraft_type ?? 'To be assigned'}
+            aircraft={aircraftLabel}
           />
         </div>
+      )}
+
+      {cancelled && (
+        <Notice tone="info" className="mb-8">
+          <span className="block">{cancelBanner(cancelled).headline}</span>
+          <span className="mt-1 block text-label">{cancelBanner(cancelled).detail}</span>
+        </Notice>
       )}
 
       {submitted === '1' && (
@@ -136,8 +159,8 @@ export default async function RequestDetailPage({
         </Notice>
       )}
       {submitted === 'empty-leg' && (
-        <Notice tone="confirmed" className="mb-8">
-          The empty leg is held for you at the listed price. Pay below to confirm it. Another traveler can take it until the payment clears.
+        <Notice tone="warning" className="mb-8">
+          Not booked yet. The empty leg is held at the listed price until you pay. Book it below to confirm; another traveler can take it until your payment clears.
         </Notice>
       )}
 
@@ -160,6 +183,7 @@ export default async function RequestDetailPage({
             failureReason: payment.failure_reason,
             checkoutUrl: payment.status === 'pending' && session.role === 'customer' ? payment.checkout_url : null,
           }}
+          policyText={describePolicy(parsePolicy(payment.cancellation_policy))}
         />
       )}
 
@@ -215,6 +239,13 @@ export default async function RequestDetailPage({
         />
       )}
 
+      {request.status === 'cancelled' && changes.length > 0 && (
+        <Card className="mb-8 space-y-3">
+          <h2 className="text-title text-ink">Changes</h2>
+          {changes.map(cr => <ChangeRequestSummary key={cr.id} cr={cr} />)}
+        </Card>
+      )}
+
       {canCancel && (request.status !== 'booked' || cancelPreview) && (
         <CancelTrip
           requestId={request.id}
@@ -260,7 +291,7 @@ export default async function RequestDetailPage({
           <Card>
             <p className="text-body text-ink-muted text-center py-8">
               {outreachCount > 0
-                ? `${outreachCount} operators have been contacted. Quotes appear here as they respond.`
+                ? `${plural(outreachCount, 'operator')} ${outreachCount === 1 ? 'has' : 'have'} been contacted. Quotes appear here as they respond.`
                 : 'No quotes yet. Operators are reviewing your request.'
               }
             </p>
@@ -279,6 +310,7 @@ export default async function RequestDetailPage({
                   operatorDetail={[quote.certificate && `FAA certificate ${quote.certificate}`, quote.safety_rating].filter(Boolean).join(' · ') || undefined}
                   badge={
                     quote.status === 'accepted' ? <StatusBadge variant="confirmed">Accepted</StatusBadge>
+                    : quote.status === 'cancelled' ? <StatusBadge variant="neutral">Cancelled</StatusBadge>
                     : quote.status === 'rejected' ? <StatusBadge variant="neutral">Declined</StatusBadge>
                     : quote.status === 'withdrawn' ? <StatusBadge variant="neutral">Withdrawn</StatusBadge>
                     : expired ? <StatusBadge variant="warning">Expired</StatusBadge>
@@ -291,12 +323,15 @@ export default async function RequestDetailPage({
                   flightTime={null}
                   yearBuilt={quote.aircraft_year ?? null}
                   price={formatMoney(quote.price_cents, quote.currency)}
-                  note={(quote.message || quote.valid_until || quote.previous_price_cents != null) && (
+                  note={(quote.message || quote.valid_until || quote.previous_price_cents != null || quote.status === 'pending') && (
                     <>
                       {quote.message && <span className="block italic">&ldquo;{quote.message}&rdquo;</span>}
                       {quote.valid_until && <span className="block text-label">{expired ? 'Expired' : 'Valid until'} {quote.valid_until}</span>}
                       {quote.previous_price_cents != null && quote.previous_price_cents !== quote.price_cents && (
                         <span className="block text-label">Previously {formatMoney(quote.previous_price_cents, quote.currency)}</span>
+                      )}
+                      {quote.status === 'pending' && (
+                        <span className="block text-label">Cancellation: {describePolicy(parsePolicy(quote.cancellation_policy))}</span>
                       )}
                     </>
                   )}
@@ -312,7 +347,7 @@ export default async function RequestDetailPage({
                       requestId={request.id}
                       operatorId={quote.operator_id}
                       title={`Messages with ${quote.company_name}`}
-                      collapsed={quote.status !== 'accepted'}
+                      collapsed={quote.status !== 'accepted' && quote.status !== 'cancelled'}
                       unread={unread.get(quote.operator_id) ?? 0}
                       viewer={session.role}
                     />

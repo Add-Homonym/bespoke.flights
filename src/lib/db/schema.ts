@@ -445,6 +445,17 @@ ALTER TABLE quotes ADD COLUMN IF NOT EXISTS empty_leg_id INTEGER REFERENCES empt
 ALTER TABLE outreach_log ADD COLUMN IF NOT EXISTS reply_token TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_outreach_reply_token ON outreach_log(reply_token);
 ALTER TABLE quotes ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'app';
+
+-- Cancellation is one state change: when and how a paid booking was cancelled,
+-- why a change request was closed, and which card the money goes back to.
+ALTER TABLE booking_requests ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;
+ALTER TABLE booking_requests ADD COLUMN IF NOT EXISTS cancel_tier TEXT;
+ALTER TABLE booking_requests ADD COLUMN IF NOT EXISTS cancel_refund_cents BIGINT;
+ALTER TABLE change_requests ADD COLUMN IF NOT EXISTS closed_reason TEXT;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_method_label TEXT;
+
+-- An empty-leg booking links to its listing here. The traveler notes stay in notes.
+ALTER TABLE booking_requests ADD COLUMN IF NOT EXISTS empty_leg_id INTEGER REFERENCES empty_legs(id);
 `;
 
 /**
@@ -464,4 +475,25 @@ export const SCHEMA_BLOCKS: string[] = [
         CHECK (status IN ('pending','accepted','rejected','withdrawn','expired'));
     END IF;
   END $$`,
+  // Add 'cancelled' to quotes.status: the accepted quote of a cancelled booking.
+  `DO $$
+  BEGIN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid = c.conrelid
+      WHERE t.relname = 'quotes' AND c.conname = 'quotes_status_check' AND pg_get_constraintdef(c.oid) LIKE '%cancelled%'
+    ) THEN
+      ALTER TABLE quotes DROP CONSTRAINT IF EXISTS quotes_status_check;
+      ALTER TABLE quotes ADD CONSTRAINT quotes_status_check
+        CHECK (status IN ('pending','accepted','rejected','withdrawn','expired','cancelled'));
+    END IF;
+  END $$`,
+  // Empty-leg bookings used to put "Empty leg #N" in the special requests. Move the link to its own column.
+  `UPDATE booking_requests br SET empty_leg_id = q.empty_leg_id
+   FROM quotes q WHERE q.request_id = br.id AND q.empty_leg_id IS NOT NULL AND br.empty_leg_id IS NULL AND br.form_variant = 'empty_leg'`,
+  `UPDATE booking_requests
+   SET notes = NULLIF(btrim(regexp_replace(notes, '(^|\n)Empty leg #[0-9]+', '', 'g'), E' \n'), '')
+   WHERE form_variant = 'empty_leg' AND notes ~ 'Empty leg #[0-9]+'`,
+  // Backfill: bookings cancelled before this change still show an accepted quote.
+  `UPDATE quotes SET status = 'cancelled'
+   WHERE status = 'accepted' AND request_id IN (SELECT id FROM booking_requests WHERE status = 'cancelled')`,
 ];

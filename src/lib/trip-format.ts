@@ -3,6 +3,8 @@
  * fixed locale and UTC so server and browser render identical text.
  */
 
+import { displayCode } from '@/lib/airports';
+
 export interface TripLeg {
   from: string;
   to: string;
@@ -39,11 +41,11 @@ export function legLine(leg: TripLeg, index: number): string {
 }
 
 export function fromDbLegs(legs: { origin_code: string; dest_code: string; departure_date: string; departure_time: string | null }[]): TripLeg[] {
-  return legs.map(l => ({ from: l.origin_code, to: l.dest_code, date: l.departure_date, time: l.departure_time ?? '' }));
+  return legs.map(l => ({ from: displayCode(l.origin_code), to: displayCode(l.dest_code), date: l.departure_date, time: l.departure_time ?? '' }));
 }
 
 export function fromDraftLegs(legs: { originCode: string; destCode: string; departureDate: string; departureTime: string }[]): TripLeg[] {
-  return legs.map(l => ({ from: l.originCode.toUpperCase(), to: l.destCode.toUpperCase(), date: l.departureDate, time: l.departureTime }));
+  return legs.map(l => ({ from: displayCode(l.originCode.toUpperCase()), to: displayCode(l.destCode.toUpperCase()), date: l.departureDate, time: l.departureTime }));
 }
 
 /**

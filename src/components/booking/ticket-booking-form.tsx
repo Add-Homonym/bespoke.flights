@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { Minus, Pencil, Plane, Plus, X } from 'lucide-react';
 import { AirportField } from '@/components/ui/route-field';
+import { Button } from '@/components/ui/button';
 import { Notice } from '@/components/ui/notice';
 import { AccountStep } from '@/components/booking/account-step';
 import { AutoRequestBar, useAutoRequest } from '@/components/booking/auto-request';
@@ -32,6 +33,14 @@ function Pending({ width, label }: { width: string; label: string }) {
 }
 
 const fieldInput = 'block w-full bg-transparent font-mono uppercase text-ink placeholder:normal-case placeholder:font-sans placeholder:text-ink-subtle';
+// The big airport codes need a smaller placeholder so "City or code" fits a half-width cell at 390px.
+const airportInput = `${fieldInput} text-ellipsis placeholder:text-[16px] placeholder:font-normal text-[28px] leading-[36px] font-semibold`;
+
+const noopSubscribe = () => () => {};
+/** False while the server HTML is on screen, true once React owns the page. */
+function useHydrated() {
+  return useSyncExternalStore(noopSubscribe, () => true, () => false);
+}
 
 /** One leg as a paper ticket with the fields printed into it. */
 /**
@@ -120,7 +129,7 @@ function LegTicket({ index, count, leg, passengers, onChange, onPassengers, onRe
             <AirportField id={`${base}-from`} label="From" value={leg.originCode} onChange={v => onChange({ originCode: v })} required
               listClass="left-0 w-[min(18rem,calc(100vw-3rem))]"
               placeholder="City or code" labelClass="text-overline" cellClass="rounded-md px-2 py-2 -mx-2"
-              inputClass={`${fieldInput} text-[28px] leading-[36px] font-semibold`} />
+              inputClass={airportInput} />
             <div aria-hidden="true" className="flex items-center gap-1 pt-9 text-royal">
               <span className="hidden h-px w-6 border-t border-dashed border-ink-subtle sm:block" />
               <Plane size={20} strokeWidth={1.5} />
@@ -129,7 +138,7 @@ function LegTicket({ index, count, leg, passengers, onChange, onPassengers, onRe
             <AirportField id={`${base}-to`} label="To" value={leg.destCode} onChange={v => onChange({ destCode: v })} required
               listClass="right-0 w-[min(18rem,calc(100vw-3rem))]"
               placeholder="City or code" labelClass="text-overline" cellClass="rounded-md px-2 py-2 -mx-2"
-              inputClass={`${fieldInput} text-[28px] leading-[36px] font-semibold`} />
+              inputClass={airportInput} />
           </div>
           {same && <p className="text-label text-danger">Origin and destination are the same airport.</p>}
 
@@ -213,6 +222,10 @@ export function TicketBookingForm({ initialDraft, viewerRole }: { initialDraft: 
   const [tags, setTags] = useState<RequestTagId[]>(start.tags);
   const [custom, setCustom] = useState<string[]>(start.custom);
   const [restored, setRestored] = useState(initialDraft !== null && draftHasContent(initialDraft));
+  const [attempted, setAttempted] = useState(false);
+  // The saved trip is in the first render. Until React takes over, the fields are locked so
+  // anything typed into the server HTML cannot mix with the restored values.
+  const hydrated = useHydrated();
 
   const draft: BookingDraft = { legs, passengerCount, tags, custom, variant: 'ticket' };
   useEffect(() => {
@@ -222,6 +235,12 @@ export function TicketBookingForm({ initialDraft, viewerRole }: { initialDraft: 
   const payload = draftToRequest(draft);
   const ready = legs.every(legIsComplete) && bookingRequestSchema.safeParse(payload).success;
   const auto = useAutoRequest({ payload, ready, viewerRole, startOnHold: restored });
+
+  const submit = () => {
+    if (!ready) { setAttempted(true); return; }
+    if (viewerRole === 'customer') void auto.send();
+    else document.getElementById('account-step')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
 
   const patchLeg = (i: number, patch: Partial<DraftLeg>) =>
     setLegs(prev => prev.map((l, j) => (j === i ? { ...l, ...patch } : l)));
@@ -253,7 +272,8 @@ export function TicketBookingForm({ initialDraft, viewerRole }: { initialDraft: 
 
       {auto.error && <Notice tone="danger">{auto.error}</Notice>}
 
-      <form id="booking-form" onSubmit={e => { e.preventDefault(); void auto.send(); }} className="space-y-6">
+      <form id="booking-form" noValidate onSubmit={e => { e.preventDefault(); submit(); }} className="space-y-6">
+        <fieldset disabled={!hydrated} className="contents">
         <ol className="space-y-6" aria-label="Tickets">
           {legs.map((leg, i) => (
             <li key={i}>
@@ -271,8 +291,16 @@ export function TicketBookingForm({ initialDraft, viewerRole }: { initialDraft: 
           </button>
         )}
 
-        <div id="submit-section" aria-live="polite">
+        </fieldset>
+
+        <div id="submit-section" aria-live="polite" className="space-y-3">
           <AutoRequestBar state={auto} ready={ready} viewerRole={viewerRole} />
+          {attempted && !ready && (
+            <p role="alert" className="text-label text-danger">Choose where from, where to and a date for every leg, then request quotes.</p>
+          )}
+          <Button id="request-quotes" type="submit" block disabled={auto.loading || !hydrated} aria-busy={auto.loading}>
+            {auto.loading ? 'Sending…' : 'Request quotes'}
+          </Button>
         </div>
       </form>
 

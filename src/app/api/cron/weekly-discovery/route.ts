@@ -15,6 +15,7 @@
  */
 
 import { NextResponse } from 'next/server';
+import { validationResponse } from '@/lib/api/validation';
 import { z } from 'zod';
 import { getDb } from '@/lib/db';
 import { adminSession, bearerOk } from '@/lib/cron-auth';
@@ -66,7 +67,7 @@ export async function POST(req: Request) {
   const raw = await req.json().catch(() => ({}));
   const parsed = manualRunSchema.safeParse(raw ?? {});
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
+    return validationResponse(parsed.error);
   }
 
   return run({

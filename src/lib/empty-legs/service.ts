@@ -19,7 +19,17 @@ import { findAirport } from '@/lib/airports';
 import { notifyEmptyLegUnavailable } from '@/lib/notify/traveler';
 
 export class EmptyLegError extends Error {
-  constructor(message: string, public status: number) { super(message); }
+  /** The form field the message belongs under, when there is one. */
+  constructor(message: string, public status: number, public field?: string) { super(message); }
+}
+
+/** Seats cannot exceed what the named aircraft carries. */
+async function checkSeats(db: Db, aircraftId: number | null, seats: number): Promise<void> {
+  if (!aircraftId) return;
+  const plane = await db.one<{ capacity: number; type: string }>('SELECT capacity, type FROM aircraft WHERE id = ?', [aircraftId]);
+  if (plane && seats > plane.capacity) {
+    throw new EmptyLegError(`This ${plane.type} seats ${plane.capacity}. Enter ${plane.capacity} or fewer.`, 400, 'seats');
+  }
 }
 
 export interface EmptyLegView extends EmptyLeg {
@@ -88,8 +98,9 @@ export interface NewEmptyLeg {
 export async function createEmptyLeg(db: Db, operatorId: number, input: NewEmptyLeg): Promise<number> {
   if (input.aircraftId) {
     const owned = await db.one('SELECT id FROM aircraft WHERE id = ? AND operator_id = ?', [input.aircraftId, operatorId]);
-    if (!owned) throw new EmptyLegError('Aircraft not in your fleet', 400);
+    if (!owned) throw new EmptyLegError('Aircraft not in your fleet', 400, 'aircraftId');
   }
+  await checkSeats(db, input.aircraftId ?? null, input.seats);
   const { id } = (await db.one<{ id: number }>(`
     INSERT INTO empty_legs (operator_id, aircraft_id, origin_code, dest_code, departure_date, departure_time, flex_days, seats, price_cents, currency, notes)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
@@ -98,13 +109,51 @@ export async function createEmptyLeg(db: Db, operatorId: number, input: NewEmpty
   return id;
 }
 
-/** Price, seats or notes of a listed flight. Travelers who already hold a quote keep their price. */
-export async function updateEmptyLeg(db: Db, operatorId: number, id: number, patch: { priceCents?: number; seats?: number; notes?: string | null }): Promise<EmptyLeg> {
+export interface EmptyLegPatch {
+  priceCents?: number;
+  seats?: number;
+  departureDate?: string;
+  departureTime?: string | null;
+  flexDays?: number;
+  notes?: string | null;
+}
+
+/**
+ * Price, seats, date, time, flexibility or notes of a listing nobody has booked.
+ * Travelers who already hold a quote keep their price. A quote made for a date
+ * or time that has since moved, or for more guests than the listing now seats,
+ * is withdrawn and that traveler is told.
+ */
+export async function updateEmptyLeg(db: Db, operatorId: number, id: number, patch: EmptyLegPatch, baseUrl = ''): Promise<EmptyLeg> {
   const leg = await db.one<EmptyLeg>('SELECT * FROM empty_legs WHERE id = ? AND operator_id = ?', [id, operatorId]);
   if (!leg) throw new EmptyLegError('Listing not found', 404);
-  if (leg.status !== 'listed') throw new EmptyLegError(`This listing is ${leg.status}`, 409);
-  await db.run('UPDATE empty_legs SET price_cents = COALESCE(?, price_cents), seats = COALESCE(?, seats), notes = ?, updated_at = now() WHERE id = ?',
-    [patch.priceCents ?? null, patch.seats ?? null, patch.notes === undefined ? leg.notes : (patch.notes || null), id]);
+  if (leg.status !== 'listed') throw new EmptyLegError(`This listing is ${leg.status}. Only a listed flight can be edited.`, 409);
+  const seats = patch.seats ?? leg.seats;
+  await checkSeats(db, leg.aircraft_id, seats);
+  const date = patch.departureDate ?? leg.departure_date;
+  const time = patch.departureTime === undefined ? leg.departure_time : (patch.departureTime || null);
+  const moved = date !== leg.departure_date || time !== leg.departure_time;
+
+  const affected = await db.transaction(async tx => {
+    await tx.run(`
+      UPDATE empty_legs SET price_cents = COALESCE(?, price_cents), seats = ?, departure_date = ?, departure_time = ?,
+        flex_days = COALESCE(?, flex_days), notes = ?, updated_at = now() WHERE id = ?
+    `, [patch.priceCents ?? null, seats, date, time, patch.flexDays ?? null,
+        patch.notes === undefined ? leg.notes : (patch.notes || null), id]);
+    if (moved) {
+      return closeOtherQuotes(tx, id, null);
+    }
+    if (seats < leg.seats) {
+      const rows = await tx.query<{ request_id: number }>(`
+        UPDATE quotes SET status = 'withdrawn'
+        WHERE empty_leg_id = ? AND status = 'pending'
+          AND request_id IN (SELECT id FROM booking_requests WHERE passenger_count > ?)
+        RETURNING request_id`, [id, seats]);
+      return rows.map(r => r.request_id);
+    }
+    return [];
+  });
+  for (const requestId of affected) await notifyEmptyLegUnavailable(db, requestId, baseUrl);
   return (await db.one<EmptyLeg>('SELECT * FROM empty_legs WHERE id = ?', [id]))!;
 }
 
@@ -145,11 +194,11 @@ export async function bookEmptyLeg(
     return { requestId: r.request_id, quoteId: open.id };
   }
 
-  const notes = [input.notes?.trim(), `Empty leg #${leg.id}`].filter(Boolean).join('\n');
+  const notes = input.notes?.trim() || null;
   return db.transaction(async tx => {
     const { id: requestId } = (await tx.one<{ id: number }>(
-      "INSERT INTO booking_requests (customer_id, status, passenger_count, notes, form_variant) VALUES (?, 'quoted', ?, ?, 'empty_leg') RETURNING id",
-      [customerId, input.passengerCount, notes]))!;
+      "INSERT INTO booking_requests (customer_id, status, passenger_count, notes, form_variant, empty_leg_id) VALUES (?, 'quoted', ?, ?, 'empty_leg', ?) RETURNING id",
+      [customerId, input.passengerCount, notes, leg.id]))!;
     await tx.run(
       'INSERT INTO booking_legs (request_id, leg_order, origin_code, dest_code, departure_date, departure_time) VALUES (?, 1, ?, ?, ?, ?)',
       [requestId, leg.origin_code, leg.dest_code, leg.departure_date, leg.departure_time]);
@@ -264,13 +313,13 @@ export async function quoteRequestFromListing(db: Db, operatorId: number, listin
 
 export const EMPTY_LEG_COOKIE = 'bf_empty_leg';
 
-export function parseEmptyLegCookie(raw: string | undefined): { id: number; passengerCount: number } | null {
+export function parseEmptyLegCookie(raw: string | undefined): { id: number; passengerCount: number; notes?: string } | null {
   if (!raw) return null;
   try {
-    const v = JSON.parse(raw) as { id?: unknown; passengerCount?: unknown };
+    const v = JSON.parse(raw) as { id?: unknown; passengerCount?: unknown; notes?: unknown };
     const id = Number(v.id), passengerCount = Number(v.passengerCount);
     if (!Number.isInteger(id) || id <= 0 || !Number.isInteger(passengerCount) || passengerCount <= 0) return null;
-    return { id, passengerCount };
+    return { id, passengerCount, notes: typeof v.notes === 'string' ? v.notes.slice(0, 300) : undefined };
   } catch { return null; }
 }
 
@@ -282,7 +331,7 @@ export async function claimEmptyLegCookie(db: Db, customerId: number): Promise<n
   if (!choice) return null;
   store.delete(EMPTY_LEG_COOKIE);
   try {
-    return (await bookEmptyLeg(db, choice.id, customerId, { passengerCount: choice.passengerCount })).requestId;
+    return (await bookEmptyLeg(db, choice.id, customerId, { passengerCount: choice.passengerCount, notes: choice.notes })).requestId;
   } catch (err) {
     if (err instanceof EmptyLegError) return null;
     throw err;

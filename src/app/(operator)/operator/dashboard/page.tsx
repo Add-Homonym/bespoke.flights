@@ -66,7 +66,11 @@ export default async function OperatorDashboardPage() {
   const operator = await db.one<Operator>('SELECT * FROM operators WHERE user_id = ?', [session!.userId]);
   if (!operator) return <Notice tone="danger">No operator company is linked to this account.</Notice>;
 
-  const { deals, fleet, team, settings } = await buildDashboard(db, operator);
+  const { deals, fleet, team, settings, checklist } = await buildDashboard(db, operator);
+  const required = checklist.filter(c => c.gate !== 'optional');
+  const missing = required.filter(c => !c.done);
+  const showChecklist = operator.status === 'pending' || missing.length > 0;
+  const approvalWaitsOn = checklist.filter(c => c.gate === 'approval' && !c.done);
 
   return (
     <div id="operator-dashboard" className="space-y-10">
@@ -82,6 +86,45 @@ export default async function OperatorDashboardPage() {
 
       {operator.status === 'pending' && (
         <Notice tone="warning">Your account is pending approval. Requests start arriving once it is approved.</Notice>
+      )}
+
+      {showChecklist && (
+        <section id="setup-checklist" aria-labelledby="setup-checklist-title" className="rounded-lg border border-hairline bg-surface-raised p-6 shadow-raised">
+          <h2 id="setup-checklist-title" className="text-heading text-ink">
+            {operator.status === 'pending' ? 'Get ready for approval' : 'Finish setting up'}
+          </h2>
+          <p className="mt-1 text-body text-ink-muted">
+            {operator.status === 'pending'
+              ? approvalWaitsOn.length
+                ? `Staff approve operators by hand after reviewing the certificate, safety rating and fleet. Still missing: ${approvalWaitsOn.map(c => c.label.toLowerCase()).join(', ')}.`
+                : 'Everything staff review is in place. You will be emailed when your account is approved.'
+              : `${missing.length} of ${required.length} required steps still open.`}
+          </p>
+          <ul className="mt-4 divide-y divide-hairline">
+            {checklist.map(item => (
+              <li key={item.key} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-3">
+                <span className={`inline-flex min-w-24 items-center gap-1.5 text-label ${item.done ? 'text-confirmed' : 'text-warning'}`}>
+                  {item.done ? <CircleCheck size={16} strokeWidth={1.5} aria-hidden="true" /> : <CircleAlert size={16} strokeWidth={1.5} aria-hidden="true" />}
+                  {item.done ? 'Done' : 'Missing'}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-body text-ink">
+                    {item.label}
+                    {item.gate === 'approval' && <span className="ml-2 text-label text-ink-muted">needed for approval</span>}
+                    {item.gate === 'payment' && <span className="ml-2 text-label text-ink-muted">needed to be paid</span>}
+                    {item.gate === 'optional' && <span className="ml-2 text-label text-ink-muted">optional</span>}
+                  </span>
+                  <span className="block text-label text-ink-muted">{item.detail}</span>
+                </span>
+                {!item.done && (
+                  <Link href={item.href} className="inline-flex min-h-11 items-center text-label text-royal underline underline-offset-4">
+                    Fix<span className="sr-only">: {item.label}</span>
+                  </Link>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       <div id="dashboard-tiles" className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -125,6 +168,11 @@ export default async function OperatorDashboardPage() {
         <Tile id="tile-settings" title="Settings" icon={Settings} href="/operator/settings" action="Settings">
           <Stat icon={SlidersHorizontal} label="Routing profile" tone={settings.profileComplete ? 'confirmed' : 'danger'}
             value={<Check good={settings.profileComplete} yes="Set" no="Incomplete" />} />
+          {!settings.profileComplete && (
+            <li className="py-2.5 text-label text-ink-muted">
+              Requests are routed to you by market, aircraft category and contact. Add {settings.profileMissing.join(', ')}.
+            </li>
+          )}
           <Stat icon={Banknote} label="Payouts" tone={settings.payoutsReady ? 'confirmed' : 'danger'}
             value={<Check good={settings.payoutsReady} yes="Ready" no="Not set up" />} />
         </Tile>

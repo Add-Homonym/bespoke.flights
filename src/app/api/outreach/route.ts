@@ -30,14 +30,18 @@ export async function GET(req: Request) {
 
     const contact = session.role === 'admin' ? 'o.contact_method, o.contact_email, o.contact_phone,' : '';
     const own = access.operatorId != null;
+    // A traveler sees who was asked and how it stands: no score, channel, RFQ text or reply token.
+    const columns = session.role === 'customer'
+      ? 'ol.id, ol.request_id, ol.operator_id, ol.status, ol.sent_at, ol.responded_at,'
+      : 'ol.*,';
     const logs = await db.query(`
-      SELECT ol.*, o.company_name, ${contact}
+      SELECT ${columns} o.company_name, ${contact}
              q.id as quote_id, q.price_cents as quote_price, q.status as quote_status
       FROM outreach_log ol
       JOIN operators o ON o.id = ol.operator_id
       LEFT JOIN quotes q ON q.request_id = ol.request_id AND q.operator_id = ol.operator_id
       WHERE ol.request_id = ? ${own ? 'AND ol.operator_id = ?' : ''}
-      ORDER BY ol.match_score DESC
+      ORDER BY ${session.role === 'customer' ? 'ol.sent_at' : 'ol.match_score DESC'}
     `, own ? [request.id, access.operatorId] : [request.id]);
     return NextResponse.json(logs);
   }
@@ -53,7 +57,7 @@ export async function GET(req: Request) {
   }
 
   const logs = await db.query(`
-    SELECT ol.*, o.company_name, br.status as request_status
+    SELECT ${session.role === 'customer' ? 'ol.id, ol.request_id, ol.operator_id, ol.status, ol.sent_at, ol.responded_at,' : 'ol.*,'} o.company_name, br.status as request_status
     FROM outreach_log ol
     JOIN operators o ON o.id = ol.operator_id
     JOIN booking_requests br ON br.id = ol.request_id

@@ -81,7 +81,7 @@ export async function buildBoard(db: Db, operatorId: number): Promise<Board> {
     `, [operatorId]),
     // This operator's bookings cancelled in the last 14 days
     db.query<Row>(`${BASE}
-      WHERE q.status = 'accepted' AND br.status = 'cancelled' AND br.updated_at > now() - interval '14 days'
+      WHERE q.status IN ('accepted', 'cancelled') AND br.status = 'cancelled' AND br.updated_at > now() - interval '14 days'
       ORDER BY br.updated_at DESC LIMIT 20
     `, [operatorId]),
     // Pending change requests on this operator's bookings

@@ -1,5 +1,6 @@
 'use client';
 
+import { readApiFailure, summaryLine } from '@/lib/api/form-errors';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/input';
@@ -58,8 +59,8 @@ export function AccountStep({
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        const err = data.error;
-        setError(typeof err === 'object' && err ? String(Object.values(err).flat()[0]) : err || 'Something went wrong. Try again.');
+        const failure = await readApiFailure(new Response(JSON.stringify(data), { status: res.status }));
+        setError(Object.keys(failure.fields).length ? summaryLine(failure.fields) : failure.message);
         return;
       }
 

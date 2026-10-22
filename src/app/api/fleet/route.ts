@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { validationResponse } from '@/lib/api/validation';
 import { getDb } from '@/lib/db';
 import { aircraftSchema } from '@/lib/validations';
 import { currentOperator, presentFleet } from '@/lib/fleet';
@@ -21,7 +22,7 @@ export async function POST(req: Request) {
 
   const parsed = aircraftSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
+    return validationResponse(parsed.error);
   }
 
   const a = parsed.data;

@@ -3,6 +3,8 @@
 import { useRouter } from 'next/navigation';
 import { useId, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Notice } from '@/components/ui/notice';
+import { readApiFailure } from '@/lib/api/form-errors';
 import { EMPTY_LEG_COOKIE } from '@/lib/empty-legs/service';
 
 /**
@@ -14,6 +16,8 @@ export function BookEmptyLeg({ legId, seats, viewerRole }: { legId: number; seat
   const router = useRouter();
   const paxId = useId();
   const [pax, setPax] = useState(1);
+  const [notes, setNotes] = useState('');
+  const notesId = useId();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -24,19 +28,20 @@ export function BookEmptyLeg({ legId, seats, viewerRole }: { legId: number; seat
     setError('');
     if (!viewerRole) {
       const secure = location.protocol === 'https:' ? '; Secure' : '';
-      document.cookie = `${EMPTY_LEG_COOKIE}=${encodeURIComponent(JSON.stringify({ id: legId, passengerCount: pax }))}; Path=/; Max-Age=86400; SameSite=Lax${secure}`;
+      document.cookie = `${EMPTY_LEG_COOKIE}=${encodeURIComponent(JSON.stringify({ id: legId, passengerCount: pax, notes: notes.trim().slice(0, 300) || undefined }))}; Path=/; Max-Age=86400; SameSite=Lax${secure}`;
       router.push('/register');
       return;
     }
     const res = await fetch(`/api/empty-legs/${legId}/book`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ passengerCount: pax }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ passengerCount: pax, notes: notes.trim() || undefined }),
     });
-    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      setError(typeof data.error === 'string' ? data.error : 'Could not book this flight.');
+      const failure = await readApiFailure(res, 'Could not book this flight.');
+      setError(failure.fields.passengerCount ?? failure.message);
       setLoading(false);
       return;
     }
+    const data = await res.json();
     router.push(`/requests/${data.requestId}?submitted=empty-leg`);
   };
 
@@ -51,7 +56,15 @@ export function BookEmptyLeg({ legId, seats, viewerRole }: { legId: number; seat
         />
         <Button size="sm" onClick={book} disabled={loading}>{viewerRole ? 'Book this flight' : 'Sign in to book'}</Button>
       </div>
-      {error && <p role="alert" className="text-label text-danger">Error: {error}</p>}
+      <div className="w-full sm:w-72">
+        <label htmlFor={notesId} className="sr-only">Special requests (optional)</label>
+        <input
+          id={notesId} value={notes} onChange={e => setNotes(e.target.value)} maxLength={300}
+          placeholder="Special requests (optional)"
+          className="h-11 w-full rounded-md border border-border-control bg-surface-raised px-3 text-body text-ink placeholder:text-ink-subtle"
+        />
+      </div>
+      {error && <Notice tone="danger">{error}</Notice>}
     </div>
   );
 }

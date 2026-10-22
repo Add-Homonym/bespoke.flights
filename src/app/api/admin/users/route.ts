@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { validationResponse } from '@/lib/api/validation';
 import { getDb } from '@/lib/db';
 import { adminCreateUserSchema } from '@/lib/validations';
 import { adminErrorResponse, requireAdmin } from '@/lib/admin/guard';
@@ -19,7 +20,7 @@ export async function POST(req: Request) {
   const me = await requireAdmin();
   if ('error' in me) return me.error;
   const parsed = adminCreateUserSchema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
+  if (!parsed.success) return validationResponse(parsed.error);
   try {
     const result = await createAccount(getDb(), { ...parsed.data, password: parsed.data.password || null });
     return NextResponse.json({ id: result.userId, operatorId: result.operatorId, password: result.password },

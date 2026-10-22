@@ -37,7 +37,7 @@ export default async function ReceiptPage({ params }: { params: Promise<{ reques
     <div className="mx-auto max-w-3xl print:max-w-none">
       <div className="mb-6 flex items-start justify-between gap-4 print:hidden">
         <Link href={`/requests/${request.id}`} className="text-label text-royal underline underline-offset-4">Back to trip</Link>
-        <PrintButton />
+        <PrintButton label="Print receipt" />
       </div>
 
       <article className="rounded-lg border border-hairline bg-surface-raised p-8 shadow-raised print:border-0 print:p-0 print:shadow-none">

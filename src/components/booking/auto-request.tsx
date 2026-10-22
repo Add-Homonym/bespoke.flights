@@ -74,7 +74,7 @@ export function AutoRequestBar({ state, ready, viewerRole }: {
   ready: boolean;
   viewerRole: Viewer;
 }) {
-  const { loading, hold, setHold, send, signature } = state;
+  const { loading, hold, setHold, signature } = state;
   if (!ready || viewerRole === null) return null;
   if (viewerRole !== 'customer') {
     return <Notice tone="warning">You are signed in as an operator or admin. Sign in with a traveler account to request quotes.</Notice>;
@@ -88,10 +88,9 @@ export function AutoRequestBar({ state, ready, viewerRole }: {
   }
   if (hold) {
     return (
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-hairline bg-surface-raised px-4 py-3">
-        <span className="text-body text-ink-muted">Paused. Edit anything, then send.</span>
-        <Button id="request-quotes" type="button" size="sm" onClick={() => void send()}>Request quotes now</Button>
-      </div>
+      <p className="rounded-md border border-hairline bg-surface-raised px-4 py-3 text-body text-ink-muted">
+        Paused. Edit anything, then press Request quotes.
+      </p>
     );
   }
   return (
@@ -101,10 +100,7 @@ export function AutoRequestBar({ state, ready, viewerRole }: {
           <Send size={16} strokeWidth={1.5} aria-hidden="true" className="text-royal" />
           Requesting quotes in a moment. Changes restart the timer.
         </span>
-        <span className="flex items-center gap-1">
-          <Button type="button" variant="quiet" size="sm" onClick={() => setHold(true)}>Wait</Button>
-          <Button id="request-quotes" type="button" size="sm" onClick={() => void send()}>Send now</Button>
-        </span>
+        <Button type="button" variant="quiet" size="sm" onClick={() => setHold(true)}>Wait</Button>
       </div>
       <div aria-hidden="true" className="h-1 bg-surface-sunken">
         <div key={signature} className="countdown-bar h-full bg-royal" style={{ ['--countdown' as string]: `${AUTO_SEND_MS}ms` }} />
