@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Notice } from '@/components/ui/notice';
 import { readApiFailure, summaryLine } from '@/lib/api/form-errors';
 import { QuoteWorksheet } from '@/components/booking/quote-worksheet';
+import { validityWindow } from '@/lib/quotes/validity';
+import { priceProblem } from '@/lib/quotes/price';
 import { defaultWorksheet, type WorksheetInputs } from '@/lib/quotes/worksheet';
 import type { Aircraft } from '@/lib/types';
 
@@ -57,7 +59,8 @@ export function SubmitQuoteForm({ requestId, aircraft, legs, passengerCount, onS
   const [showSheet, setShowSheet] = useState(!!draft);
   const [sheet, setSheet] = useState<WorksheetInputs | null>(draft?.worksheet ?? null);
   const [note, setNote] = useState(draft?.message ?? '');
-  const [validUntil, setValidUntil] = useState(draft?.validUntil ?? '');
+  const validity = validityWindow(legs[0]?.departure_date ?? '9999-12-31');
+  const [validUntil, setValidUntil] = useState(draft?.validUntil ?? validity.default);
   const [drafting, setDrafting] = useState(false);
 
   const applyDraft = (d: QuoteDraft | null) => {
@@ -110,12 +113,13 @@ export function SubmitQuoteForm({ requestId, aircraft, legs, passengerCount, onS
     e.preventDefault();
     setError('');
     setFields({});
-    const amount = parseFloat(price);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setFields({ priceCents: 'Enter a price greater than $0' });
+    const problem = priceProblem(price);
+    if (problem) {
+      setFields({ priceCents: problem });
       setError('Fix 1 field: Price.');
       return;
     }
+    const amount = parseFloat(price);
     setLoading(true);
     try {
       const res = await fetch(`/api/booking-requests/${requestId}/quotes`, {
@@ -202,7 +206,7 @@ export function SubmitQuoteForm({ requestId, aircraft, legs, passengerCount, onS
             {fields.aircraftId && <p className="text-label text-danger">{fields.aircraftId}</p>}
           </div>
         )}
-        <Input id={`quote-${requestId}-price`} name="price" label="Total price (USD)" type="number" step="1" min="1" inputMode="decimal"
+        <Input id={`quote-${requestId}-price`} name="price" label="Total price (USD)" type="number" step="0.01" min="100" inputMode="decimal"
           placeholder="25000" value={price} onChange={e => setPrice(e.target.value)} required error={fields.priceCents} />
       </div>
 
@@ -227,7 +231,7 @@ export function SubmitQuoteForm({ requestId, aircraft, legs, passengerCount, onS
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:items-end">
-        <Input id={`quote-${requestId}-valid`} name="validUntil" label="Valid until" type="date" value={validUntil} onChange={e => setValidUntil(e.target.value)} error={fields.validUntil} />
+        <Input id={`quote-${requestId}-valid`} name="validUntil" label="Valid until" type="date" min={validity.min} max={validity.max} value={validUntil} onChange={e => setValidUntil(e.target.value)} error={fields.validUntil} />
         <Button type="submit" disabled={loading} block>{loading ? 'Submitting…' : draft ? 'Approve and submit quote' : 'Submit quote'}</Button>
       </div>
     </form>

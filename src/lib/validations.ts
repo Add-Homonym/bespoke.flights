@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { worksheetSchema } from '@/lib/quotes/worksheet';
 import { autopilotSchema } from '@/lib/quotes/autopilot';
+import { MIN_QUOTE_CENTS } from '@/lib/quotes/price';
 
 export const registerSchema = z.object({
   email: z.string().email(),
@@ -38,13 +39,15 @@ export const bookingRequestSchema = z.object({
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+
 export const quoteSchema = z.object({
   aircraftId: z.number().int().positive().optional(),
-  // Cents, up to $10,000,000.
-  priceCents: z.number().int().min(50).max(1_000_000_000),
+  // Whole cents, $100 to $10,000,000.
+  priceCents: z.number().int('Enter dollars and cents, no fractions of a cent')
+    .min(MIN_QUOTE_CENTS, 'Enter a price of at least $100').max(1_000_000_000, 'Enter a price of $10,000,000 or less'),
   currency: z.enum(['USD']).default('USD'),
   message: z.string().max(2000).optional(),
-  validUntil: z.string().regex(ISO_DATE).optional()
+  validUntil: z.string().regex(ISO_DATE, 'Enter a date').optional()
     .refine(d => !d || d >= new Date().toISOString().slice(0, 10), { message: 'Valid-until date is in the past' }),
   /** The operator's private working for the price. Never shown to the traveler. */
   worksheet: worksheetSchema.optional().nullable(),

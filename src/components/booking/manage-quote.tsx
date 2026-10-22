@@ -9,6 +9,8 @@ import { Calculator } from 'lucide-react';
 import { readApiFailure, summaryLine } from '@/lib/api/form-errors';
 import { QuoteWorksheet } from '@/components/booking/quote-worksheet';
 import { FIELD_LABELS, type QuoteLeg } from '@/components/booking/submit-quote-form';
+import { validityWindow } from '@/lib/quotes/validity';
+import { priceProblem } from '@/lib/quotes/price';
 import { defaultWorksheet, type WorksheetInputs } from '@/lib/quotes/worksheet';
 import type { Aircraft } from '@/lib/types';
 
@@ -29,6 +31,7 @@ export function ManageQuote({
   const [mode, setMode] = useState<'idle' | 'revise' | 'withdraw'>('idle');
   const [price, setPrice] = useState((priceCents / 100).toFixed(2));
   const [note, setNote] = useState(message ?? '');
+  const validity = validityWindow(legs[0]?.departure_date ?? '9999-12-31');
   const [until, setUntil] = useState(validUntil ?? '');
   const [plane, setPlane] = useState(aircraftId ? String(aircraftId) : '');
   const [busy, setBusy] = useState(false);
@@ -72,8 +75,9 @@ export function ManageQuote({
   };
 
   const revise = async () => {
+    const problem = priceProblem(price);
+    if (problem) { setFields({ priceCents: problem }); setError('Fix 1 field: Price.'); return; }
     const cents = Math.round(Number(price) * 100);
-    if (!Number.isFinite(cents) || cents < 50) { setFields({ priceCents: 'Enter a price of at least $0.50' }); setError('Fix 1 field: Price.'); return; }
     const body: Record<string, unknown> = { priceCents: cents };
     if (note.trim() !== (message ?? '')) body.message = note.trim();
     if (until && until !== validUntil) body.validUntil = until;
@@ -113,8 +117,8 @@ export function ManageQuote({
   return (
     <div className="mt-4 space-y-4 border-t border-hairline pt-4">
       <div className="grid gap-3 sm:grid-cols-2">
-        <Input label="All-in price (USD)" type="number" step="0.01" min="0.50" value={price} onChange={e => setPrice(e.target.value)} error={fields.priceCents} />
-        <Input label="Valid until" type="date" value={until} onChange={e => setUntil(e.target.value)} error={fields.validUntil} />
+        <Input label="All-in price (USD)" type="number" step="0.01" min="100" value={price} onChange={e => setPrice(e.target.value)} error={fields.priceCents} />
+        <Input label="Valid until" type="date" min={validity.min} max={validity.max} value={until} onChange={e => setUntil(e.target.value)} error={fields.validUntil} />
       </div>
       {aircraft.length > 0 && (
         <div className="space-y-2">
