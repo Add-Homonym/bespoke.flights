@@ -180,7 +180,7 @@ export function BusinessModelForm({ initial, applied, onSaved }: { initial: Busi
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      const fieldErrors = typeof data.error === 'object' && data.error ? data.error : {};
+      const fieldErrors = data.fieldErrors ?? (typeof data.error === 'object' && data.error ? data.error : {});
       const next: Partial<Record<Key, string>> = {};
       for (const [k, v] of Object.entries(fieldErrors)) next[k as Key] = Array.isArray(v) ? String(v[0]) : String(v);
       setErrors(next);

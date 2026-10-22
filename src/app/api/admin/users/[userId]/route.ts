@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { validationResponse } from '@/lib/api/validation';
 import { getDb } from '@/lib/db';
 import { toId } from '@/lib/db/queries';
 import { adminUpdateUserSchema } from '@/lib/validations';
@@ -10,7 +11,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ userId
   const me = await requireAdmin();
   if ('error' in me) return me.error;
   const parsed = adminUpdateUserSchema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
+  if (!parsed.success) return validationResponse(parsed.error);
   const db = getDb();
   const userId = toId((await params).userId);
   try {

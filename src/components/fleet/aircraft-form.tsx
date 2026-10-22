@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Lock, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { fieldsOf } from '@/lib/api/form-errors';
 import { Input } from '@/components/ui/input';
 import { Notice } from '@/components/ui/notice';
 import { RegistrySummary } from '@/components/fleet/registry-summary';
@@ -61,11 +62,6 @@ export function toPayload(v: AircraftValues) {
   };
 }
 
-function fieldErrors(body: unknown): Record<string, string> {
-  const e = (body as { error?: unknown })?.error;
-  if (!e || typeof e !== 'object') return {};
-  return Object.fromEntries(Object.entries(e as Record<string, string[]>).map(([k, v]) => [k, v?.[0] ?? 'Invalid']));
-}
 
 /**
  * Add or edit an aircraft. "Look up" reads the FAA registry for the tail
@@ -200,4 +196,4 @@ export function AircraftForm({
   );
 }
 
-export { fieldErrors };
+export { fieldsOf as fieldErrors };

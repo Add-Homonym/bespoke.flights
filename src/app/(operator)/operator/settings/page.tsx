@@ -1,9 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import type { ReactNode } from 'react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { FieldStatus, type SaveState } from '@/components/ui/field-status';
+import { readApiFailure } from '@/lib/api/form-errors';
 import { PayoutSettings } from '@/components/operator/payout-settings';
 import Link from 'next/link';
 import { Bot } from 'lucide-react';
@@ -39,35 +42,50 @@ export default function OperatorSettingsPage() {
     fetch('/api/operator/settings').then(r => r.json()).then(setSettings);
   }, []);
 
-  const save = async (patch: Partial<OperatorSettings>) => {
+  /** Which field last saved or failed, so the result shows next to it. */
+  const [fieldState, setFieldState] = useState<Record<string, SaveState>>({});
+  const mark = (key: string, state: SaveState | null) => setFieldState(prev => {
+    const next = { ...prev };
+    if (state) next[key] = state; else delete next[key];
+    return next;
+  });
+
+  /** Saves `patch`; resolves to an error message on failure so the caller can revert the field. */
+  const save = async (key: string, patch: Record<string, unknown>, apiKey = key): Promise<string | null> => {
     setMessage('');
-    const res = await fetch('/api/operator/settings', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(patch),
-    });
-    if (res.ok) {
-      const updated = await res.json();
-      setSettings(updated);
-      setMessage('Saved');
-      setTimeout(() => setMessage(''), 2000);
+    mark(key, null);
+    let failure: string;
+    try {
+      const res = await fetch('/api/operator/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+      if (res.ok) {
+        setSettings(await res.json());
+        mark(key, { kind: 'saved' });
+        setMessage('Saved');
+        setTimeout(() => { setMessage(''); mark(key, null); }, 2500);
+        return null;
+      }
+      const err = await readApiFailure(res, 'Could not save. Try again.');
+      failure = err.fields[apiKey] ?? Object.values(err.fields)[0] ?? err.message;
+    } catch {
+      failure = 'Could not save. Check your connection and try again.';
     }
+    mark(key, { kind: 'error', message: failure });
+    return failure;
   };
 
-  const [policyError, setPolicyError] = useState('');
-  const savePolicy = async (patch: Partial<OperatorSettings['cancellation_policy']>) => {
-    if (!settings) return;
-    const policy = { ...settings.cancellation_policy, ...patch };
-    if (Object.values(policy).some(v => !Number.isInteger(v) || v < 0)) {
-      setPolicyError('Enter whole numbers.');
-      return;
+  const savePolicy = async (key: keyof OperatorSettings['cancellation_policy'], value: number): Promise<string | null> => {
+    if (!settings) return null;
+    const pct = key === 'partial_refund_bps';
+    if (!Number.isInteger(pct ? value / 100 : value) || value < 0) {
+      const message = pct ? 'Enter a whole percentage from 0 to 100' : 'Enter a whole number of hours';
+      mark(key, { kind: 'error', message });
+      return message;
     }
-    if (policy.partial_refund_hours > policy.full_refund_hours) {
-      setPolicyError('The partial refund window must end before the full refund window.');
-      return;
-    }
-    setPolicyError('');
-    await save({ cancellation_policy: policy });
+    return save(key, { cancellation_policy: { ...settings.cancellation_policy, [key]: value } }, `cancellation_policy.${key}`);
   };
 
   const toggleArrayItem = (arr: string[], item: string): string[] =>
@@ -108,7 +126,7 @@ export default function OperatorSettingsPage() {
                 <button
                   key={method}
                   type="button"
-                  onClick={() => save({ contact_method: method })}
+                  onClick={() => save('contact_method', { contact_method: method })}
                   className={`flex-1 py-3 text-sm font-medium transition-colors cursor-pointer capitalize ${
                     settings.contact_method === method
                       ? 'bg-royal text-on-royal'
@@ -119,33 +137,28 @@ export default function OperatorSettingsPage() {
                 </button>
               ))}
             </div>
+            <FieldStatus state={fieldState.contact_method} className="mt-1" />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Input
-                label="Charter Sales Email"
-                type="email"
-                defaultValue={settings.contact_email || settings.user_email}
-                placeholder="charter@yourcompany.com"
-                onBlur={e => save({ contact_email: e.target.value })}
-              />
-              <p className="text-ink-subtle text-xs mt-1">
-                RFQs are sent here. Defaults to your account email.
-              </p>
-            </div>
-            <div>
-              <Input
-                label="Charter Sales Phone (SMS)"
-                type="tel"
-                defaultValue={settings.contact_phone || settings.user_phone || ''}
-                placeholder="+1-555-123-4567"
-                onBlur={e => save({ contact_phone: e.target.value })}
-              />
-              <p className="text-ink-subtle text-xs mt-1">
-                For text message RFQs. US numbers only for now.
-              </p>
-            </div>
+            <SettingInput
+              label="Charter Sales Email"
+              type="email"
+              saved={settings.contact_email || settings.user_email}
+              state={fieldState.contact_email}
+              placeholder="charter@yourcompany.com"
+              onCommit={v => save('contact_email', { contact_email: v })}
+              hint="RFQs are sent here. Defaults to your account email."
+            />
+            <SettingInput
+              label="Charter Sales Phone (SMS)"
+              type="tel"
+              saved={settings.contact_phone || settings.user_phone || ''}
+              state={fieldState.contact_phone}
+              placeholder="+1-555-123-4567"
+              onCommit={v => save('contact_phone', { contact_phone: v })}
+              hint="For text message RFQs. US numbers only for now."
+            />
           </div>
         </div>
       </Card>
@@ -154,22 +167,24 @@ export default function OperatorSettingsPage() {
       <Card className="mb-6">
         <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wider mb-6">Safety & Certification</h2>
         <div className="grid grid-cols-2 gap-4 mb-4">
-          <Input
+          <SettingInput
             label="FAA Certificate Number"
-            defaultValue={settings.certificate || ''}
+            saved={settings.certificate || ''}
+            state={fieldState.certificate}
             placeholder="FAA-135-XXXX"
-            onBlur={e => save({ certificate: e.target.value })}
+            onCommit={v => save('certificate', { certificate: v })}
           />
           <div>
             <label className="block text-sm font-medium text-ink-muted mb-1.5">Highest Safety Rating</label>
             <select
               value={settings.safety_rating || ''}
-              onChange={e => save({ safety_rating: e.target.value })}
+              onChange={e => { void save('safety_rating', { safety_rating: e.target.value }); }}
               className="w-full rounded-md border border-hairline bg-surface-raised px-4 py-2.5 text-ink transition-colors"
             >
               <option value="">Select...</option>
               {SAFETY_RATINGS.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
+            <FieldStatus state={fieldState.safety_rating} className="mt-1" />
           </div>
         </div>
       </Card>
@@ -182,30 +197,35 @@ export default function OperatorSettingsPage() {
           {!settings.cancellation_policy_custom && ' Showing the platform default.'}
         </p>
         <div className="grid grid-cols-3 gap-4">
-          <Input
+          <SettingInput
             label="Full refund until (hours before)"
             type="number"
             min={0}
-            defaultValue={settings.cancellation_policy.full_refund_hours}
-            onBlur={e => savePolicy({ full_refund_hours: Number(e.target.value) })}
+            step={1}
+            saved={String(settings.cancellation_policy.full_refund_hours)}
+            state={fieldState.full_refund_hours}
+            onCommit={v => savePolicy('full_refund_hours', Number(v))}
           />
-          <Input
+          <SettingInput
             label="Partial refund until (hours before)"
             type="number"
             min={0}
-            defaultValue={settings.cancellation_policy.partial_refund_hours}
-            onBlur={e => savePolicy({ partial_refund_hours: Number(e.target.value) })}
+            step={1}
+            saved={String(settings.cancellation_policy.partial_refund_hours)}
+            state={fieldState.partial_refund_hours}
+            onCommit={v => savePolicy('partial_refund_hours', Number(v))}
           />
-          <Input
+          <SettingInput
             label="Partial refund (%)"
             type="number"
             min={0}
             max={100}
-            defaultValue={Math.round(settings.cancellation_policy.partial_refund_bps / 100)}
-            onBlur={e => savePolicy({ partial_refund_bps: Math.round(Number(e.target.value) * 100) })}
+            step={1}
+            saved={String(settings.cancellation_policy.partial_refund_bps / 100)}
+            state={fieldState.partial_refund_bps}
+            onCommit={v => savePolicy('partial_refund_bps', Math.round(Number(v) * 100))}
           />
         </div>
-        {policyError && <p className="text-danger text-xs mt-2" role="alert">{policyError}</p>}
       </Card>
 
       {/* Market Coverage */}
@@ -221,7 +241,7 @@ export default function OperatorSettingsPage() {
               <button
                 key={key}
                 type="button"
-                onClick={() => save({ markets: toggleArrayItem(settings.markets, key) })}
+                onClick={() => save('markets', { markets: toggleArrayItem(settings.markets, key) })}
                 className={`rounded-md border px-4 py-3 text-sm text-left transition-colors cursor-pointer ${
                   active
                     ? 'border-brass bg-surface-raised text-ink'
@@ -233,25 +253,28 @@ export default function OperatorSettingsPage() {
             );
           })}
         </div>
+        <FieldStatus state={fieldState.markets} className="mt-2" />
 
         <div className="flex gap-4 mt-4">
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
               checked={!!settings.hi_capable}
-              onChange={e => save({ hi_capable: e.target.checked ? 1 : 0 })}
+              onChange={e => { void save('hi_capable', { hi_capable: e.target.checked ? 1 : 0 }); }}
               className="rounded border-hairline bg-surface-raised text-royal "
             />
             <span className="text-sm text-ink">Hawaii capable</span>
+            <FieldStatus state={fieldState.hi_capable} />
           </label>
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
               checked={!!settings.transoceanic}
-              onChange={e => save({ transoceanic: e.target.checked ? 1 : 0 })}
+              onChange={e => { void save('transoceanic', { transoceanic: e.target.checked ? 1 : 0 }); }}
               className="rounded border-hairline bg-surface-raised text-royal "
             />
             <span className="text-sm text-ink">Transoceanic capable</span>
+            <FieldStatus state={fieldState.transoceanic} />
           </label>
         </div>
       </Card>
@@ -269,7 +292,7 @@ export default function OperatorSettingsPage() {
               <button
                 key={key}
                 type="button"
-                onClick={() => save({ fleet_types: toggleArrayItem(settings.fleet_types, key) })}
+                onClick={() => save('fleet_types', { fleet_types: toggleArrayItem(settings.fleet_types, key) })}
                 className={`rounded-md border px-4 py-3 text-sm text-left transition-colors cursor-pointer ${
                   active
                     ? 'border-brass bg-surface-raised text-ink'
@@ -281,14 +304,16 @@ export default function OperatorSettingsPage() {
             );
           })}
         </div>
+        <FieldStatus state={fieldState.fleet_types} className="mt-2" />
 
         <div className="mt-4">
-          <Input
+          <SettingInput
             label="Maximum Range (NM)"
             type="number"
-            defaultValue={settings.range_max_nm || ''}
+            saved={String(settings.range_max_nm || '')}
+            state={fieldState.range_max_nm}
             placeholder="7000"
-            onBlur={e => save({ range_max_nm: e.target.value ? Number(e.target.value) : null })}
+            onCommit={v => save('range_max_nm', { range_max_nm: v ? Number(v) : null })}
           />
         </div>
       </Card>
@@ -312,6 +337,43 @@ export default function OperatorSettingsPage() {
           </StatusBadge>
         </div>
       </Card>
+    </div>
+  );
+}
+
+/**
+ * A text or number field that saves when you leave it. A rejected save puts
+ * the last saved value back and shows the reason under the field; "Saved"
+ * appears under the field that saved.
+ */
+function SettingInput({ label, saved, state, onCommit, hint, ...rest }: {
+  label: string;
+  /** The last value the server accepted. */
+  saved: string;
+  state?: SaveState;
+  /** Resolves to an error message when the save was rejected. */
+  onCommit: (value: string) => Promise<string | null>;
+  hint?: ReactNode;
+} & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'onBlur'>) {
+  const [value, setValue] = useState(saved);
+  useEffect(() => { setValue(saved); }, [saved]);
+  const rejected = state?.kind === 'error';
+  return (
+    <div>
+      <Input
+        label={label}
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        onBlur={async () => {
+          if (value === saved) return;
+          const failure = await onCommit(value);
+          if (failure) setValue(saved);
+        }}
+        error={rejected ? state.message : undefined}
+        {...rest}
+      />
+      {state?.kind === 'saved' && <FieldStatus state={state} className="mt-1" />}
+      {hint && <p className="text-ink-subtle text-xs mt-1">{hint}</p>}
     </div>
   );
 }

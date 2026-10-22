@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
+import { readApiFailure, summaryLine } from '@/lib/api/form-errors';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -15,11 +16,10 @@ import type { Aircraft } from '@/lib/types';
 
 type Errors = Record<string, string>;
 
-function fieldErrors(body: unknown): Errors {
-  const e = (body as { error?: unknown })?.error;
-  if (!e || typeof e !== 'object') return {};
-  return Object.fromEntries(Object.entries(e as Record<string, string[]>).map(([k, v]) => [k, v?.[0] ?? 'Invalid']));
-}
+const FIELD_LABELS: Errors = {
+  originCode: 'From', destCode: 'To', departureDate: 'Departure date', departureTime: 'Departure time',
+  seats: 'Seats', priceCents: 'Price', aircraftId: 'Aircraft', notes: 'Note', flexDays: 'Date flexibility',
+};
 
 const STATUS: Record<EmptyLegView['status'], { label: string; variant: StatusVariant }> = {
   listed: { label: 'Listed', variant: 'confirmed' },
@@ -61,14 +61,14 @@ function NewListingForm({ aircraft, onCreated, onCancel }: { aircraft: Aircraft[
         flexDays: Number(flex), seats: Number(seats), priceCents: Math.round(Number(price) * 100), notes: notes || null,
       }),
     });
-    const body = await res.json().catch(() => null);
     if (!res.ok) {
-      setErrors(fieldErrors(body));
-      setMessage(typeof body?.error === 'string' ? body.error : 'Check the highlighted fields.');
+      const failure = await readApiFailure(res, 'Could not list this empty leg.');
+      setErrors(failure.fields);
+      setMessage(Object.keys(failure.fields).length ? summaryLine(failure.fields, FIELD_LABELS) : failure.message);
       setSaving(false);
       return;
     }
-    onCreated(body as EmptyLegView);
+    onCreated((await res.json()) as EmptyLegView);
   };
 
   return (

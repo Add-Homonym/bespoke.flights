@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { validationResponse } from '@/lib/api/validation';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { toId } from '@/lib/db/queries';
@@ -21,7 +22,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ change
 
   const { changeId } = await params;
   const parsed = resolveChangeSchema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
+  if (!parsed.success) return validationResponse(parsed.error);
 
   const db = getDb();
   const cr = await getChangeRequest(db, toId(changeId));

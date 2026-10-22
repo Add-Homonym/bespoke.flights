@@ -20,11 +20,11 @@ export const loginSchema = z.object({
 });
 
 export const legSchema = z.object({
-  originCode: z.string().min(3).max(4),
+  originCode: z.string().min(3, 'Enter an airport code').max(4, 'Enter an airport code'),
   originName: z.string().optional(),
-  destCode: z.string().min(3).max(4),
+  destCode: z.string().min(3, 'Enter an airport code').max(4, 'Enter an airport code'),
   destName: z.string().optional(),
-  departureDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  departureDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter a date'),
   departureTime: z.string().optional(),
 });
 
@@ -115,7 +115,8 @@ export const operatorSettingsSchema = z.object({
   cancellation_policy: z.object({
     full_refund_hours: z.number().int().min(0).max(24 * 365),
     partial_refund_hours: z.number().int().min(0).max(24 * 365),
-    partial_refund_bps: z.number().int().min(0).max(10_000),
+    partial_refund_bps: z.number().int().min(0).max(10_000)
+      .refine(v => v % 100 === 0, { message: 'Enter a whole percentage from 0 to 100' }),
   }).refine(p => p.partial_refund_hours <= p.full_refund_hours, {
     message: 'The partial refund window must end before the full refund window',
     path: ['partial_refund_hours'],

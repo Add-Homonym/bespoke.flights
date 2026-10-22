@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { validationResponse } from '@/lib/api/validation';
 import { getDb } from '@/lib/db';
 import { requireAdmin } from '@/lib/admin/guard';
 import { businessModelPatchSchema, getBusinessModel, saveBusinessModel } from '@/lib/business-model';
@@ -16,7 +17,7 @@ export async function PATCH(req: Request) {
   if ('error' in me) return me.error;
 
   const parsed = businessModelPatchSchema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
+  if (!parsed.success) return validationResponse(parsed.error);
   if (Object.keys(parsed.data).length === 0) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
 
   return NextResponse.json(await saveBusinessModel(getDb(), parsed.data));

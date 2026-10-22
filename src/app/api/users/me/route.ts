@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { validationResponse } from '@/lib/api/validation';
 import { getSession } from '@/lib/auth';
 import { neonAuthEnabled } from '@/lib/neon-auth';
 import { getDb } from '@/lib/db';
@@ -23,7 +24,7 @@ export async function PATCH(req: Request) {
   const body = await req.json().catch(() => null);
   const parsed = profileSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
+    return validationResponse(parsed.error);
   }
 
   if (parsed.data.email && neonAuthEnabled()) {

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { validationResponse } from '@/lib/api/validation';
 import { getDb } from '@/lib/db';
 import { currentOperator } from '@/lib/fleet';
 import { emptyLegSchema } from '@/lib/validations';
@@ -18,7 +19,7 @@ export async function POST(req: Request) {
   if (me.operator.status !== 'approved') return NextResponse.json({ error: 'Operator not approved' }, { status: 403 });
 
   const parsed = emptyLegSchema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
+  if (!parsed.success) return validationResponse(parsed.error);
 
   try {
     const id = await createEmptyLeg(db, me.operator.id, parsed.data);

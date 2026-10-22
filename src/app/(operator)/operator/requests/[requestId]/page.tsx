@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { Card } from '@/components/ui/card';
+import { Notice } from '@/components/ui/notice';
 import { formatTripDate, formatTripTime } from '@/lib/trip-format';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { SubmitQuoteForm } from '@/components/booking/submit-quote-form';
@@ -14,11 +15,15 @@ import { MessageThread } from '@/components/messaging/message-thread';
 import { unreadForOperator } from '@/lib/messaging/messages';
 import type { BookingRequest, BookingLeg, Operator, Aircraft, Quote } from '@/lib/types';
 
-export default async function OperatorRequestDetailPage({ params }: { params: Promise<{ requestId: string }> }) {
+export default async function OperatorRequestDetailPage({ params, searchParams }: {
+  params: Promise<{ requestId: string }>;
+  searchParams: Promise<{ quoted?: string }>;
+}) {
   const session = await getSession();
   if (!session || session.role !== 'operator') redirect('/login');
 
   const { requestId } = await params;
+  const { quoted } = await searchParams;
   const db = getDb();
 
   const request = await db.one<BookingRequest>('SELECT * FROM booking_requests WHERE id = ?', [requestId]);
@@ -39,6 +44,10 @@ export default async function OperatorRequestDetailPage({ params }: { params: Pr
   const existingQuote = liveQuote ?? quotes[0];
   const canQuoteAgain = !liveQuote && ['open', 'quoted'].includes(request.status) && operator?.status === 'approved';
 
+  const quotedPlane = existingQuote?.aircraft_id
+    ? aircraft.find(a => a.id === existingQuote.aircraft_id) ?? null
+    : null;
+
   const route = legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).join(' → ');
   const won = existingQuote?.status === 'accepted' && ['booked', 'completed'].includes(request.status);
   const changes = won ? await changeRequestViews(db, request.id, existingQuote!.currency) : [];
@@ -56,6 +65,12 @@ export default async function OperatorRequestDetailPage({ params }: { params: Pr
         </div>
         <StatusBadge variant="brass" className="text-base px-4 py-1">{request.status}</StatusBadge>
       </div>
+
+      {quoted && existingQuote?.status === 'pending' && (
+        <Notice tone="confirmed" className="mb-6">
+          Quote submitted: {formatMoney(existingQuote.price_cents, existingQuote.currency)}. The traveler has been emailed and can book it from their request page.
+        </Notice>
+      )}
 
       {/* Itinerary */}
       <Card className="mb-8">
@@ -109,6 +124,10 @@ export default async function OperatorRequestDetailPage({ params }: { params: Pr
           <div className="flex items-center justify-between">
             <div>
               <p className="text-royal font-display text-2xl">${(existingQuote.price_cents / 100).toLocaleString()}</p>
+              <p className="text-ink text-sm mt-2">
+                {quotedPlane ? `${quotedPlane.type} · ${quotedPlane.tail_number}` : 'Aircraft not specified'}
+                {existingQuote.valid_until && <span className="text-ink-muted"> · Valid until {formatTripDate(existingQuote.valid_until) || existingQuote.valid_until}</span>}
+              </p>
               {existingQuote.message && <p className="text-ink-muted text-sm mt-2 italic">&quot;{existingQuote.message}&quot;</p>}
             </div>
             <StatusBadge variant={existingQuote.status === 'accepted' ? 'confirmed' : existingQuote.status === 'rejected' ? 'danger' : existingQuote.status === 'pending' ? 'warning' : 'neutral'}>

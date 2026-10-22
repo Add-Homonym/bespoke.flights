@@ -1,11 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Bot, Calculator, ChevronDown, CircleAlert, GraduationCap } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Notice } from '@/components/ui/notice';
+import { readApiFailure, summaryLine } from '@/lib/api/form-errors';
 import { QuoteWorksheet } from '@/components/booking/quote-worksheet';
 import { defaultWorksheet, type WorksheetInputs } from '@/lib/quotes/worksheet';
 import type { Aircraft } from '@/lib/types';
@@ -31,6 +32,10 @@ export interface QuoteDraft {
   notes?: string[];
 }
 
+export const FIELD_LABELS: Record<string, string> = {
+  priceCents: 'Price', validUntil: 'Valid until', aircraftId: 'Aircraft', message: 'Message',
+};
+
 export function SubmitQuoteForm({ requestId, aircraft, legs, passengerCount, onSubmitted, draft: initialDraft = null }: {
   requestId: number;
   /** An Autopilot draft to review: prefills every field. */
@@ -42,11 +47,13 @@ export function SubmitQuoteForm({ requestId, aircraft, legs, passengerCount, onS
   onSubmitted?: () => void;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [draft, setDraft] = useState<QuoteDraft | null>(initialDraft);
   const [aircraftId, setAircraftId] = useState<number | ''>(draft?.aircraftId ?? (aircraft.length === 1 ? aircraft[0]!.id : ''));
   const [price, setPrice] = useState(draft ? String(draft.priceCents / 100) : '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [fields, setFields] = useState<Record<string, string>>({});
   const [showSheet, setShowSheet] = useState(!!draft);
   const [sheet, setSheet] = useState<WorksheetInputs | null>(draft?.worksheet ?? null);
   const [note, setNote] = useState(draft?.message ?? '');
@@ -102,9 +109,11 @@ export function SubmitQuoteForm({ requestId, aircraft, legs, passengerCount, onS
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
+    setFields({});
     const amount = parseFloat(price);
     if (!Number.isFinite(amount) || amount <= 0) {
-      setError('Enter a price');
+      setFields({ priceCents: 'Enter a price greater than $0' });
+      setError('Fix 1 field: Price.');
       return;
     }
     setLoading(true);
@@ -121,11 +130,15 @@ export function SubmitQuoteForm({ requestId, aircraft, legs, passengerCount, onS
         }),
       });
       if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        setError(typeof data?.error === 'string' ? data.error : 'Could not submit the quote');
+        const failure = await readApiFailure(res, 'Could not submit the quote.');
+        setFields(failure.fields);
+        setError(Object.keys(failure.fields).length ? summaryLine(failure.fields, FIELD_LABELS) : failure.message);
         return;
       }
-      if (onSubmitted) onSubmitted(); else router.refresh();
+      if (onSubmitted) { onSubmitted(); return; }
+      // The page swaps this form for the saved quote, so the confirmation rides along in the URL.
+      router.replace(`${pathname}?quoted=1`);
+      router.refresh();
     } catch {
       setError('Something went wrong');
     } finally {
@@ -186,10 +199,11 @@ export function SubmitQuoteForm({ requestId, aircraft, legs, passengerCount, onS
                 <option key={a.id} value={a.id}>{a.type} · {a.tail_number} · {a.capacity} seats</option>
               ))}
             </select>
+            {fields.aircraftId && <p className="text-label text-danger">{fields.aircraftId}</p>}
           </div>
         )}
         <Input id={`quote-${requestId}-price`} name="price" label="Total price (USD)" type="number" step="1" min="1" inputMode="decimal"
-          placeholder="25000" value={price} onChange={e => setPrice(e.target.value)} required />
+          placeholder="25000" value={price} onChange={e => setPrice(e.target.value)} required error={fields.priceCents} />
       </div>
 
       <button type="button" onClick={openSheet} aria-expanded={showSheet} aria-controls={`quote-${requestId}-worksheet`}
@@ -209,10 +223,11 @@ export function SubmitQuoteForm({ requestId, aircraft, legs, passengerCount, onS
         <textarea id={`quote-${requestId}-message`} name="message" rows={3} value={note} onChange={e => setNote(e.target.value)}
           placeholder="What is included: aircraft, crew, catering, Wi-Fi…"
           className="block w-full resize-y rounded-md border border-border-control bg-surface-raised px-4 py-3 text-body text-ink placeholder:text-ink-subtle" />
+        {fields.message && <p className="text-label text-danger">{fields.message}</p>}
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:items-end">
-        <Input id={`quote-${requestId}-valid`} name="validUntil" label="Valid until" type="date" value={validUntil} onChange={e => setValidUntil(e.target.value)} />
+        <Input id={`quote-${requestId}-valid`} name="validUntil" label="Valid until" type="date" value={validUntil} onChange={e => setValidUntil(e.target.value)} error={fields.validUntil} />
         <Button type="submit" disabled={loading} block>{loading ? 'Submitting…' : draft ? 'Approve and submit quote' : 'Submit quote'}</Button>
       </div>
     </form>

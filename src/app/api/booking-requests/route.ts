@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { validationResponse } from '@/lib/api/validation';
 import { cookies } from 'next/headers';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
@@ -18,7 +19,7 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   const parsed = bookingRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
+    return validationResponse(parsed.error);
   }
 
   const limited = await rateLimited('bookingCreate', session.userId);

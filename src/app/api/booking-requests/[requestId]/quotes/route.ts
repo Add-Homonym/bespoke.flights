@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { validationResponse } from '@/lib/api/validation';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { toId } from '@/lib/db/queries';
@@ -44,7 +45,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ request
   const body = await req.json().catch(() => null);
   const parsed = quoteSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
+    return validationResponse(parsed.error);
   }
 
   const db = getDb();
@@ -59,7 +60,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ request
     return NextResponse.json({ id: quoteId }, { status: 201 });
   } catch (err) {
     if (err instanceof QuoteError) {
-      return NextResponse.json({ error: err.field ? { [err.field]: [err.message] } : err.message }, { status: err.status });
+      return NextResponse.json(err.field ? { error: 'Check the highlighted fields.', fieldErrors: { [err.field]: [err.message] } } : { error: err.message }, { status: err.status });
     }
     throw err;
   }

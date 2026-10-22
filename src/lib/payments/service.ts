@@ -446,7 +446,9 @@ export async function simulateStubPayment(
   if (!payment || payment.customer_id !== customerId || payment.provider !== 'stub') {
     throw new PaymentError('Payment not found', 404);
   }
-  if (payment.status !== 'pending') throw new PaymentError(`Payment is ${payment.status}`, 409);
+  // Tapping Pay twice, or on a page that went stale, is not an error: report where the payment stands.
+  if ((SETTLED_STATUSES as readonly string[]).includes(payment.status)) return 'duplicate';
+  if (payment.status !== 'pending') throw new PaymentError('This payment can no longer be completed. Go back to the quote and book again.', 409);
   return fulfillPayment(db, paymentId, { paymentIntentId: null, baseUrl });
 }
 
