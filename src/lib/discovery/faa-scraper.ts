@@ -247,9 +247,8 @@ export function getNextStateBatch(
     return US_STATES.slice(0, batchSize);
   }
 
-  // Find the index of the last scraped state
-  const lastState = lastScrapedStates[lastScrapedStates.length - 1];
-  const lastIdx = US_STATES.indexOf(lastState);
+  // Furthest-along state among those scraped in the last batch.
+  const lastIdx = Math.max(...lastScrapedStates.map(st => US_STATES.indexOf(st)));
 
   if (lastIdx === -1 || lastIdx >= US_STATES.length - 1) {
     // Wrap around to the beginning

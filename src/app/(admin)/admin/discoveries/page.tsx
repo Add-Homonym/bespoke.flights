@@ -53,6 +53,7 @@ function DiscoveriesContent() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, pages: 0 });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || '');
   const [stateFilter, setStateFilter] = useState(searchParams.get('state') || '');
@@ -73,12 +74,19 @@ function DiscoveriesContent() {
     params.set('page', String(page));
     params.set('limit', '50');
 
-    const res = await fetch('/api/admin/discoveries?' + params.toString());
-    if (res.ok) {
-      const json = await res.json();
-      setData(json.data);
-      setStats(json.stats);
-      setPagination(json.pagination);
+    try {
+      const res = await fetch('/api/admin/discoveries?' + params.toString());
+      if (res.ok) {
+        const json = await res.json();
+        setData(json.data);
+        setStats(json.stats);
+        setPagination(json.pagination);
+        setError(null);
+      } else {
+        setError(res.status === 401 ? 'Not authorized. Sign in as an admin.' : `Failed to load operators (HTTP ${res.status}).`);
+      }
+    } catch {
+      setError('Failed to load operators. Check your connection.');
     }
     setLoading(false);
   }, [statusFilter, stateFilter, search]);
@@ -135,6 +143,12 @@ function DiscoveriesContent() {
       {cronResult && (
         <Card className="mb-6 border-hairline bg-surface-sunken">
           <p className="text-ink text-sm">{cronResult}</p>
+        </Card>
+      )}
+
+      {error && (
+        <Card className="mb-6 border-danger">
+          <p className="text-danger text-sm">{error}</p>
         </Card>
       )}
 
