@@ -162,10 +162,12 @@ export async function acceptChange(
   const newPrice = params.newPriceCents ?? currentPrice;
   const diff = newPrice - currentPrice;
 
-  await db.run(`
+  // The status guard makes concurrent accepts safe: only one of them goes on to charge or refund.
+  const claimed = await db.run(`
     UPDATE change_requests SET status = 'accepted', operator_note = ?, new_price_cents = ?, previous_price_cents = ?, resolved_at = now()
     WHERE id = ? AND status = 'pending'
   `, [params.note?.trim() || null, newPrice, currentPrice, cr.id]);
+  if (!claimed) throw new ChangeError('Change request was already answered', 409);
 
   if (diff > 0) {
     const due = await createDifferenceCheckout(db, cr, payment, operator, diff, baseUrl);
@@ -198,8 +200,9 @@ export async function declineChange(
   const payment = await bookingPayment(db, cr.request_id);
   if (!payment || payment.operator_id !== operatorId) throw new ChangeError('Forbidden', 403);
 
-  await db.run("UPDATE change_requests SET status = 'declined', operator_note = ?, resolved_at = now() WHERE id = ? AND status = 'pending'",
+  const claimed = await db.run("UPDATE change_requests SET status = 'declined', operator_note = ?, resolved_at = now() WHERE id = ? AND status = 'pending'",
     [note?.trim() || null, cr.id]);
+  if (!claimed) throw new ChangeError('Change request was already answered', 409);
   const updated = (await getChangeRequest(db, cr.id))!;
   await notify(db, updated, 'declined', baseUrl).catch(err => console.error('Change request email failed:', err));
   return updated;
@@ -210,7 +213,8 @@ export async function withdrawChange(db: Db, changeRequestId: number, customerId
   if (!cr) throw new ChangeError('Change request not found', 404);
   if (cr.requested_by !== customerId) throw new ChangeError('Forbidden', 403);
   if (cr.status !== 'pending') throw new ChangeError(`Change request is ${cr.status}`, 409);
-  await db.run("UPDATE change_requests SET status = 'withdrawn', resolved_at = now() WHERE id = ? AND status = 'pending'", [cr.id]);
+  const claimed = await db.run("UPDATE change_requests SET status = 'withdrawn', resolved_at = now() WHERE id = ? AND status = 'pending'", [cr.id]);
+  if (!claimed) throw new ChangeError('Change request was already answered', 409);
   return (await getChangeRequest(db, cr.id))!;
 }
 

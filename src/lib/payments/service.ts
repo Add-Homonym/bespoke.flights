@@ -197,6 +197,21 @@ async function supersedePendingPayments(db: Db, requestId: number, exceptPayment
   const pending = await db.query<Payment>(`
     SELECT * FROM payments WHERE request_id = ? AND status = 'pending' AND id != ?
   `, [requestId, exceptPaymentId ?? -1]);
+  await cancelPending(db, pending);
+}
+
+/**
+ * Cancel open checkouts for one quote, before its price changes. Throws a 409
+ * PaymentError when the traveler has already completed one.
+ */
+export async function supersedeQuotePayments(db: Db, quoteId: number) {
+  const pending = await db.query<Payment>(`
+    SELECT * FROM payments WHERE quote_id = ? AND change_request_id IS NULL AND status = 'pending'
+  `, [quoteId]);
+  await cancelPending(db, pending);
+}
+
+async function cancelPending(db: Db, pending: Payment[]) {
 
   for (const payment of pending) {
     if (payment.provider === 'stripe' && payment.stripe_checkout_session_id) {
@@ -264,6 +279,8 @@ export async function markPaymentSucceeded(
     if (quote.status !== 'pending' || !['open', 'quoted'].includes(request.status)) {
       return 'conflict';
     }
+    // The operator revised the price after this checkout opened.
+    if (payment.amount_cents !== quote.price_cents) return 'conflict';
     // An empty leg already taken by another traveler's payment.
     if (!(await listingAvailable(tx, quote))) return 'conflict';
 

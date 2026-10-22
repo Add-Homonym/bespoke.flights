@@ -93,7 +93,7 @@ export async function revokeShares(db: Db, requestId: number, operatorId: number
   `, [requestId, operatorId]);
 }
 
-/** Load the sheet behind a share token, or null if unknown, revoked or expired. */
+/** Load the sheet behind a share token, or null if unknown, revoked or expired, or the operator is no longer approved. */
 export async function loadTripSheet(db: Db, token: string): Promise<TripSheet | null> {
   if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) return null;
 
@@ -111,7 +111,7 @@ export async function loadTripSheet(db: Db, token: string): Promise<TripSheet | 
     JOIN users u ON u.id = br.customer_id
     LEFT JOIN quotes q ON q.request_id = br.id AND q.operator_id = s.operator_id AND q.status IN ('accepted', 'cancelled')
     LEFT JOIN aircraft a ON a.id = q.aircraft_id
-    WHERE s.token = ? AND s.revoked_at IS NULL AND s.expires_at > now()
+    WHERE s.token = ? AND s.revoked_at IS NULL AND s.expires_at > now() AND o.status = 'approved'
   `, [token]);
   if (!row) return null;
 

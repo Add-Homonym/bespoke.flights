@@ -5,20 +5,11 @@
  */
 
 import { getSession } from '@/lib/auth';
+import { bearerMatches } from '@/lib/bearer';
 import type { SessionPayload } from '@/lib/types';
 
 export function bearerOk(req: Request): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return false;
-  const header = req.headers.get('authorization') ?? '';
-  return timingSafeEqual(header, `Bearer ${secret}`);
-}
-
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
+  return bearerMatches(req, process.env.CRON_SECRET);
 }
 
 /** The signed-in admin's session, or null. */

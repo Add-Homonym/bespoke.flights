@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { requireAdminPage } from '@/lib/admin/guard';
 import { getDb } from '@/lib/db';
 import { legsByRequest, quoteCountsByRequest } from '@/lib/db/queries';
 import { Card } from '@/components/ui/card';
@@ -17,6 +18,7 @@ const statusBadge: Record<string, 'neutral' | 'confirmed' | 'warning' | 'danger'
 };
 
 export default async function AdminRequestsPage() {
+  await requireAdminPage();
   const db = getDb();
   const requests = await db.query<BookingRequest & { customer_name: string; customer_email: string }>(`
     SELECT br.*, u.name as customer_name, u.email as customer_email

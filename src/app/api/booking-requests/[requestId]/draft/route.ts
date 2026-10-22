@@ -19,6 +19,7 @@ export async function GET(_req: Request, { params }: Ctx) {
 export async function POST(_req: Request, { params }: Ctx) {
   const ctx = await currentOperator();
   if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (ctx.operator.status !== 'approved') return NextResponse.json({ error: 'Your company is not approved to quote' }, { status: 403 });
   const requestId = toId((await params).requestId);
   // Only requests this operator can quote: matched to them, or open on the board.
   const req = await ctx.db.one<{ status: string }>('SELECT status FROM booking_requests WHERE id = ?', [requestId]);

@@ -58,7 +58,11 @@ const BASE = `
   LEFT JOIN aircraft a ON a.id = q.aircraft_id
 `;
 
-export async function buildBoard(db: Db, operatorId: number): Promise<Board> {
+/**
+ * `withholdTraveler`: for an operator that is not approved (pending or
+ * suspended), leave out what travelers typed and their contact details.
+ */
+export async function buildBoard(db: Db, operatorId: number, { withholdTraveler = false } = {}): Promise<Board> {
   const company = (await db.one<{ company_name: string }>('SELECT company_name FROM operators WHERE id = ?', [operatorId]))?.company_name ?? '';
   const today = new Date().toISOString().slice(0, 10);
 
@@ -106,10 +110,10 @@ export async function buildBoard(db: Db, operatorId: number): Promise<Board> {
     status: r.status,
     legs: fromDbLegs(legs.get(r.id) ?? []),
     passengerCount: r.passenger_count,
-    specialRequests: r.notes?.trim() || null,
+    specialRequests: withholdTraveler ? null : r.notes?.trim() || null,
     aircraft: r.aircraft_type ? `${r.aircraft_type}${r.tail_number ? ` (${r.tail_number})` : ''}` : null,
     quoteCents: r.quote_cents,
-    leadPassenger: withContact ? { name: r.customer_name, phone: r.customer_phone, email: r.customer_email } : null,
+    leadPassenger: withContact && !withholdTraveler ? { name: r.customer_name, phone: r.customer_phone, email: r.customer_email } : null,
     updatedAt: r.updated_at,
   });
   const firstDeparture = (t: BoardTrip) => `${t.legs[0]?.date ?? ''}T${t.legs[0]?.time || '00:00'}`;
@@ -122,7 +126,7 @@ export async function buildBoard(db: Db, operatorId: number): Promise<Board> {
     changeRequests: changes.map(r => ({
       ...toTrip(r, true),
       updatedAt: r.cr_created,
-      proposed: { changeRequestId: r.cr_id, legs: parseProposed(r.cr_legs), passengerCount: r.cr_pax, notes: r.cr_notes?.trim() || null },
+      proposed: { changeRequestId: r.cr_id, legs: parseProposed(r.cr_legs), passengerCount: r.cr_pax, notes: withholdTraveler ? null : r.cr_notes?.trim() || null },
     })),
     toQuote: toQuote.map(r => toTrip(r, false)),
     awaitingClient: awaiting.map(r => toTrip(r, false)),

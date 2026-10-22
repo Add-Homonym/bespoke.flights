@@ -41,8 +41,10 @@ export async function createToken(payload: SessionPayload): Promise<string> {
 
 export async function verifyToken(token: string): Promise<SessionPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, signingKey());
-    return payload as unknown as SessionPayload;
+    const { payload } = await jwtVerify(token, signingKey(), { algorithms: ['HS256'] });
+    const { userId, role } = payload as Record<string, unknown>;
+    if (!Number.isInteger(userId) || !['customer', 'operator', 'admin'].includes(role as string)) return null;
+    return { userId: userId as number, role: role as SessionPayload['role'] };
   } catch {
     return null;
   }

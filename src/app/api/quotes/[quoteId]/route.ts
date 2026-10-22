@@ -11,6 +11,7 @@ import { resolveValidUntil } from '@/lib/quotes/validity';
 import { saveWorksheet } from '@/lib/quotes/worksheet-store';
 import { learnFromQuote } from '@/lib/quotes/learning';
 import { refreshDrafts } from '@/lib/quotes/autopilot';
+import { PaymentError, supersedeQuotePayments } from '@/lib/payments/service';
 import type { Quote, BookingRequest, Operator } from '@/lib/types';
 
 /**
@@ -64,6 +65,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ quoteI
     await notifyQuoteWithdrawn(db, quote.id, baseUrl);
     return NextResponse.json({ success: true, status: 'withdrawn' });
   }
+  // A suspended operator may withdraw but not revise.
+  if (operator.status !== 'approved') return NextResponse.json({ error: 'Your company is not approved to quote' }, { status: 403 });
 
   if (!['open', 'quoted'].includes(request.status)) {
     return NextResponse.json({ error: `This request is ${request.status}` }, { status: 409 });
@@ -90,6 +93,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ quoteI
     if (!owned) return NextResponse.json({ error: 'Check the highlighted fields.', fieldErrors: { aircraftId: ['Aircraft not in your fleet'] } }, { status: 400 });
   }
   const priceChanged = priceCents != null && priceCents !== quote.price_cents;
+  if (priceChanged) {
+    try {
+      await supersedeQuotePayments(db, quote.id);
+    } catch (err) {
+      if (err instanceof PaymentError) return NextResponse.json({ error: 'The traveler is paying for this quote. Try again in a few minutes.' }, { status: 409 });
+      throw err;
+    }
+  }
   await db.run(`
     UPDATE quotes SET
       price_cents = COALESCE(?, price_cents),

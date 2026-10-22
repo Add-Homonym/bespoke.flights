@@ -56,16 +56,16 @@ function p(text: string, style?: string): string {
 
 // ─── Operator Invite (cold outreach) ────────────────────────────────
 
-export function operatorInviteEmail(companyName: string, certNumber?: string): { subject: string; html: string } {
+export function operatorInviteEmail(companyName: string, certNumber: string | undefined, unsubscribeUrl: string): { subject: string; html: string } {
   const subject = companyName + ' — Receive Charter Quote Requests, No Broker Markup';
 
   const body =
     '<h1 style="margin:0 0 24px 0;color:' + BRAND.cream + ';font-size:22px;font-weight:600">' +
     'Charter requests, direct to your dispatch' +
     '</h1>' +
-    p('Hi ' + companyName + ' team,') +
+    p('Hi ' + escapeHtml(companyName) + ' team,') +
     p('We found your FAA Part 135 certificate' +
-      (certNumber ? ' (' + certNumber + ')' : '') +
+      (certNumber ? ' (' + escapeHtml(certNumber) + ')' : '') +
       ' and wanted to introduce Bespoke Flights &mdash; a charter marketplace that connects travelers directly with operators like you.') +
     p('<strong style="color:' + BRAND.gold + '">How it works:</strong>') +
     '<table cellpadding="0" cellspacing="0" style="margin:0 0 20px 0;width:100%">' +
@@ -79,7 +79,7 @@ export function operatorInviteEmail(companyName: string, certNumber?: string): {
     p('Takes about 2 minutes. Once approved, RFQs arrive via your preferred method &mdash; email, text, or both.', 'color:' + BRAND.muted + ';font-size:13px') +
     '<hr style="border:none;border-top:1px solid #2a3444;margin:28px 0">' +
     p('Questions? Reply to this email or visit <a href="https://bespoke.flights" style="color:' + BRAND.gold + '">bespoke.flights</a>.', 'color:' + BRAND.muted + ';font-size:13px') +
-    p('If you\'d prefer not to receive messages from us, <a href="https://bespoke.flights/unsubscribe" style="color:' + BRAND.muted + '">unsubscribe here</a>.', 'color:' + BRAND.muted + ';font-size:12px');
+    p('If you\'d prefer not to receive messages from us, <a href="' + escapeHtml(unsubscribeUrl) + '" style="color:' + BRAND.muted + '">unsubscribe here</a>.', 'color:' + BRAND.muted + ';font-size:12px');
 
   return { subject, html: layout(body) };
 }
@@ -123,8 +123,8 @@ export function rfqNotificationEmail(data: RFQEmailData): { subject: string; htm
     '<table cellpadding="0" cellspacing="0" style="width:100%;background:#0f1724;border-radius:8px;margin:20px 0">' +
     '<tr><td style="padding:16px">' +
     '<table cellpadding="0" cellspacing="0" style="width:100%">' +
-    summaryRow('Route', data.route) +
-    summaryRow('Dates', data.dateRange) +
+    summaryRow('Route', escapeHtml(data.route)) +
+    summaryRow('Dates', escapeHtml(data.dateRange)) +
     summaryRow('Passengers', String(data.passengerCount)) +
     summaryRow('Special requests', data.notes ? escapeHtml(data.notes) : 'None') +
     '</table></td></tr></table>' +
@@ -204,16 +204,16 @@ export function paymentReceiptEmail(data: BookingPaymentEmailData): { subject: s
     '<table cellpadding="0" cellspacing="0" style="width:100%;background:#0f1724;border-radius:8px;margin:20px 0">' +
     '<tr><td style="padding:16px">' +
     '<table cellpadding="0" cellspacing="0" style="width:100%">' +
-    summaryRow('Route', data.route) +
-    summaryRow('Dates', data.dateRange) +
+    summaryRow('Route', escapeHtml(data.route)) +
+    summaryRow('Dates', escapeHtml(data.dateRange)) +
     data.legLines.map((line, i) => summaryRow(i === 0 ? 'Legs' : '', escapeHtml(line.replace(/^Leg \d+: /, '')))).join('') +
     summaryRow('Passengers', String(data.passengerCount)) +
     summaryRow('Special requests', data.specialRequests ? escapeHtml(data.specialRequests) : 'None') +
-    summaryRow('Operator', data.operatorCompany) +
-    (data.aircraft ? summaryRow('Aircraft', data.aircraft) : '') +
+    summaryRow('Operator', escapeHtml(data.operatorCompany)) +
+    (data.aircraft ? summaryRow('Aircraft', escapeHtml(data.aircraft)) : '') +
     summaryRow('Total paid', data.amount) +
     '</table></td></tr></table>' +
-    p(data.operatorCompany + ' will confirm passenger details and flight logistics with you in the app.') +
+    p(escapeHtml(data.operatorCompany) + ' will confirm passenger details and flight logistics with you in the app.') +
     button('View Booking', data.baseUrl + '/requests/' + data.requestId) +
     p('<a href="' + data.baseUrl + '/requests/' + data.requestId + '/receipt" style="color:' + BRAND.gold + '">Printable receipt</a>', 'color:' + BRAND.muted + ';font-size:13px');
 
@@ -235,12 +235,12 @@ export function bookingConfirmedOperatorEmail(
     '<table cellpadding="0" cellspacing="0" style="width:100%;background:#0f1724;border-radius:8px;margin:20px 0">' +
     '<tr><td style="padding:16px">' +
     '<table cellpadding="0" cellspacing="0" style="width:100%">' +
-    summaryRow('Route', data.route) +
-    summaryRow('Dates', data.dateRange) +
+    summaryRow('Route', escapeHtml(data.route)) +
+    summaryRow('Dates', escapeHtml(data.dateRange)) +
     data.legLines.map((line, i) => summaryRow(i === 0 ? 'Legs' : '', escapeHtml(line.replace(/^Leg \d+: /, '')))).join('') +
     summaryRow('Passengers', String(data.passengerCount)) +
     summaryRow('Special requests', data.specialRequests ? escapeHtml(data.specialRequests) : 'None') +
-    (data.aircraft ? summaryRow('Aircraft', data.aircraft) : '') +
+    (data.aircraft ? summaryRow('Aircraft', escapeHtml(data.aircraft)) : '') +
     summaryRow('Quote', data.amount) +
     summaryRow('Platform fee', data.platformFee) +
     summaryRow('Your payout', data.payout) +

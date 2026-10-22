@@ -4,34 +4,34 @@ import { autopilotSchema } from '@/lib/quotes/autopilot';
 import { MIN_QUOTE_CENTS } from '@/lib/quotes/price';
 
 export const registerSchema = z.object({
-  email: z.string().email(),
-  phone: z.string().min(7).optional(),
-  password: z.string().min(8),
-  name: z.string().min(1),
+  email: z.string().email().max(254),
+  phone: z.string().min(7).max(32).optional(),
+  password: z.string().min(8).max(128),
+  name: z.string().min(1).max(120),
   role: z.enum(['customer', 'operator']),
-  companyName: z.string().min(1).optional(),
+  companyName: z.string().min(1).max(120).optional(),
 }).refine(data => data.role !== 'operator' || data.companyName, {
   message: 'Company name is required for operators',
   path: ['companyName'],
 });
 
 export const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
+  email: z.string().email().max(254),
+  password: z.string().min(1).max(128),
 });
 
 export const legSchema = z.object({
   originCode: z.string().min(3, 'Enter an airport code').max(4, 'Enter an airport code'),
-  originName: z.string().optional(),
+  originName: z.string().max(200).optional(),
   destCode: z.string().min(3, 'Enter an airport code').max(4, 'Enter an airport code'),
-  destName: z.string().optional(),
+  destName: z.string().max(200).optional(),
   departureDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter a date'),
-  departureTime: z.string().optional(),
+  departureTime: z.union([z.string().regex(/^\d{2}:\d{2}$/, 'Enter a time'), z.literal('')]).optional(),
 });
 
 export const bookingRequestSchema = z.object({
   passengerCount: z.number().int().min(1).max(999),
-  notes: z.string().optional(),
+  notes: z.string().max(2000).optional(),
   legs: z.array(legSchema).min(1).max(10),
   /** Booking form the request came from, for comparing the two designs. */
   formVariant: z.enum(['ticket', 'classic']).optional(),
@@ -85,9 +85,9 @@ export const emptyLegBookSchema = z.object({
 });
 
 export const profileSchema = z.object({
-  name: z.string().min(1).optional(),
-  email: z.string().email().optional(),
-  phone: z.string().min(7).optional(),
+  name: z.string().min(1).max(120).optional(),
+  email: z.string().email().max(254).optional(),
+  phone: z.string().min(7).max(32).optional(),
 });
 
 const thisYear = new Date().getFullYear();

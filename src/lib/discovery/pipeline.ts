@@ -13,6 +13,8 @@ import { scrapeStates, getNextStateBatch } from './faa-scraper';
 import type { FAAOperator } from './faa-scraper';
 import { sendEmail } from '@/lib/email/resend';
 import { operatorInviteEmail } from '@/lib/email/templates';
+import { appBaseUrl } from '@/lib/payments/config';
+import { randomBytes } from 'crypto';
 
 export interface DiscoveryResult {
   statesQueried: string[];
@@ -89,9 +91,14 @@ async function sendInviteEmails(
   const errors: string[] = [];
 
   for (const op of pending) {
+    const { unsubscribe_token: token } = (await db.one<{ unsubscribe_token: string }>(`
+      UPDATE discovered_operators SET unsubscribe_token = COALESCE(unsubscribe_token, ?)
+      WHERE id = ? RETURNING unsubscribe_token
+    `, [randomBytes(18).toString('base64url'), op.id]))!;
     const { subject, html } = operatorInviteEmail(
       op.company_name,
-      op.certificate_number || undefined
+      op.certificate_number || undefined,
+      `${appBaseUrl()}/unsubscribe?t=${token}`
     );
 
     const result = await sendEmail({

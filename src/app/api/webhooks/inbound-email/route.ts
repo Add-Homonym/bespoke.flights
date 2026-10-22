@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getDb } from '@/lib/db';
+import { bearerMatches } from '@/lib/bearer';
 import { appBaseUrl } from '@/lib/payments/config';
 import { quoteFromEmail } from '@/lib/quotes/by-email';
 
@@ -23,8 +24,7 @@ const envelope = z.union([message, z.object({ data: message })]);
 export async function POST(req: Request) {
   const secret = process.env.INBOUND_EMAIL_SECRET;
   if (!secret) return NextResponse.json({ error: 'Inbound email is not configured' }, { status: 503 });
-  const auth = req.headers.get('authorization') ?? '';
-  if (auth !== `Bearer ${secret}`) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!bearerMatches(req, secret)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const parsed = envelope.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: 'Invalid message' }, { status: 400 });

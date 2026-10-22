@@ -1,8 +1,10 @@
 import Link from 'next/link';
+import { requireAdminPage } from '@/lib/admin/guard';
 import { getDb } from '@/lib/db';
 import { Card } from '@/components/ui/card';
 
 export default async function AdminDashboardPage() {
+  await requireAdminPage();
   const db = getDb();
 
   const totalUsers = (await db.one<{ count: number }>('SELECT COUNT(*) as count FROM users'))!.count;

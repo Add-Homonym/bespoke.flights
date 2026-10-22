@@ -12,7 +12,8 @@ import { ChangeRequestSummary, OperatorChangeRequests } from '@/components/booki
 import { changeRequestViews } from '@/lib/bookings/changes';
 import { displayCode } from '@/lib/airports';
 import { formatMoney } from '@/lib/payments/config';
-import { withholdTravelerText } from '@/lib/access';
+import { requestAccess, withholdTravelerText } from '@/lib/access';
+import { toId } from '@/lib/db/queries';
 import { cancellationSummary } from '@/lib/bookings/cancellation';
 import { MessageThread } from '@/components/messaging/message-thread';
 import { unreadForOperator } from '@/lib/messaging/messages';
@@ -29,11 +30,17 @@ export default async function OperatorRequestDetailPage({ params, searchParams }
   const { quoted } = await searchParams;
   const db = getDb();
 
-  const request = await db.one<BookingRequest>('SELECT * FROM booking_requests WHERE id = ?', [requestId]);
+  const request = await db.one<BookingRequest>('SELECT * FROM booking_requests WHERE id = ?', [toId(requestId)]);
   if (!request) notFound();
+  const operator = await db.one<Operator>('SELECT * FROM operators WHERE user_id = ?', [session.userId]);
+  // Approved operators: requests open to quotes or ones they were invited to or quoted.
+  // Pending operators: the shape of open requests only. Suspended: nothing.
+  const visible = operator?.status === 'approved'
+    ? (await requestAccess(db, session, request)).canView
+    : operator?.status === 'pending' && ['open', 'quoted'].includes(request.status);
+  if (!visible) notFound();
 
   const legs = await db.query<BookingLeg>('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order', [request.id]);
-  const operator = await db.one<Operator>('SELECT * FROM operators WHERE user_id = ?', [session.userId]);
 
   const aircraft = operator
     ? (await db.query<Aircraft>('SELECT * FROM aircraft WHERE operator_id = ?', [operator.id]))

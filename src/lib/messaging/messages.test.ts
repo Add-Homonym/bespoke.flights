@@ -118,7 +118,8 @@ describe('notifications', () => {
 
     await send('customer', 'one', t0);
     expect(emails()).toEqual(['dispatch@alpha.com', 'dee@alpha.com']);   // operator email + staff alert
-    expect(subjects()[0]).toBe(`New message from Customer — Request #${f.requestId}`);
+    // Operator A has not won this request, so its email does not name the traveler.
+    expect(subjects()[0]).toBe(`New message from Traveler — Request #${f.requestId}`);
     log.mockClear();
 
     await send('customer', 'two', t0 + 60_000);

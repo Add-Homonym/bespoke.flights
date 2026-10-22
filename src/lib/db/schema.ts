@@ -456,6 +456,8 @@ ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_method_label TEXT;
 
 -- An empty-leg booking links to its listing here. The traveler notes stay in notes.
 ALTER TABLE booking_requests ADD COLUMN IF NOT EXISTS empty_leg_id INTEGER REFERENCES empty_legs(id);
+-- Opt-out link in cold outreach (FAA discovery invites).
+ALTER TABLE discovered_operators ADD COLUMN IF NOT EXISTS unsubscribe_token TEXT UNIQUE;
 `;
 
 /**
