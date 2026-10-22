@@ -10,11 +10,13 @@
 
 import { z } from 'zod';
 import type { Db } from '@/lib/db';
+import { closeCancelledBooking } from '@/lib/bookings/close';
 import { relistAfterCancellation } from '@/lib/empty-legs/service';
 import { sendEmail } from '@/lib/email/resend';
 import { bookingCancelledEmail } from '@/lib/email/templates';
 import { appBaseUrl, formatMoney } from '@/lib/payments/config';
 import { PaymentError, refundPayment } from '@/lib/payments/service';
+import { formatUtc, tierLabel as tierText, type CancelBannerParts } from '@/lib/bookings/cancel-text';
 import { alertStaff } from '@/lib/staff/alerts';
 import { fromDbLegs, legLine, tripRoute } from '@/lib/trip-format';
 import type { BookingLeg, BookingRequest, Payment } from '@/lib/types';
@@ -149,12 +151,61 @@ export async function previewCancellation(db: Db, request: BookingRequest, now =
   };
 }
 
+export interface CancellationSummary extends CancelBannerParts {
+  tier: RefundTier;
+  paid: string;
+  policyText: string;
+  operatorCompany: string;
+  /** Operator payout before the cancellation, what is clawed back, and what they keep. */
+  payout: string;
+  payoutAdjustment: string;
+  payoutRetained: string;
+}
+
+/** What a cancelled booking refunded and how the operator's payout moved, or null when it was never paid. */
+export async function cancellationSummary(db: Db, requestId: number): Promise<CancellationSummary | null> {
+  const request = await db.one<BookingRequest>('SELECT * FROM booking_requests WHERE id = ?', [requestId]);
+  if (!request || request.status !== 'cancelled' || !request.cancelled_at) return null;
+  const payment = await db.one<Payment & { cancellation_policy: string | null; company_name: string }>(`
+    SELECT p.*, o.cancellation_policy, o.company_name FROM payments p JOIN operators o ON o.id = p.operator_id
+    WHERE p.request_id = ? AND p.change_request_id IS NULL AND p.status IN ('succeeded','partially_refunded','refunded')
+    ORDER BY p.id DESC LIMIT 1`, [requestId]);
+  if (!payment) return null;
+  const policy = parsePolicy(payment.cancellation_policy);
+  const tier = (request.cancel_tier ?? (payment.refunded_cents >= payment.amount_cents ? 'full' : payment.refunded_cents > 0 ? 'partial' : 'none')) as RefundTier;
+  const refundCents = Number(payment.refunded_cents);
+  // The refund pulls the same share of the operator's payout back from them.
+  const adjustment = payment.amount_cents > 0 ? Math.round((payment.operator_payout_cents * refundCents) / payment.amount_cents) : 0;
+  return {
+    tier,
+    refund: formatMoney(refundCents, payment.currency),
+    refundCents,
+    refundTo: payment.payment_method_label || ORIGINAL_METHOD,
+    tierLabel: tierText(tier, policy),
+    cancelledAt: formatUtc(request.cancelled_at),
+    paid: formatMoney(payment.amount_cents, payment.currency),
+    policyText: describePolicy(policy),
+    operatorCompany: payment.company_name,
+    payout: formatMoney(payment.operator_payout_cents, payment.currency),
+    payoutAdjustment: formatMoney(adjustment, payment.currency),
+    payoutRetained: formatMoney(payment.operator_payout_cents - adjustment, payment.currency),
+  };
+}
+
 export interface CancellationResult {
   status: 'cancelled';
   refundCents: number;
   refund: string;
   tier: RefundTier;
+  /** "card ending 4242" when known, otherwise "the original payment method". */
+  refundTo: string;
+  cancelledAt: string;
+  /** Which refund tier applied, in words. */
+  tierLabel: string;
+  policyText: string;
 }
+
+export const ORIGINAL_METHOD = 'the original payment method';
 
 /**
  * Cancel a paid booking: refund per policy, mark the request cancelled,
@@ -179,10 +230,14 @@ export async function cancelPaidBooking(
       baseUrl,
     });
   }
-  const changed = await db.run(
-    "UPDATE booking_requests SET status = 'cancelled', updated_at = now() WHERE id = ? AND status <> 'cancelled'", [request.id]);
-  await db.run("UPDATE quotes SET status = 'rejected' WHERE request_id = ? AND status = 'pending'", [request.id]);
-  await relistAfterCancellation(db, request.id);
+  // One transaction: the request, its quotes, its change requests and its message thread's state all move together.
+  const changed = await db.transaction(async tx => {
+    const moved = await tx.run(
+      "UPDATE booking_requests SET status = 'cancelled', updated_at = now() WHERE id = ? AND status <> 'cancelled'", [request.id]);
+    await closeCancelledBooking(tx, request.id, { tier: preview.tier, refundCents: preview.refundCents });
+    await relistAfterCancellation(tx, request.id);
+    return moved;
+  });
 
   const payment = (await db.one<Payment>('SELECT * FROM payments WHERE id = ?', [preview.paymentId]))!;
   if (changed) {
@@ -191,7 +246,17 @@ export async function cancelPaidBooking(
   await sendCancellationEmails(db, request.id, payment, preview, baseUrl).catch(err =>
     console.error('Cancellation email failed:', err));
 
-  return { status: 'cancelled', refundCents: preview.refundCents, refund: preview.refund, tier: preview.tier };
+  const when = await db.one<{ cancelled_at: string }>('SELECT cancelled_at FROM booking_requests WHERE id = ?', [request.id]);
+  return {
+    status: 'cancelled',
+    refundCents: preview.refundCents,
+    refund: preview.refund,
+    tier: preview.tier,
+    refundTo: payment.payment_method_label || ORIGINAL_METHOD,
+    cancelledAt: formatUtc(when?.cancelled_at ?? new Date().toISOString()),
+    tierLabel: tierText(preview.tier, preview.policy),
+    policyText: preview.policyText,
+  };
 }
 
 async function sendCancellationEmails(db: Db, requestId: number, payment: Payment, preview: CancellationPreview, baseUrl: string) {

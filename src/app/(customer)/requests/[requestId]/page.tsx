@@ -14,11 +14,12 @@ import { RequestStatusBadge } from '@/components/booking/request-status';
 import { OutreachStatus } from '@/components/operator/outreach-status';
 import { PaymentStatus } from '@/components/booking/payment-status';
 import { CancelTrip } from '@/components/booking/cancel-trip';
-import { TravelerChangeRequests } from '@/components/booking/change-request';
+import { ChangeRequestSummary, TravelerChangeRequests } from '@/components/booking/change-request';
 import { changeRequestViews } from '@/lib/bookings/changes';
 import { MessageThread } from '@/components/messaging/message-thread';
 import { unreadByOperator } from '@/lib/messaging/messages';
-import { previewCancellation } from '@/lib/bookings/cancellation';
+import { cancellationSummary, previewCancellation } from '@/lib/bookings/cancellation';
+import { cancelBanner } from '@/lib/bookings/cancel-text';
 import { formatMoney, getPaymentsMode } from '@/lib/payments/config';
 import { emptyLegsForRequest } from '@/lib/empty-legs/service';
 import { EmptyLegCard } from '@/components/empty-legs/empty-leg-card';
@@ -100,7 +101,8 @@ export default async function RequestDetailPage({
   // Cancellation: paid bookings refund per the operator's policy; unpaid requests are simply withdrawn.
   const canCancel = session.role === 'customer' && ['open', 'quoted', 'booked'].includes(request.status) && !(payment && payment.status === 'processing');
   const cancelPreview = canCancel && request.status === 'booked' ? await previewCancellation(db, request) : null;
-  const changes = request.status === 'booked' || request.status === 'completed' ? await changeRequestViews(db, request.id, payment?.currency) : [];
+  const cancelled = request.status === 'cancelled' ? await cancellationSummary(db, request.id) : null;
+  const changes = ['booked', 'completed', 'cancelled'].includes(request.status) ? await changeRequestViews(db, request.id, payment?.currency) : [];
   const unread = quotes.length ? await unreadByOperator(db, request.id, request.customer_id) : new Map<number, number>();
   // Listed empty legs that fit this trip, offered while the request is still open.
   const emptyLegs = session.role === 'customer' && ['open', 'quoted'].includes(request.status) && !paymentInFlight ? await emptyLegsForRequest(db, request.id) : [];
@@ -111,6 +113,8 @@ export default async function RequestDetailPage({
       <div className="mb-6">
         {confirmed ? (
           <h1 className="text-display sm:text-display-xl text-ink">Booking confirmed</h1>
+        ) : request.status === 'cancelled' ? (
+          <h1 className="text-display text-ink">Trip cancelled</h1>
         ) : (
           <h1 className="text-display text-ink">Your trip</h1>
         )}
@@ -128,6 +132,13 @@ export default async function RequestDetailPage({
             aircraft={acceptedQuote?.aircraft_type ?? 'To be assigned'}
           />
         </div>
+      )}
+
+      {cancelled && (
+        <Notice tone="info" className="mb-8">
+          <span className="block">{cancelBanner(cancelled).headline}</span>
+          <span className="mt-1 block text-label">{cancelBanner(cancelled).detail}</span>
+        </Notice>
       )}
 
       {submitted === '1' && (
@@ -215,6 +226,13 @@ export default async function RequestDetailPage({
         />
       )}
 
+      {request.status === 'cancelled' && changes.length > 0 && (
+        <Card className="mb-8 space-y-3">
+          <h2 className="text-title text-ink">Changes</h2>
+          {changes.map(cr => <ChangeRequestSummary key={cr.id} cr={cr} />)}
+        </Card>
+      )}
+
       {canCancel && (request.status !== 'booked' || cancelPreview) && (
         <CancelTrip
           requestId={request.id}
@@ -279,6 +297,7 @@ export default async function RequestDetailPage({
                   operatorDetail={[quote.certificate && `FAA certificate ${quote.certificate}`, quote.safety_rating].filter(Boolean).join(' · ') || undefined}
                   badge={
                     quote.status === 'accepted' ? <StatusBadge variant="confirmed">Accepted</StatusBadge>
+                    : quote.status === 'cancelled' ? <StatusBadge variant="neutral">Cancelled</StatusBadge>
                     : quote.status === 'rejected' ? <StatusBadge variant="neutral">Declined</StatusBadge>
                     : quote.status === 'withdrawn' ? <StatusBadge variant="neutral">Withdrawn</StatusBadge>
                     : expired ? <StatusBadge variant="warning">Expired</StatusBadge>
@@ -312,7 +331,7 @@ export default async function RequestDetailPage({
                       requestId={request.id}
                       operatorId={quote.operator_id}
                       title={`Messages with ${quote.company_name}`}
-                      collapsed={quote.status !== 'accepted'}
+                      collapsed={quote.status !== 'accepted' && quote.status !== 'cancelled'}
                       unread={unread.get(quote.operator_id) ?? 0}
                       viewer={session.role}
                     />

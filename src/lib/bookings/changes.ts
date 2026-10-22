@@ -66,6 +66,8 @@ export interface ChangeRequest {
   created_at: string;
   resolved_at: string | null;
   applied_at: string | null;
+  /** Why it was closed without the operator or traveler acting: 'trip_cancelled'. */
+  closed_reason?: string | null;
 }
 
 export type ProposedLeg = z.infer<typeof legSchema>;

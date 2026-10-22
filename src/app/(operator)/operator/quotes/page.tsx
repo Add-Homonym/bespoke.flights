@@ -13,21 +13,20 @@ const statusBadge: Record<string, 'neutral' | 'confirmed' | 'warning' | 'danger'
   rejected: 'danger',
   withdrawn: 'neutral',
   expired: 'neutral',
+  cancelled: 'neutral',
 };
 
-const paymentBadge: Record<string, 'neutral' | 'confirmed' | 'warning' | 'danger' | 'neutral'> = {
-  processing: 'warning',
-  succeeded: 'confirmed',
-  partially_refunded: 'warning',
-  refunded: 'neutral',
-};
-
-const paymentLabel: Record<string, string> = {
-  processing: 'payment processing',
-  succeeded: 'paid',
-  partially_refunded: 'partially refunded',
-  refunded: 'refunded',
-};
+/** One status per quote: the quote's own, refined by how its payment stands. */
+function quoteStatus(q: { status: string; payment_status: string | null; payout_cents: number | null; currency: string }): { variant: 'neutral' | 'confirmed' | 'warning' | 'danger'; label: string } {
+  if (q.status === 'cancelled') return { variant: 'neutral', label: q.payment_status === 'refunded' ? 'cancelled · refunded' : q.payment_status === 'partially_refunded' ? 'cancelled · partially refunded' : 'cancelled' };
+  if (q.status === 'accepted') {
+    if (q.payment_status === 'processing') return { variant: 'warning', label: 'accepted · payment processing' };
+    const payout = q.payout_cents != null ? ` · ${formatMoney(q.payout_cents, q.currency)} payout` : '';
+    if (q.payment_status === 'partially_refunded') return { variant: 'warning', label: `booked · partially refunded${payout}` };
+    return { variant: 'confirmed', label: `booked${q.payment_status === 'succeeded' ? ' · paid' : ''}${payout}` };
+  }
+  return { variant: statusBadge[q.status] ?? 'neutral', label: q.status };
+}
 
 export default async function OperatorQuotesPage() {
   const session = await getSession();
@@ -88,13 +87,7 @@ export default async function OperatorQuotesPage() {
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    {quote.payment_status && (
-                      <StatusBadge variant={paymentBadge[quote.payment_status] ?? 'neutral'}>
-                        {paymentLabel[quote.payment_status] ?? quote.payment_status}
-                        {quote.payout_cents != null && ` · ${formatMoney(quote.payout_cents, quote.currency)} payout`}
-                      </StatusBadge>
-                    )}
-                    <StatusBadge variant={statusBadge[quote.status]}>{quote.status}</StatusBadge>
+                    <StatusBadge variant={quoteStatus(quote).variant}>{quoteStatus(quote).label}</StatusBadge>
                   </div>
                 </Card>
               </Link>

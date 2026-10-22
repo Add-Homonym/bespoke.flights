@@ -32,6 +32,7 @@ import { alertStaff } from '@/lib/staff/alerts';
 import { paymentReceiptEmail, bookingConfirmedOperatorEmail } from '@/lib/email/templates';
 import type { Payment, Quote, BookingRequest, Operator, BookingLeg } from '@/lib/types';
 import { fromDbLegs, legLine } from '@/lib/trip-format';
+import { closeCancelledBooking } from '@/lib/bookings/close';
 import { listingAvailable, markListingBooked, relistAfterCancellation } from '@/lib/empty-legs/service';
 import { notifyEmptyLegUnavailable } from '@/lib/notify/traveler';
 
@@ -242,7 +243,7 @@ export async function markPaymentSucceeded(
       // A succeeded payment whose quote never got accepted is a conflict whose
       // refund has not gone through yet (e.g. Stripe error, webhook retried).
       if (payment.change_request_id) return payment.status === 'succeeded' ? 'change_paid' : 'duplicate';
-      return payment.status === 'succeeded' && quote.status !== 'accepted' ? 'conflict' : 'duplicate';
+      return payment.status === 'succeeded' && !['accepted', 'cancelled'].includes(quote.status) ? 'conflict' : 'duplicate';
     }
 
     await tx.run(`
@@ -319,6 +320,7 @@ export async function applyRefundTotal(db: Db, paymentId: number, refundedCents:
           WHERE id = ? AND status = 'booked'
         `, [payment.request_id]);
         if (changed) {
+          await closeCancelledBooking(tx, payment.request_id, { tier: 'full', refundCents: total });
           await relistAfterCancellation(tx, payment.request_id);
           return { requestId: payment.request_id, operatorId: payment.operator_id };
         }
@@ -617,6 +619,21 @@ async function paymentForIntent(db: Db, intent: string | Stripe.PaymentIntent | 
   return db.one<Payment>('SELECT * FROM payments WHERE stripe_payment_intent_id = ?', [id]);
 }
 
+/** Remember "card ending 4242" so a later refund can say where the money goes. Best effort. */
+async function recordPaymentMethod(db: Db, paymentId: number, paymentIntentId: string | null) {
+  if (!paymentIntentId) return;
+  try {
+    const intent = await getStripe().paymentIntents.retrieve(paymentIntentId, { expand: ['latest_charge'] });
+    const charge = typeof intent.latest_charge === 'object' ? intent.latest_charge : null;
+    const details = charge?.payment_method_details;
+    const label = details?.card?.last4 ? `card ending ${details.card.last4}`
+      : details?.us_bank_account?.last4 ? `bank account ending ${details.us_bank_account.last4}` : null;
+    if (label) await db.run('UPDATE payments SET payment_method_label = ? WHERE id = ?', [label, paymentId]);
+  } catch (err) {
+    console.error('Could not read the payment method:', err instanceof Error ? err.message : err);
+  }
+}
+
 function intentId(intent: string | Stripe.PaymentIntent | null): string | null {
   return typeof intent === 'string' ? intent : intent?.id ?? null;
 }
@@ -647,6 +664,7 @@ export async function handleStripeEvent(
       if (!payment) break;
       if (session.payment_status === 'paid' || session.payment_status === 'no_payment_required') {
         await fulfillPayment(db, payment.id, { paymentIntentId: intentId(session.payment_intent), baseUrl });
+        await recordPaymentMethod(db, payment.id, intentId(session.payment_intent));
       } else {
         // ACH and other delayed methods: funds not yet confirmed.
         await markPaymentProcessing(db, payment.id, intentId(session.payment_intent));

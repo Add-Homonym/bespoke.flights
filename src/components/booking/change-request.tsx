@@ -25,6 +25,7 @@ export interface ChangeRequestView {
   new_price_cents: number | null;
   previous_price_cents: number | null;
   applied_at: string | null;
+  closed_reason?: string | null;
   created_at: string;
   /** Formatted new price, when the operator set one. */
   newPrice?: string | null;
@@ -75,6 +76,9 @@ export function ChangeRequestSummary({ cr, children }: { cr: ChangeRequestView; 
         <p className="text-label text-ink-muted">New all-in price: <span className="text-ink tabular-nums">{cr.newPrice}</span></p>
       )}
       {cr.operator_note && <p className="text-body text-ink-muted italic">&ldquo;{cr.operator_note}&rdquo;</p>}
+      {cr.status === 'withdrawn' && cr.closed_reason === 'trip_cancelled' && (
+        <p className="text-body text-ink">Change request closed because the trip was cancelled.</p>
+      )}
       {cr.status === 'accepted' && !cr.applied_at && cr.paymentDue && (
         <p className="text-body text-ink">Pay {cr.paymentDue.amount} to apply this change.</p>
       )}

@@ -43,7 +43,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ requestI
   const ctx = await resolve(req, requestId);
   if (ctx.error) return ctx.error;
   const thread = await getThread(ctx.db, ctx.request.id, ctx.operatorId, ctx.side, ctx.afterId);
-  return NextResponse.json({ ...thread, viewer: ctx.side }, { headers: { 'Cache-Control': 'no-store' } });
+  return NextResponse.json({ ...thread, viewer: ctx.side, closed: ctx.request.status === 'cancelled' }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 /** Post a message. Admins read but do not write. */
@@ -52,6 +52,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ request
   const ctx = await resolve(req, requestId);
   if (ctx.error) return ctx.error;
   if (ctx.side === 'admin') return NextResponse.json({ error: 'Admins can read but not post' }, { status: 403 });
+  if (ctx.request.status === 'cancelled') {
+    return NextResponse.json({ error: 'This trip was cancelled, so the conversation is closed.' }, { status: 409 });
+  }
 
   const parsed = messageInputSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'Invalid message' }, { status: 400 });

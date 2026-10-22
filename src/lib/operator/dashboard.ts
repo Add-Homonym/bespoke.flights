@@ -13,7 +13,7 @@ export interface Dashboard {
     awaiting: number;
     submitted: number;
     accepted: number;
-    /** Sum of accepted quote prices. */
+    /** Sum of accepted quote prices, net of partial refunds; cancelled bookings excluded. */
     wonCents: number;
     /** Autopilot drafts waiting for a staffer. */
     drafts: number;
@@ -46,11 +46,18 @@ export async function buildDashboard(db: Db, operator: Operator, now = new Date(
           AND NOT EXISTS (SELECT 1 FROM quotes q WHERE q.request_id = ol.request_id AND q.operator_id = ol.operator_id))::int AS awaiting
       FROM outreach_log ol JOIN booking_requests br ON br.id = ol.request_id
       WHERE ol.operator_id = ?`, [id]),
+    // Accepted counts bookings still standing: a cancelled quote is neither accepted nor won,
+    // and money refunded on a standing booking (a change to a lower price) comes off the total.
     db.one<{ submitted: number; accepted: number; won: number }>(`
       SELECT COUNT(*)::int AS submitted,
-        COUNT(*) FILTER (WHERE status = 'accepted')::int AS accepted,
-        COALESCE(SUM(price_cents) FILTER (WHERE status = 'accepted'), 0)::bigint AS won
-      FROM quotes WHERE operator_id = ?`, [id]),
+        COUNT(*) FILTER (WHERE q.status = 'accepted')::int AS accepted,
+        COALESCE(SUM(q.price_cents - COALESCE(r.refunded, 0)) FILTER (WHERE q.status = 'accepted'), 0)::bigint AS won
+      FROM quotes q
+      LEFT JOIN LATERAL (
+        SELECT SUM(p.refunded_cents) AS refunded FROM payments p
+        WHERE p.quote_id = q.id AND p.change_request_id IS NULL AND p.status IN ('succeeded','partially_refunded')
+      ) r ON true
+      WHERE q.operator_id = ?`, [id]),
     db.one<{ count: number; seats: number; without_photos: number; flags: number }>(`
       SELECT COUNT(*)::int AS count, COALESCE(SUM(capacity), 0)::int AS seats,
         COUNT(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM aircraft_photos p WHERE p.aircraft_id = a.id))::int AS without_photos,

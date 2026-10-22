@@ -445,6 +445,14 @@ ALTER TABLE quotes ADD COLUMN IF NOT EXISTS empty_leg_id INTEGER REFERENCES empt
 ALTER TABLE outreach_log ADD COLUMN IF NOT EXISTS reply_token TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_outreach_reply_token ON outreach_log(reply_token);
 ALTER TABLE quotes ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'app';
+
+-- Cancellation is one state change: when and how a paid booking was cancelled,
+-- why a change request was closed, and which card the money goes back to.
+ALTER TABLE booking_requests ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;
+ALTER TABLE booking_requests ADD COLUMN IF NOT EXISTS cancel_tier TEXT;
+ALTER TABLE booking_requests ADD COLUMN IF NOT EXISTS cancel_refund_cents BIGINT;
+ALTER TABLE change_requests ADD COLUMN IF NOT EXISTS closed_reason TEXT;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_method_label TEXT;
 `;
 
 /**
@@ -464,4 +472,19 @@ export const SCHEMA_BLOCKS: string[] = [
         CHECK (status IN ('pending','accepted','rejected','withdrawn','expired'));
     END IF;
   END $$`,
+  // Add 'cancelled' to quotes.status: the accepted quote of a cancelled booking.
+  `DO $$
+  BEGIN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid = c.conrelid
+      WHERE t.relname = 'quotes' AND c.conname = 'quotes_status_check' AND pg_get_constraintdef(c.oid) LIKE '%cancelled%'
+    ) THEN
+      ALTER TABLE quotes DROP CONSTRAINT IF EXISTS quotes_status_check;
+      ALTER TABLE quotes ADD CONSTRAINT quotes_status_check
+        CHECK (status IN ('pending','accepted','rejected','withdrawn','expired','cancelled'));
+    END IF;
+  END $$`,
+  // Backfill: bookings cancelled before this change still show an accepted quote.
+  `UPDATE quotes SET status = 'cancelled'
+   WHERE status = 'accepted' AND request_id IN (SELECT id FROM booking_requests WHERE status = 'cancelled')`,
 ];
