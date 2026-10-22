@@ -66,7 +66,7 @@ function Instrument({ id, label, unit, prefix, step, value, onChange, learned }:
           <label htmlFor={id} className="sr-only">{label} ({unit.toLowerCase()})</label>
           <input id={id} type="number" inputMode="decimal" min={0} step={step} value={value}
             onChange={e => onChange(e.target.value === '' ? 0 : Math.max(0, Number(e.target.value)))}
-            className="w-full min-w-0 bg-transparent text-right text-[20px] tabular-nums outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />
+            className="h-11 w-full min-w-0 bg-transparent text-right text-[20px] tabular-nums outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />
         </div>
         <button type="button" aria-label={`Increase ${label}`} onClick={() => nudge(step)} className="console-knob inline-flex size-11 shrink-0 items-center justify-center rounded-full cursor-pointer">
           <Plus size={14} strokeWidth={2} aria-hidden="true" />
@@ -159,7 +159,7 @@ export function AutopilotConsole() {
         <div className="flex items-center gap-3">
           <button type="button" role="switch" aria-checked={engaged} aria-label="Autopilot" disabled={saving}
             onClick={() => { const next = { ...value, enabled: !engaged }; setValue(next); void save(next); }}
-            className="engage-switch relative h-16 w-10 shrink-0 overflow-hidden rounded-md cursor-pointer disabled:cursor-wait">
+            className="engage-switch relative h-16 w-11 shrink-0 overflow-hidden rounded-md cursor-pointer disabled:cursor-wait">
             <span aria-hidden="true" className="engage-lever absolute inset-x-1 bottom-1 h-[calc(50%-4px)] rounded-sm" />
           </button>
           <div>

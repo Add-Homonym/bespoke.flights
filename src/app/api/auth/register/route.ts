@@ -23,7 +23,7 @@ export async function POST(req: Request) {
 
     const userId = await registerUser(db, { email, phone, password, name, role, companyName });
     if (userId === null) {
-      return NextResponse.json({ error: { email: ['Email already registered'] } }, { status: 409 });
+      return NextResponse.json({ error: 'Check the highlighted fields.', fieldErrors: { email: ['That email is already registered. Sign in instead.'] } }, { status: 409 });
     }
 
     // A traveler who built a trip before signing up: submit it now.

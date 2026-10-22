@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { FieldStatus, type SaveState } from '@/components/ui/field-status';
 import { readApiFailure } from '@/lib/api/form-errors';
@@ -175,11 +176,12 @@ export default function OperatorSettingsPage() {
             onCommit={v => save('certificate', { certificate: v })}
           />
           <div>
-            <label className="block text-sm font-medium text-ink-muted mb-1.5">Highest Safety Rating</label>
+            <label htmlFor="safety-rating" className="block text-label text-ink-muted mb-2">Highest safety rating</label>
             <select
+              id="safety-rating"
               value={settings.safety_rating || ''}
               onChange={e => { void save('safety_rating', { safety_rating: e.target.value }); }}
-              className="w-full rounded-md border border-hairline bg-surface-raised px-4 py-2.5 text-ink transition-colors"
+              className="block h-12 w-full rounded-md border border-border-control bg-surface-raised px-4 text-body text-ink transition-colors"
             >
               <option value="">Select...</option>
               {SAFETY_RATINGS.map(r => <option key={r} value={r}>{r}</option>)}
@@ -256,26 +258,14 @@ export default function OperatorSettingsPage() {
         <FieldStatus state={fieldState.markets} className="mt-2" />
 
         <div className="flex gap-4 mt-4">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={!!settings.hi_capable}
-              onChange={e => { void save('hi_capable', { hi_capable: e.target.checked ? 1 : 0 }); }}
-              className="rounded border-hairline bg-surface-raised text-royal "
-            />
-            <span className="text-sm text-ink">Hawaii capable</span>
-            <FieldStatus state={fieldState.hi_capable} />
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={!!settings.transoceanic}
-              onChange={e => { void save('transoceanic', { transoceanic: e.target.checked ? 1 : 0 }); }}
-              className="rounded border-hairline bg-surface-raised text-royal "
-            />
-            <span className="text-sm text-ink">Transoceanic capable</span>
-            <FieldStatus state={fieldState.transoceanic} />
-          </label>
+          <Checkbox label="Hawaii capable" checked={!!settings.hi_capable}
+            onChange={e => { void save('hi_capable', { hi_capable: e.target.checked ? 1 : 0 }); }}>
+            <FieldStatus state={fieldState.hi_capable} className="ml-2" />
+          </Checkbox>
+          <Checkbox label="Transoceanic capable" checked={!!settings.transoceanic}
+            onChange={e => { void save('transoceanic', { transoceanic: e.target.checked ? 1 : 0 }); }}>
+            <FieldStatus state={fieldState.transoceanic} className="ml-2" />
+          </Checkbox>
         </div>
       </Card>
 
