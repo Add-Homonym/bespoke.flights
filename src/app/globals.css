@@ -212,6 +212,54 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 700;
 }
 
+/*
+ * Booking form focus, at two levels.
+ * .form-part   — a leg, Guests or Special requests: the whole part lifts and
+ *                takes a royal border while anything inside it has focus or
+ *                the pointer is over it.
+ * .field-card  — a raised field group (route, schedule, guests, requests):
+ *                its border turns royal.
+ * .field-cell  — one field (From, To, Date, Time, …): it shows the focus ring
+ *                and a light tint, so the bare input inside needs no outline.
+ */
+.form-part, .field-card, .field-cell {
+  transition: border-color 200ms ease-out, box-shadow 200ms ease-out, background-color 200ms ease-out;
+}
+.form-part:focus-within {
+  border-color: var(--royal);
+  background-color: var(--surface-raised);
+  box-shadow: 0 0 0 1px var(--royal), var(--ds-shadow-raised);
+}
+.field-card:focus-within { border-color: var(--royal); }
+.field-cell:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+  background-color: color-mix(in srgb, var(--royal) 6%, transparent);
+}
+/* The pointer inside a part or field activates the same state. Mouse and
+   trackpad only, so a tap on a touchscreen does not leave it stuck on. */
+@media (hover: hover) and (pointer: fine) {
+  .form-part:hover {
+    border-color: var(--royal);
+    background-color: var(--surface-raised);
+    box-shadow: 0 0 0 1px var(--royal), var(--ds-shadow-raised);
+  }
+  .field-card:hover { border-color: var(--royal); }
+  .field-cell:hover {
+    outline: 2px solid var(--focus);
+    outline-offset: -2px;
+    background-color: color-mix(in srgb, var(--royal) 6%, transparent);
+  }
+}
+.field-cell :is(input, textarea):focus-visible { outline: none; }
+
+/* While the fixed action bar is on screen, keep the footer's last line above it. */
+body:has([data-action-bar]) #site-footer { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+
+/* A chip being typed into shows the ring around the pill, not the bare input. */
+.chip-field:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
+.chip-field input:focus-visible { outline: none; }
+
 /* Focus ring on every interactive element. */
 :focus-visible {
   outline: 2px solid var(--focus);
@@ -219,6 +267,159 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* Native date/time pickers follow the theme through color-scheme. */
+/* Date and time values in ScheduleField use the field's own type and colour,
+   not the browser's (Safari tints and pads them). */
+.schedule-input { appearance: none; -webkit-appearance: none; min-height: 30px; padding: 0; color: var(--ink); }
+.schedule-input::-webkit-date-and-time-value { text-align: left; margin: 0; }
+.schedule-input::-webkit-datetime-edit,
+.schedule-input::-webkit-datetime-edit-fields-wrapper { padding: 0; color: inherit; }
+.schedule-input::-webkit-datetime-edit-month-field,
+.schedule-input::-webkit-datetime-edit-day-field,
+.schedule-input::-webkit-datetime-edit-year-field,
+.schedule-input::-webkit-datetime-edit-hour-field,
+.schedule-input::-webkit-datetime-edit-minute-field,
+.schedule-input::-webkit-datetime-edit-ampm-field,
+.schedule-input::-webkit-datetime-edit-text { color: inherit; padding: 0; }
+.schedule-input[data-empty="true"] { color: var(--ink-subtle); }
+.schedule-input::-webkit-calendar-picker-indicator { opacity: 0.7; cursor: pointer; }
+
+/* Next steps: quotes being prepared. Rows fill in turn, then the best one is marked.
+   The last keyframe is the resting state, so reduced motion shows filled rows. */
+@keyframes quote-fill {
+  0% { width: 0; opacity: 0.4; }
+  45% { width: 100%; opacity: 1; }
+  100% { width: 100%; opacity: 1; }
+}
+@keyframes quote-best {
+  0%, 60% { transform: scale(0); opacity: 0; }
+  75% { transform: scale(1.4); opacity: 1; }
+  85%, 100% { transform: scale(1); opacity: 1; }
+}
+.quote-fill { width: 100%; animation: quote-fill 3s ease-out infinite both; }
+.quote-best { animation: quote-best 3s ease-out infinite both; }
+
+/* Autopilot console: a cockpit panel. Always dark, in both themes. */
+.console {
+  --lcd: #8effb8;
+  --annun-amber: #ffb547;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--night) 88%, #fff) 0%, var(--night) 60%);
+  border: 1px solid #000;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.07), 0 12px 32px rgb(0 0 0 / 0.28);
+  color: var(--on-night);
+}
+.console-module {
+  position: relative;
+  background: rgb(0 0 0 / 0.32);
+  border: 1px solid rgb(255 255 255 / 0.08);
+  border-radius: 8px;
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.5);
+}
+/* Panel screws in the top corners. */
+.console-module::before, .console-module::after {
+  content: ""; position: absolute; top: 6px; width: 5px; height: 5px; border-radius: 9999px;
+  background: radial-gradient(circle at 35% 35%, rgb(255 255 255 / 0.45), rgb(255 255 255 / 0.08));
+}
+.console-module::before { left: 6px; }
+.console-module::after { right: 6px; }
+.lcd {
+  background: #07120c;
+  color: var(--lcd);
+  border: 1px solid rgb(255 255 255 / 0.06);
+  border-radius: 4px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  text-shadow: 0 0 6px color-mix(in srgb, var(--lcd) 55%, transparent);
+  caret-color: var(--lcd);
+}
+.lcd:focus { outline: 2px solid var(--lcd); outline-offset: 1px; }
+.lcd::placeholder { color: color-mix(in srgb, var(--lcd) 35%, transparent); }
+.console-knob {
+  background: radial-gradient(circle at 40% 35%, #4a4553, #1c1922 70%);
+  border: 1px solid #000;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.15), 0 2px 4px rgb(0 0 0 / 0.5);
+  color: var(--on-night);
+}
+.console-knob:hover { color: var(--lcd); }
+.console-knob:focus-visible { outline: 2px solid var(--lcd); outline-offset: 2px; }
+.annunciator {
+  border: 1px solid rgb(0 0 0 / 0.6);
+  border-radius: 4px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  letter-spacing: 0.12em;
+  background: #1a1720;
+  color: rgb(255 255 255 / 0.25);
+}
+.annunciator[data-lit="green"] { background: #0f2a1a; color: var(--lcd); box-shadow: 0 0 12px color-mix(in srgb, var(--lcd) 35%, transparent), inset 0 0 8px color-mix(in srgb, var(--lcd) 25%, transparent); }
+.annunciator[data-lit="amber"] { background: #2b1f0b; color: var(--annun-amber); box-shadow: 0 0 12px color-mix(in srgb, var(--annun-amber) 30%, transparent), inset 0 0 8px color-mix(in srgb, var(--annun-amber) 20%, transparent); }
+.engage-switch { background: linear-gradient(180deg, #2a2631, #141118); border: 1px solid #000; box-shadow: inset 0 2px 4px rgb(0 0 0 / 0.6); }
+.engage-switch[aria-checked="true"] .engage-lever { transform: translateY(-100%); background: linear-gradient(180deg, #9a95a3, #5b5664); }
+.engage-lever { transition: transform 0.2s ease-out; background: linear-gradient(180deg, #6b6574, #3a3541); box-shadow: 0 2px 4px rgb(0 0 0 / 0.6), inset 0 1px 0 rgb(255 255 255 / 0.25); }
+
+/* New requests slide into the Autopilot feed. */
+@keyframes feed-in {
+  0% { transform: translateY(-8px); opacity: 0; background: color-mix(in srgb, var(--lcd) 25%, transparent); }
+  60% { transform: none; opacity: 1; }
+  100% { background: transparent; }
+}
+.feed-row-new { animation: feed-in 2.4s ease-out both; }
+
+/* Dashboard: new inquiries slide in with a brief highlight. */
+@keyframes inquiry-in {
+  0% { transform: translateY(-10px); opacity: 0; box-shadow: 0 0 0 2px var(--royal); }
+  50% { transform: none; opacity: 1; box-shadow: 0 0 0 2px var(--royal); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+.inquiry-new { animation: inquiry-in 2.4s ease-out both; }
+/* Autopilot response being written: three dots. */
+@keyframes typing { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+.typing span { animation: typing 1.2s infinite both; }
+.typing span:nth-child(2) { animation-delay: 0.15s; }
+.typing span:nth-child(3) { animation-delay: 0.3s; }
+
+/* Trip ticket: a printed airline ticket. Perforation between the main part
+   and the stub, with half-circle notches cut in the page colour. */
+.ticket {
+  background-image:
+    repeating-linear-gradient(135deg, transparent 0 22px, color-mix(in srgb, var(--brass) 5%, transparent) 22px 23px);
+  background-color: var(--surface-raised);
+}
+.ticket-perf { position: relative; }
+.ticket-perf::before, .ticket-perf::after {
+  content: ""; position: absolute; width: 22px; height: 22px; border-radius: 9999px;
+  background: var(--surface); border: 1px solid var(--hairline);
+}
+/* Stacked (mobile): perforation is horizontal, notches on the left and right edges. */
+.ticket-perf { border-top: 2px dashed var(--hairline); }
+.ticket-perf::before { top: -12px; left: -12px; clip-path: inset(0 0 0 50%); }
+.ticket-perf::after { top: -12px; right: -12px; clip-path: inset(0 50% 0 0); }
+@media (min-width: 640px) {
+  .ticket-perf { border-top: 0; border-left: 2px dashed var(--hairline); }
+  .ticket-perf::before { top: -12px; left: -12px; clip-path: inset(50% 0 0 0); }
+  .ticket-perf::after { top: auto; bottom: -12px; right: auto; left: -12px; clip-path: inset(0 0 50% 0); }
+}
+.ticket-barcode {
+  background: repeating-linear-gradient(90deg,
+    var(--ink) 0 2px, transparent 2px 4px, var(--ink) 4px 5px, transparent 5px 8px,
+    var(--ink) 8px 11px, transparent 11px 12px, var(--ink) 12px 13px, transparent 13px 16px);
+  opacity: 0.85;
+}
+/* Fields filled in later (operator, aircraft, fare): a sweep of light over a placeholder bar. */
+@keyframes ticket-sweep {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.ticket-pending {
+  display: inline-block; height: 0.9em; border-radius: 3px; vertical-align: middle;
+  background: linear-gradient(90deg, var(--surface-sunken) 0%, color-mix(in srgb, var(--royal) 22%, var(--surface-sunken)) 50%, var(--surface-sunken) 100%);
+  background-size: 200% 100%;
+  animation: ticket-sweep 2.4s linear infinite;
+}
+@keyframes ticket-dots { 0%, 20% { opacity: 0.2; } 50% { opacity: 1; } 100% { opacity: 0.2; } }
+.ticket-dots span { animation: ticket-dots 1.4s infinite both; }
+.ticket-dots span:nth-child(2) { animation-delay: 0.2s; }
+.ticket-dots span:nth-child(3) { animation-delay: 0.4s; }
+/* Auto-request countdown bar. */
+@keyframes countdown { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+.countdown-bar { transform-origin: left; animation: countdown var(--countdown, 5s) linear forwards; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

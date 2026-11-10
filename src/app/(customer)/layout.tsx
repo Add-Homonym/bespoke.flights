@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { Header } from '@/components/layout/header';
+import { Footer, Header } from '@/components/layout/header';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 
@@ -16,6 +16,7 @@ export default async function CustomerLayout({ children }: { children: React.Rea
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 pt-12 pb-16">
         {children}
       </main>
+      <Footer user={user} />
     </>
   );
 }

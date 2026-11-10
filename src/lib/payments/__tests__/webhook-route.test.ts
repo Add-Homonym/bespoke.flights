@@ -102,14 +102,14 @@ describe('POST /api/webhooks/stripe', () => {
 
 describe('middleware', () => {
   it('lets Stripe reach the webhook without a session cookie', async () => {
-    const { middleware } = await import('@/middleware');
+    const { proxy: middleware } = await import('@/proxy');
     const res = await middleware(new NextRequest('http://localhost/api/webhooks/stripe', { method: 'POST' }));
     expect(res.status).toBe(200);
     expect(res.headers.get('x-middleware-next')).toBe('1');
   });
 
   it('still protects payment APIs', async () => {
-    const { middleware } = await import('@/middleware');
+    const { proxy: middleware } = await import('@/proxy');
     const res = await middleware(new NextRequest('http://localhost/api/payments/checkout', { method: 'POST' }));
     expect(res.status).toBe(401);
   });

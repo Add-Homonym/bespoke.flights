@@ -2,34 +2,71 @@ import { notFound, redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { Card } from '@/components/ui/card';
+import { Notice } from '@/components/ui/notice';
 import { formatTripDate, formatTripTime } from '@/lib/trip-format';
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { SubmitQuoteForm } from '@/components/booking/submit-quote-form';
+import { ManageQuote } from '@/components/booking/manage-quote';
 import { TripShare } from '@/components/operator/trip-share';
+import { ChangeRequestSummary, OperatorChangeRequests } from '@/components/booking/change-request';
+import { changeRequestViews } from '@/lib/bookings/changes';
+import { displayCode } from '@/lib/airports';
+import { formatMoney } from '@/lib/payments/config';
+import { requestAccess, withholdTravelerText } from '@/lib/access';
+import { toId } from '@/lib/db/queries';
+import { cancellationSummary } from '@/lib/bookings/cancellation';
+import { MessageThread } from '@/components/messaging/message-thread';
+import { unreadForOperator } from '@/lib/messaging/messages';
 import type { BookingRequest, BookingLeg, Operator, Aircraft, Quote } from '@/lib/types';
 
-export default async function OperatorRequestDetailPage({ params }: { params: Promise<{ requestId: string }> }) {
+export default async function OperatorRequestDetailPage({ params, searchParams }: {
+  params: Promise<{ requestId: string }>;
+  searchParams: Promise<{ quoted?: string }>;
+}) {
   const session = await getSession();
   if (!session || session.role !== 'operator') redirect('/login');
 
   const { requestId } = await params;
+  const { quoted } = await searchParams;
   const db = getDb();
 
-  const request = await db.one<BookingRequest>('SELECT * FROM booking_requests WHERE id = ?', [requestId]);
+  const request = await db.one<BookingRequest>('SELECT * FROM booking_requests WHERE id = ?', [toId(requestId)]);
   if (!request) notFound();
+  const operator = await db.one<Operator>('SELECT * FROM operators WHERE user_id = ?', [session.userId]);
+  // Approved operators: requests open to quotes or ones they were invited to or quoted.
+  // Pending operators: the shape of open requests only. Suspended: nothing.
+  const visible = operator?.status === 'approved'
+    ? (await requestAccess(db, session, request)).canView
+    : operator?.status === 'pending' && ['open', 'quoted'].includes(request.status);
+  if (!visible) notFound();
 
   const legs = await db.query<BookingLeg>('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order', [request.id]);
-  const operator = await db.one<Operator>('SELECT * FROM operators WHERE user_id = ?', [session.userId]);
 
   const aircraft = operator
     ? (await db.query<Aircraft>('SELECT * FROM aircraft WHERE operator_id = ?', [operator.id]))
     : [];
 
-  const existingQuote = operator
-    ? (await db.one<Quote>('SELECT * FROM quotes WHERE request_id = ? AND operator_id = ?', [request.id, operator.id]))
-    : undefined;
+  // The live quote if there is one, otherwise the most recent (withdrawn, rejected, expired).
+  const quotes = operator
+    ? await db.query<Quote>('SELECT * FROM quotes WHERE request_id = ? AND operator_id = ? ORDER BY id DESC', [request.id, operator.id])
+    : [];
+  const liveQuote = quotes.find(q => q.status === 'pending' || q.status === 'accepted' || q.status === 'cancelled');
+  const existingQuote = liveQuote ?? quotes[0];
+  const canQuoteAgain = !liveQuote && ['open', 'quoted'].includes(request.status) && operator?.status === 'approved';
 
-  const route = legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).join(' → ');
+  const quotedPlane = existingQuote?.aircraft_id
+    ? aircraft.find(a => a.id === existingQuote.aircraft_id) ?? null
+    : null;
+
+  const route = legs.map(l => l.origin_code).concat(legs[legs.length - 1]?.dest_code).filter(Boolean).map(displayCode).join(' → ');
+  const won = existingQuote?.status === 'accepted' && ['booked', 'completed'].includes(request.status);
+  const changes = won ? await changeRequestViews(db, request.id, existingQuote!.currency) : [];
+  const cancelled = request.status === 'cancelled' && existingQuote?.status === 'cancelled' ? await cancellationSummary(db, request.id) : null;
+  const closedChanges = cancelled ? await changeRequestViews(db, request.id, existingQuote!.currency) : [];
+  const unread = existingQuote && operator ? await unreadForOperator(db, request.id, operator.id) : 0;
+  const currentPaid = won
+    ? await db.one<{ paid: number }>("SELECT COALESCE(SUM(amount_cents - refunded_cents), 0) AS paid FROM payments WHERE request_id = ? AND status IN ('succeeded','partially_refunded')", [request.id])
+    : undefined;
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -38,8 +75,36 @@ export default async function OperatorRequestDetailPage({ params }: { params: Pr
           <p className="text-ink-muted text-sm mb-1">Request #{request.id}</p>
           <h1 className="font-display text-3xl text-ink font-mono tracking-wide">{route}</h1>
         </div>
-        <Badge variant="gold" className="text-base px-4 py-1">{request.status}</Badge>
+        <StatusBadge variant="brass" className="text-base px-4 py-1">{request.status}</StatusBadge>
       </div>
+
+      {cancelled && (
+        <Card className="mb-8 space-y-3" id="cancellation">
+          <h2 className="text-title text-ink">Trip cancelled</h2>
+          <p className="text-body text-ink-muted">{cancelled.tierLabel} Cancelled {cancelled.cancelledAt}.</p>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-body">
+            <dt className="text-ink-muted">Traveler paid</dt>
+            <dd className="text-ink tabular-nums">{cancelled.paid}</dd>
+            <dt className="text-ink-muted">Refunded to traveler</dt>
+            <dd className="text-ink tabular-nums">{cancelled.refund}</dd>
+            <dt className="text-ink-muted">Policy tier applied</dt>
+            <dd className="text-ink">{cancelled.tier === 'full' ? 'Full refund' : cancelled.tier === 'partial' ? 'Partial refund' : 'No refund'}</dd>
+            <dt className="text-ink-muted">Your payout</dt>
+            <dd className="text-ink tabular-nums">{cancelled.payout} before cancellation</dd>
+            <dt className="text-ink-muted">Payout adjustment</dt>
+            <dd className="text-ink tabular-nums">{cancelled.refundCents > 0 ? `\u2212${cancelled.payoutAdjustment}` : 'None'}</dd>
+            <dt className="text-ink-muted">You keep</dt>
+            <dd className="text-ink tabular-nums">{cancelled.payoutRetained}</dd>
+          </dl>
+          {closedChanges.map(cr => <ChangeRequestSummary key={cr.id} cr={cr} />)}
+        </Card>
+      )}
+
+      {quoted && existingQuote?.status === 'pending' && (
+        <Notice tone="confirmed" className="mb-6">
+          Quote submitted: {formatMoney(existingQuote.price_cents, existingQuote.currency)}. The traveler has been emailed and can book it from their request page.
+        </Notice>
+      )}
 
       {/* Itinerary */}
       <Card className="mb-8">
@@ -47,14 +112,14 @@ export default async function OperatorRequestDetailPage({ params }: { params: Pr
         <div className="space-y-4">
           {legs.map((leg, i) => (
             <div key={leg.id} className="flex items-center gap-4">
-              <span className="w-7 h-7 rounded-full bg-surface-sunken flex items-center justify-center text-brass-ink text-xs font-bold shrink-0">
+              <span className="w-7 h-7 rounded-full bg-surface-sunken flex items-center justify-center text-royal text-xs font-bold shrink-0">
                 {i + 1}
               </span>
               <div className="flex-1 flex items-center justify-between rounded-md bg-surface-sunken px-4 py-3">
                 <div>
-                  <span className="text-ink font-mono">{leg.origin_code}</span>
+                  <span className="text-ink font-mono">{displayCode(leg.origin_code)}</span>
                   <span className="text-ink-muted mx-3">&rarr;</span>
-                  <span className="text-ink font-mono">{leg.dest_code}</span>
+                  <span className="text-ink font-mono">{displayCode(leg.dest_code)}</span>
                 </div>
                 <div className="text-right">
                   <p className="text-ink text-sm">{formatTripDate(leg.departure_date) || leg.departure_date}</p>
@@ -68,13 +133,27 @@ export default async function OperatorRequestDetailPage({ params }: { params: Pr
           <dt className="text-ink-muted">Passengers</dt>
           <dd className="text-ink">{request.passenger_count}</dd>
           <dt className="text-ink-muted">Special requests</dt>
-          <dd className="text-ink break-words">{request.notes?.trim() || <span className="text-ink-subtle">None</span>}</dd>
+          <dd className="text-ink break-words">
+            {withholdTravelerText(operator?.status)
+              ? <span className="text-ink-subtle">Shown once your account is approved</span>
+              : request.notes?.trim() || <span className="text-ink-subtle">None</span>}
+          </dd>
         </dl>
       </Card>
 
       {/* Quote submission */}
-      {existingQuote?.status === 'accepted' && ['booked', 'completed'].includes(request.status) && (
-        <TripShare requestId={request.id} />
+      {won && (
+        <>
+          <OperatorChangeRequests changes={changes} currentPrice={formatMoney(currentPaid?.paid ?? existingQuote!.price_cents, existingQuote!.currency)} />
+          <TripShare requestId={request.id} />
+        </>
+      )}
+
+      {existingQuote && operator && (
+        <Card className="mb-8" id="messages">
+          <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wider mb-4">Messages with the traveler</h2>
+          <MessageThread requestId={request.id} operatorId={operator.id} title="Conversation" unread={unread} viewer="operator" />
+        </Card>
       )}
 
       {existingQuote ? (
@@ -82,18 +161,43 @@ export default async function OperatorRequestDetailPage({ params }: { params: Pr
           <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wider mb-4">Your Quote</h2>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-brass-ink font-display text-2xl">${(existingQuote.price_cents / 100).toLocaleString()}</p>
+              <p className="text-royal font-display text-2xl">${(existingQuote.price_cents / 100).toLocaleString()}</p>
+              <p className="text-ink text-sm mt-2">
+                {quotedPlane ? `${quotedPlane.type} · ${quotedPlane.tail_number}` : 'Aircraft not specified'}
+                {existingQuote.valid_until && <span className="text-ink-muted"> · Valid until {formatTripDate(existingQuote.valid_until) || existingQuote.valid_until}</span>}
+              </p>
               {existingQuote.message && <p className="text-ink-muted text-sm mt-2 italic">&quot;{existingQuote.message}&quot;</p>}
             </div>
-            <Badge variant={existingQuote.status === 'accepted' ? 'success' : existingQuote.status === 'rejected' ? 'error' : 'warning'}>
+            <StatusBadge variant={existingQuote.status === 'accepted' ? 'confirmed' : existingQuote.status === 'cancelled' ? 'neutral' : existingQuote.status === 'rejected' ? 'danger' : existingQuote.status === 'pending' ? 'warning' : 'neutral'}>
               {existingQuote.status}
-            </Badge>
+            </StatusBadge>
           </div>
+          {existingQuote.previous_price_cents != null && (
+            <p className="text-ink-muted text-xs mt-2">Revised from ${(existingQuote.previous_price_cents / 100).toLocaleString()}</p>
+          )}
+          {existingQuote.status === 'pending' && ['open', 'quoted'].includes(request.status) && (
+            <ManageQuote
+              quoteId={existingQuote.id}
+              aircraft={aircraft}
+              priceCents={existingQuote.price_cents}
+              message={existingQuote.message}
+              validUntil={existingQuote.valid_until}
+              aircraftId={existingQuote.aircraft_id}
+              legs={legs}
+              passengerCount={request.passenger_count}
+            />
+          )}
+          {canQuoteAgain && (
+            <div className="mt-6 border-t border-hairline pt-6">
+              <h3 className="text-sm font-semibold text-ink-muted uppercase tracking-wider mb-4">Submit a new quote</h3>
+              <SubmitQuoteForm requestId={request.id} aircraft={aircraft} legs={legs} passengerCount={request.passenger_count} />
+            </div>
+          )}
         </Card>
       ) : operator?.status === 'approved' ? (
         <Card>
           <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wider mb-6">Submit a Quote</h2>
-          <SubmitQuoteForm requestId={request.id} aircraft={aircraft} />
+          <SubmitQuoteForm requestId={request.id} aircraft={aircraft} legs={legs} passengerCount={request.passenger_count} />
         </Card>
       ) : (
         <Card>

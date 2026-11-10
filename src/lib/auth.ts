@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { neonAuth, neonAuthEnabled } from './neon-auth';
 import { getDb, type Db } from './db';
 import { COOKIE_NAME, createToken, verifyToken } from './session-cookie';
+import { isTestMode } from './payments/config';
 import type { SessionPayload, User } from './types';
 
 /**
@@ -34,6 +35,11 @@ async function setLocalSession(payload: SessionPayload) {
   });
 }
 
+/** Demo accounts (seeded in test mode) are refused once test mode is off. */
+function demoAllowed(user: { is_demo?: boolean | null } | null | undefined): boolean {
+  return !user?.is_demo || isTestMode();
+}
+
 function requireConfigured() {
   if (!neonAuthEnabled() && process.env.NODE_ENV === 'production') {
     throw new Error('NEON_AUTH_BASE_URL is not set. Enable Neon Auth for the project and set NEON_AUTH_BASE_URL and NEON_AUTH_COOKIE_SECRET.');
@@ -47,13 +53,14 @@ async function profileForNeonUser(
   db: Db,
   neonUser: { id: string; email: string; name?: string | null; emailVerified?: boolean },
 ): Promise<Pick<User, 'id' | 'role'> | null> {
-  const linked = await db.one<Pick<User, 'id' | 'role'>>('SELECT id, role FROM users WHERE auth_id = ?', [neonUser.id]);
-  if (linked) return linked;
+  const linked = await db.one<Pick<User, 'id' | 'role' | 'is_demo'>>('SELECT id, role, is_demo FROM users WHERE auth_id = ?', [neonUser.id]);
+  if (linked) return demoAllowed(linked) ? { id: linked.id, role: linked.role } : null;
 
   const email = neonUser.email.toLowerCase();
-  const byEmail = await db.one<Pick<User, 'id' | 'role'> & { auth_id: string | null }>(
-    'SELECT id, role, auth_id FROM users WHERE lower(email) = ?', [email]);
+  const byEmail = await db.one<Pick<User, 'id' | 'role' | 'is_demo'> & { auth_id: string | null }>(
+    'SELECT id, role, auth_id, is_demo FROM users WHERE lower(email) = ?', [email]);
   if (byEmail) {
+    if (!demoAllowed(byEmail)) return null;
     // Link by email only when Neon Auth has verified the address; otherwise anyone
     // could register an unverified identity with an admin's email and inherit the role.
     if (byEmail.auth_id || !neonUser.emailVerified) return null;
@@ -81,7 +88,10 @@ export async function getSession(): Promise<SessionPayload | null> {
   }
 
   const token = cookieStore.get(COOKIE_NAME)?.value;
-  return token ? verifyToken(token) : null;
+  const payload = token ? await verifyToken(token) : null;
+  if (!payload) return null;
+  const user = await getDb().one<Pick<User, 'id' | 'role' | 'is_demo'>>('SELECT id, role, is_demo FROM users WHERE id = ?', [payload.userId]);
+  return user && demoAllowed(user) ? { userId: user.id, role: user.role } : null;
 }
 
 export async function requireAuth(): Promise<SessionPayload> {
@@ -122,6 +132,7 @@ export async function authenticate(db: Db, email: string, password: string): Pro
   if (!neonAuthEnabled()) {
     const user = await db.one<User>('SELECT * FROM users WHERE lower(email) = ?', [email]);
     if (!user?.password_hash || !(await bcrypt.compare(password, user.password_hash))) return null;
+    if (!demoAllowed(user)) return null;
     await setLocalSession({ userId: user.id, role: user.role });
     return user;
   }
@@ -129,7 +140,7 @@ export async function authenticate(db: Db, email: string, password: string): Pro
   let result = await neonSignIn(email, password);
   if (!result.data?.user) {
     const legacy = await db.one<User>('SELECT * FROM users WHERE lower(email) = ?', [email]);
-    if (!legacy || legacy.auth_id || !legacy.password_hash || !(await bcrypt.compare(password, legacy.password_hash))) {
+    if (!legacy || !demoAllowed(legacy) || legacy.auth_id || !legacy.password_hash || !(await bcrypt.compare(password, legacy.password_hash))) {
       if (result.error && (result.error.status ?? 0) >= 500) console.error('Neon Auth sign-in failed:', result.error);
       return null;
     }

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
-import { appBaseUrl, getPaymentsMode, platformFeeBps } from '@/lib/payments/config';
+import { appBaseUrl, getPaymentsMode } from '@/lib/payments/config';
+import { getBusinessModel, resolveCommission } from '@/lib/business-model';
 import {
   refreshConnectAccount,
   startConnectOnboarding,
@@ -45,7 +46,7 @@ export async function GET() {
       charges_enabled: !!updated.stripe_charges_enabled,
       payouts_enabled: !!updated.stripe_payouts_enabled,
       details_submitted: !!updated.stripe_details_submitted,
-      platform_fee_bps: platformFeeBps(updated.platform_fee_bps),
+      platform_fee_bps: (await resolveCommission(db, await getBusinessModel(db), updated)).bps,
       ...totals,
     });
   } catch (err) {

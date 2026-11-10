@@ -1,0 +1,246 @@
+/**
+ * Cancelling a paid booking.
+ *
+ * The refund follows the operator's cancellation policy, measured from the
+ * first leg's departure: a full refund far enough ahead, a partial refund
+ * closer in, nothing inside the final window. Times are compared as local
+ * wall-clock values treated as UTC (no time zone library); a leg with no
+ * time counts as departing at 23:59 that day, which favours the traveler.
+ */
+
+import type { Db } from '@/lib/db';
+import { closeCancelledBooking } from '@/lib/bookings/close';
+import { relistAfterCancellation } from '@/lib/empty-legs/service';
+import { sendEmail } from '@/lib/email/resend';
+import { bookingCancelledEmail } from '@/lib/email/templates';
+import { appBaseUrl, formatMoney } from '@/lib/payments/config';
+import { PaymentError, refundPayment } from '@/lib/payments/service';
+import { formatUtc, tierLabel as tierText, type CancelBannerParts } from '@/lib/bookings/cancel-text';
+import { alertStaff } from '@/lib/staff/alerts';
+import { fromDbLegs, legLine, tripRoute } from '@/lib/trip-format';
+import type { BookingLeg, BookingRequest, Payment } from '@/lib/types';
+
+export { cancellationPolicySchema, DEFAULT_POLICY, parsePolicy, describePolicy, type CancellationPolicy } from './policy';
+import { describePolicy, parsePolicy, type CancellationPolicy } from './policy';
+
+/** Departure instant of a leg, as a UTC timestamp of its local date and time. */
+export function departureMs(leg: Pick<BookingLeg, 'departure_date' | 'departure_time'>): number {
+  const time = leg.departure_time && /^\d{2}:\d{2}$/.test(leg.departure_time) ? leg.departure_time : '23:59';
+  return new Date(`${leg.departure_date}T${time}:00Z`).getTime();
+}
+
+export type RefundTier = 'full' | 'partial' | 'none';
+
+export interface RefundQuote {
+  tier: RefundTier;
+  hoursBeforeDeparture: number;
+  refundBps: number;
+  refundCents: number;
+  paidCents: number;
+  policy: CancellationPolicy;
+}
+
+/** How much of `paidCents` comes back when cancelling at `now`. */
+export function computeRefund(
+  policy: CancellationPolicy,
+  firstLeg: Pick<BookingLeg, 'departure_date' | 'departure_time'>,
+  paidCents: number,
+  now = Date.now(),
+): RefundQuote {
+  const hours = (departureMs(firstLeg) - now) / 3_600_000;
+  let tier: RefundTier;
+  let bps: number;
+  if (hours >= policy.full_refund_hours) { tier = 'full'; bps = 10_000; }
+  else if (hours >= policy.partial_refund_hours) { tier = 'partial'; bps = policy.partial_refund_bps; }
+  else { tier = 'none'; bps = 0; }
+  // A "partial" window at 100% or 0% is reported as what it is.
+  if (tier === 'partial' && bps === 10_000) tier = 'full';
+  if (tier === 'partial' && bps === 0) tier = 'none';
+  return {
+    tier,
+    hoursBeforeDeparture: Math.max(0, Math.floor(hours)),
+    refundBps: bps,
+    refundCents: Math.round((paidCents * bps) / 10_000),
+    paidCents,
+    policy,
+  };
+}
+
+/** The payment that booked a request: succeeded or partially refunded. */
+export async function bookingPayment(db: Db, requestId: number): Promise<(Payment & { cancellation_policy: string | null; company_name: string }) | undefined> {
+  return db.one<Payment & { cancellation_policy: string | null; company_name: string }>(`
+    SELECT p.*, o.cancellation_policy, o.company_name
+    FROM payments p
+    JOIN quotes q ON q.id = p.quote_id AND q.status = 'accepted'
+    JOIN operators o ON o.id = p.operator_id
+    WHERE p.request_id = ? AND p.status IN ('succeeded', 'partially_refunded')
+    ORDER BY p.id DESC LIMIT 1
+  `, [requestId]);
+}
+
+export interface CancellationPreview extends RefundQuote {
+  paymentId: number;
+  currency: string;
+  operatorCompany: string;
+  /** Formatted for display. */
+  refund: string;
+  paid: string;
+  policyText: string;
+}
+
+/** What cancelling now would refund, or null when the request has no paid booking. */
+export async function previewCancellation(db: Db, request: BookingRequest, now = Date.now()): Promise<CancellationPreview | null> {
+  if (request.status !== 'booked') return null;
+  const payment = await bookingPayment(db, request.id);
+  if (!payment) return null;
+  const first = await db.one<BookingLeg>('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order LIMIT 1', [request.id]);
+  if (!first) return null;
+  const policy = parsePolicy(payment.cancellation_policy);
+  const remaining = payment.amount_cents - payment.refunded_cents;
+  const quote = computeRefund(policy, first, remaining, now);
+  return {
+    ...quote,
+    paymentId: payment.id,
+    currency: payment.currency,
+    operatorCompany: payment.company_name,
+    refund: formatMoney(quote.refundCents, payment.currency),
+    paid: formatMoney(remaining, payment.currency),
+    policyText: describePolicy(policy),
+  };
+}
+
+export interface CancellationSummary extends CancelBannerParts {
+  tier: RefundTier;
+  paid: string;
+  policyText: string;
+  operatorCompany: string;
+  /** Operator payout before the cancellation, what is clawed back, and what they keep. */
+  payout: string;
+  payoutAdjustment: string;
+  payoutRetained: string;
+}
+
+/** What a cancelled booking refunded and how the operator's payout moved, or null when it was never paid. */
+export async function cancellationSummary(db: Db, requestId: number): Promise<CancellationSummary | null> {
+  const request = await db.one<BookingRequest>('SELECT * FROM booking_requests WHERE id = ?', [requestId]);
+  if (!request || request.status !== 'cancelled' || !request.cancelled_at) return null;
+  const payment = await db.one<Payment & { cancellation_policy: string | null; company_name: string }>(`
+    SELECT p.*, o.cancellation_policy, o.company_name FROM payments p JOIN operators o ON o.id = p.operator_id
+    WHERE p.request_id = ? AND p.change_request_id IS NULL AND p.status IN ('succeeded','partially_refunded','refunded')
+    ORDER BY p.id DESC LIMIT 1`, [requestId]);
+  if (!payment) return null;
+  const policy = parsePolicy(payment.cancellation_policy);
+  const tier = (request.cancel_tier ?? (payment.refunded_cents >= payment.amount_cents ? 'full' : payment.refunded_cents > 0 ? 'partial' : 'none')) as RefundTier;
+  const refundCents = Number(payment.refunded_cents);
+  // The refund pulls the same share of the operator's payout back from them.
+  const adjustment = payment.amount_cents > 0 ? Math.round((payment.operator_payout_cents * refundCents) / payment.amount_cents) : 0;
+  return {
+    tier,
+    refund: formatMoney(refundCents, payment.currency),
+    refundCents,
+    refundTo: payment.payment_method_label || ORIGINAL_METHOD,
+    tierLabel: tierText(tier, policy),
+    cancelledAt: formatUtc(request.cancelled_at),
+    paid: formatMoney(payment.amount_cents, payment.currency),
+    policyText: describePolicy(policy),
+    operatorCompany: payment.company_name,
+    payout: formatMoney(payment.operator_payout_cents, payment.currency),
+    payoutAdjustment: formatMoney(adjustment, payment.currency),
+    payoutRetained: formatMoney(payment.operator_payout_cents - adjustment, payment.currency),
+  };
+}
+
+export interface CancellationResult {
+  status: 'cancelled';
+  refundCents: number;
+  refund: string;
+  tier: RefundTier;
+  /** "card ending 4242" when known, otherwise "the original payment method". */
+  refundTo: string;
+  cancelledAt: string;
+  /** Which refund tier applied, in words. */
+  tierLabel: string;
+  policyText: string;
+}
+
+export const ORIGINAL_METHOD = 'the original payment method';
+
+/**
+ * Cancel a paid booking: refund per policy, mark the request cancelled,
+ * reject pending quotes, email both sides and alert the operator's staff.
+ */
+export async function cancelPaidBooking(
+  db: Db,
+  request: BookingRequest,
+  params: { initiatedBy: number; baseUrl?: string; now?: number },
+): Promise<CancellationResult> {
+  const baseUrl = params.baseUrl ?? appBaseUrl();
+  const preview = await previewCancellation(db, request, params.now);
+  if (!preview) throw new PaymentError('This trip is not a paid booking', 409);
+
+  // A full refund already cancels the request inside applyRefundTotal and
+  // alerts staff; a partial or zero refund needs the status change here.
+  if (preview.refundCents > 0) {
+    await refundPayment(db, preview.paymentId, {
+      amountCents: preview.refundCents,
+      reason: `Traveler cancellation (${preview.tier} refund, ${preview.hoursBeforeDeparture} h before departure)`,
+      initiatedBy: params.initiatedBy,
+      baseUrl,
+    });
+  }
+  // One transaction: the request, its quotes, its change requests and its message thread's state all move together.
+  const changed = await db.transaction(async tx => {
+    const moved = await tx.run(
+      "UPDATE booking_requests SET status = 'cancelled', updated_at = now() WHERE id = ? AND status <> 'cancelled'", [request.id]);
+    await closeCancelledBooking(tx, request.id, { tier: preview.tier, refundCents: preview.refundCents });
+    await relistAfterCancellation(tx, request.id);
+    return moved;
+  });
+
+  const payment = (await db.one<Payment>('SELECT * FROM payments WHERE id = ?', [preview.paymentId]))!;
+  if (changed) {
+    await alertStaff(db, { kind: 'cancellation', requestId: request.id, operatorId: payment.operator_id }, baseUrl);
+  }
+  await sendCancellationEmails(db, request.id, payment, preview, baseUrl).catch(err =>
+    console.error('Cancellation email failed:', err));
+
+  const when = await db.one<{ cancelled_at: string }>('SELECT cancelled_at FROM booking_requests WHERE id = ?', [request.id]);
+  return {
+    status: 'cancelled',
+    refundCents: preview.refundCents,
+    refund: preview.refund,
+    tier: preview.tier,
+    refundTo: payment.payment_method_label || ORIGINAL_METHOD,
+    cancelledAt: formatUtc(when?.cancelled_at ?? new Date().toISOString()),
+    tierLabel: tierText(preview.tier, preview.policy),
+    policyText: preview.policyText,
+  };
+}
+
+async function sendCancellationEmails(db: Db, requestId: number, payment: Payment, preview: CancellationPreview, baseUrl: string) {
+  const row = (await db.one<{ customer_email: string; company_name: string; operator_email: string | null; operator_user_email: string; passenger_count: number }>(`
+    SELECT u.email AS customer_email, o.company_name, o.contact_email AS operator_email, ou.email AS operator_user_email, br.passenger_count
+    FROM payments p
+    JOIN users u ON u.id = p.customer_id
+    JOIN operators o ON o.id = p.operator_id
+    JOIN users ou ON ou.id = o.user_id
+    JOIN booking_requests br ON br.id = p.request_id
+    WHERE p.id = ?
+  `, [payment.id]))!;
+  const legs = fromDbLegs(await db.query<BookingLeg>('SELECT * FROM booking_legs WHERE request_id = ? ORDER BY leg_order', [requestId]));
+  const data = {
+    requestId,
+    route: tripRoute(legs),
+    legLines: legs.map(legLine),
+    passengerCount: row.passenger_count,
+    operatorCompany: row.company_name,
+    paid: preview.paid,
+    refund: preview.refund,
+    tier: preview.tier,
+    policyText: preview.policyText,
+    baseUrl,
+  };
+  const tags = [{ name: 'type', value: 'booking-cancelled' }, { name: 'request_id', value: String(requestId) }];
+  await sendEmail({ to: row.customer_email, ...bookingCancelledEmail({ ...data, audience: 'customer' }), tags });
+  await sendEmail({ to: row.operator_email || row.operator_user_email, ...bookingCancelledEmail({ ...data, audience: 'operator' }), tags });
+}

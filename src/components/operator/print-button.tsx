@@ -1,13 +1,12 @@
 'use client';
 
-export function PrintButton() {
+import { Button } from '@/components/ui/button';
+
+/** Opens the browser print dialog. The label says what is being printed. */
+export function PrintButton({ label = 'Print trip sheet' }: { label?: string }) {
   return (
-    <button
-      type="button"
-      onClick={() => window.print()}
-      className="rounded-md bg-royal px-4 py-2 text-sm font-semibold text-on-royal hover:opacity-90 cursor-pointer"
-    >
-      Print
-    </button>
+    <Button type="button" size="sm" onClick={() => window.print()}>
+      {label}
+    </Button>
   );
 }

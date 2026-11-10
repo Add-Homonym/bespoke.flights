@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
 
 interface PayoutStatus {
@@ -55,9 +55,9 @@ export function PayoutSettings() {
       <div className="flex items-start justify-between mb-4">
         <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wider">Payouts</h2>
         {status && (
-          <Badge variant={ready ? 'success' : status.connected ? 'warning' : 'default'}>
+          <StatusBadge variant={ready ? 'confirmed' : status.connected ? 'warning' : 'neutral'}>
             {ready ? 'active' : status.connected ? 'setup incomplete' : 'not set up'}
-          </Badge>
+          </StatusBadge>
         )}
       </div>
 

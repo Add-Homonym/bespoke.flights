@@ -14,6 +14,8 @@ export interface StaffMember {
   on_new_request: number;
   on_booking: number;
   on_cancellation: number;
+  on_change: number;
+  on_message: number;
   active: number;
   created_at: string;
 }
@@ -42,6 +44,8 @@ export const staffInputSchema = z.object({
   on_new_request: flag,
   on_booking: flag,
   on_cancellation: flag,
+  on_change: flag.optional(),
+  on_message: flag.optional(),
   active: flag.optional(),
 }).superRefine((s, ctx) => {
   if (s.notify_email && !s.email) ctx.addIssue({ code: 'custom', path: ['email'], message: 'Add an email address to send email alerts' });
@@ -65,20 +69,21 @@ export async function addStaff(db: Db, operatorId: number, input: unknown): Prom
   const { count } = (await db.one<{ count: number }>('SELECT COUNT(*) AS count FROM operator_staff WHERE operator_id = ?', [operatorId]))!;
   if (count >= MAX_STAFF) throw new StaffError(`A company can have up to ${MAX_STAFF} staff members`, 400);
   return (await db.one<StaffMember>(`
-    INSERT INTO operator_staff (operator_id, name, role, email, phone, notify_email, notify_sms, on_new_request, on_booking, on_cancellation, active)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO operator_staff (operator_id, name, role, email, phone, notify_email, notify_sms, on_new_request, on_booking, on_cancellation, on_change, on_message, active)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING *
-  `, [operatorId, s.name, s.role, s.email, s.phone, s.notify_email, s.notify_sms, s.on_new_request, s.on_booking, s.on_cancellation, s.active ?? 1]))!;
+  `, [operatorId, s.name, s.role, s.email, s.phone, s.notify_email, s.notify_sms, s.on_new_request, s.on_booking, s.on_cancellation, s.on_change ?? 1, s.on_message ?? 1, s.active ?? 1]))!;
 }
 
 export async function updateStaff(db: Db, operatorId: number, staffId: number, input: unknown): Promise<StaffMember> {
   const s = parse(input);
   const row = await db.one<StaffMember>(`
     UPDATE operator_staff SET name = ?, role = ?, email = ?, phone = ?, notify_email = ?, notify_sms = ?,
-      on_new_request = ?, on_booking = ?, on_cancellation = ?, active = COALESCE(?, active)
+      on_new_request = ?, on_booking = ?, on_cancellation = ?,
+      on_change = COALESCE(?, on_change), on_message = COALESCE(?, on_message), active = COALESCE(?, active)
     WHERE id = ? AND operator_id = ?
     RETURNING *
-  `, [s.name, s.role, s.email, s.phone, s.notify_email, s.notify_sms, s.on_new_request, s.on_booking, s.on_cancellation, s.active ?? null, staffId, operatorId]);
+  `, [s.name, s.role, s.email, s.phone, s.notify_email, s.notify_sms, s.on_new_request, s.on_booking, s.on_cancellation, s.on_change ?? null, s.on_message ?? null, s.active ?? null, staffId, operatorId]);
   if (!row) throw new StaffError('Staff member not found', 404);
   return row;
 }

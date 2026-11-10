@@ -30,7 +30,7 @@ export default async function RequestsPage() {
 
       {requests.length === 0 ? (
         <Card>
-          <p className="text-body text-ink-muted text-center py-12">No trips yet. <Link href="/book" className="text-brass-ink underline underline-offset-4">Request your first quotes</Link></p>
+          <p className="text-body text-ink-muted text-center py-12">No trips yet. <Link href="/book" className="text-royal underline underline-offset-4">Request your first quotes</Link></p>
         </Card>
       ) : (
         <ul className="space-y-3">
@@ -47,7 +47,7 @@ export default async function RequestsPage() {
                         <p className="mt-2 text-label text-ink-muted tabular-nums">{quoteCount} {quoteCount !== 1 ? 'quotes' : 'quote'} received</p>
                       )}
                     </div>
-                    <RequestStatusBadge status={req.status} />
+                    <RequestStatusBadge status={req.status} emptyLeg={req.empty_leg_id != null} />
                   </Card>
                 </Link>
               </li>

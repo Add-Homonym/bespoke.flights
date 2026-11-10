@@ -15,7 +15,7 @@ export function ActionBar({
   children: ReactNode;
 }) {
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--space-4)+env(safe-area-inset-bottom))] z-40 px-4 print:hidden">
+    <div data-action-bar className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--space-4)+env(safe-area-inset-bottom))] z-40 px-4 print:hidden">
       <div className="pointer-events-auto mx-auto flex max-w-3xl items-center justify-between gap-4 rounded-pill border border-hairline bg-surface-raised py-2 pl-6 pr-2 shadow-float">
         <div className="min-w-0">
           <p className="text-label text-ink-muted">{label}</p>

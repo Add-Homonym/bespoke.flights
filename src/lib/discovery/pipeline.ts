@@ -13,6 +13,8 @@ import { scrapeStates, getNextStateBatch } from './faa-scraper';
 import type { FAAOperator } from './faa-scraper';
 import { sendEmail } from '@/lib/email/resend';
 import { operatorInviteEmail } from '@/lib/email/templates';
+import { appBaseUrl } from '@/lib/payments/config';
+import { randomBytes } from 'crypto';
 
 export interface DiscoveryResult {
   statesQueried: string[];
@@ -89,9 +91,14 @@ async function sendInviteEmails(
   const errors: string[] = [];
 
   for (const op of pending) {
+    const { unsubscribe_token: token } = (await db.one<{ unsubscribe_token: string }>(`
+      UPDATE discovered_operators SET unsubscribe_token = COALESCE(unsubscribe_token, ?)
+      WHERE id = ? RETURNING unsubscribe_token
+    `, [randomBytes(18).toString('base64url'), op.id]))!;
     const { subject, html } = operatorInviteEmail(
       op.company_name,
-      op.certificate_number || undefined
+      op.certificate_number || undefined,
+      `${appBaseUrl()}/unsubscribe?t=${token}`
     );
 
     const result = await sendEmail({
@@ -134,13 +141,16 @@ async function sendInviteEmails(
  * Get which states were last scraped (from the most recent discovery run).
  */
 async function getLastScrapedStates(db: Db): Promise<string[]> {
-  // Look at the most recently discovered operators to infer which states were last done
+  // Rows from one batch share a transaction timestamp, so the latest batch is
+  // every state whose newest row ties for the overall newest discovered_at.
   const recent = await db.query<{ state: string }>(`
     SELECT state FROM discovered_operators
     WHERE source = 'faa_registry' AND state IS NOT NULL
     GROUP BY state
-    ORDER BY MAX(discovered_at) DESC
-    LIMIT 10
+    HAVING MAX(discovered_at) = (
+      SELECT MAX(discovered_at) FROM discovered_operators
+      WHERE source = 'faa_registry' AND state IS NOT NULL
+    )
   `);
 
   return recent.map(r => r.state);
@@ -176,9 +186,12 @@ export async function runDiscoveryPipeline(
   // Step 2: Scrape FAA registry
   let operatorsFound = 0;
   let newOperators = 0;
+  let statesQueried: string[] = [];
 
   try {
     const scrapeResult = await scrapeStates(stateBatch, 500, statesPerRun);
+    errors.push(...scrapeResult.errors.map(e => 'Scrape error: ' + e));
+    statesQueried = scrapeResult.statesQueried;
     operatorsFound = scrapeResult.operators.length;
     console.log(`[Discovery] Found ${operatorsFound} operators across ${scrapeResult.statesQueried.length} states`);
 
@@ -208,7 +221,7 @@ export async function runDiscoveryPipeline(
   }
 
   return {
-    statesQueried: stateBatch,
+    statesQueried,
     operatorsFound,
     newOperators,
     emailsSent,

@@ -51,7 +51,7 @@ export function BoardLink() {
             <Button size="sm" type="button" onClick={() => navigator.clipboard.writeText(url).then(() => setMessage('Link copied.'), () => {})}>Copy</Button>
           </div>
           <div className="flex gap-5 text-xs">
-            <a href={url} target="_blank" rel="noreferrer" className="text-brass-ink hover:underline">Open board</a>
+            <a href={url} target="_blank" rel="noreferrer" className="text-royal hover:underline">Open board</a>
             <button type="button" onClick={() => act('create')} disabled={busy} className="text-ink-muted hover:text-ink cursor-pointer">Replace link</button>
             <button type="button" onClick={() => act('revoke')} disabled={busy} className="text-ink-muted hover:text-danger cursor-pointer">Turn off link</button>
           </div>

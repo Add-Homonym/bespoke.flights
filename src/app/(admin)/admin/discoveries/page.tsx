@@ -3,8 +3,9 @@
 import { Suspense, useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
+import { plural } from '@/lib/plural';
 
 interface DiscoveredOperator {
   id: number;
@@ -36,13 +37,13 @@ interface Stats {
   bounced_count: number;
 }
 
-const statusBadge: Record<string, 'default' | 'success' | 'warning' | 'error' | 'gold'> = {
-  new: 'gold',
+const statusBadge: Record<string, 'neutral' | 'confirmed' | 'warning' | 'danger' | 'neutral'> = {
+  new: 'neutral',
   no_email: 'warning',
-  emailed: 'success',
-  registered: 'success',
-  opted_out: 'default',
-  bounced: 'error',
+  emailed: 'confirmed',
+  registered: 'confirmed',
+  opted_out: 'neutral',
+  bounced: 'danger',
 };
 
 function DiscoveriesContent() {
@@ -52,6 +53,7 @@ function DiscoveriesContent() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, pages: 0 });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || '');
   const [stateFilter, setStateFilter] = useState(searchParams.get('state') || '');
@@ -72,12 +74,19 @@ function DiscoveriesContent() {
     params.set('page', String(page));
     params.set('limit', '50');
 
-    const res = await fetch('/api/admin/discoveries?' + params.toString());
-    if (res.ok) {
-      const json = await res.json();
-      setData(json.data);
-      setStats(json.stats);
-      setPagination(json.pagination);
+    try {
+      const res = await fetch('/api/admin/discoveries?' + params.toString());
+      if (res.ok) {
+        const json = await res.json();
+        setData(json.data);
+        setStats(json.stats);
+        setPagination(json.pagination);
+        setError(null);
+      } else {
+        setError(res.status === 401 ? 'Not authorized. Sign in as an admin.' : `Failed to load operators (HTTP ${res.status}).`);
+      }
+    } catch {
+      setError('Failed to load operators. Check your connection.');
     }
     setLoading(false);
   }, [statusFilter, stateFilter, search]);
@@ -106,7 +115,7 @@ function DiscoveriesContent() {
       const json = await res.json();
       if (json.ok) {
         setCronResult(
-          `Found ${json.operatorsFound} operators in ${json.statesQueried?.length || 0} states. ` +
+          `Found ${plural(json.operatorsFound, "operator")} in ${plural(json.statesQueried?.length || 0, "state")}. ` +
           `${json.newOperators} new. ${json.emailsSent} emails sent.`
         );
         await fetchData();
@@ -134,6 +143,12 @@ function DiscoveriesContent() {
       {cronResult && (
         <Card className="mb-6 border-hairline bg-surface-sunken">
           <p className="text-ink text-sm">{cronResult}</p>
+        </Card>
+      )}
+
+      {error && (
+        <Card className="mb-6 border-danger">
+          <p className="text-danger text-sm">{error}</p>
         </Card>
       )}
 
@@ -204,7 +219,7 @@ function DiscoveriesContent() {
                     <div className="flex items-center gap-3 mb-1">
                       <h3 className="text-ink font-semibold truncate">{op.company_name}</h3>
                       {op.dba_name && <span className="text-ink-muted text-xs">DBA: {op.dba_name}</span>}
-                      <Badge variant={statusBadge[op.status] || 'default'}>{op.status}</Badge>
+                      <StatusBadge variant={statusBadge[op.status] || 'neutral'}>{op.status}</StatusBadge>
                     </div>
                     <p className="text-ink-muted text-xs">
                       {[op.city, op.state, op.zip].filter(Boolean).join(', ')}

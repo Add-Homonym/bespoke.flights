@@ -1,3 +1,4 @@
+import { saveBusinessModel } from '@/lib/business-model';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFixture, row, type Fixture } from './fixtures';
 import {
@@ -50,6 +51,18 @@ describe('createCheckout (stub mode)', () => {
     // Quote and request untouched until paid
     expect(await status('quotes', f.quoteA)).toBe('pending');
     expect(await status('booking_requests', f.requestId)).toBe('quoted');
+  });
+
+  it('uses the admin-set default commission, empty-leg rate and processing pass-through', async () => {
+    await saveBusinessModel(f.db, { operatorCommissionBps: 800, emptyLegCommissionBps: 1500, passProcessingToOperator: true, processingFeeBps: 100, processingFeeFixedCents: 30 });
+    let res = await createCheckout(f.db, { quoteId: f.quoteA, customerId: f.customerId, baseUrl: BASE });
+    // 8% of $85,000 = $6,800, plus 1% + $0.30 processing = $850.30
+    expect((await payment(res.paymentId)).platform_fee_cents).toBe(680_000 + 85_030);
+
+    await f.db.run('UPDATE quotes SET is_empty_leg = 1 WHERE id = ?', [f.quoteA]);
+    await f.db.run("UPDATE payments SET status = 'canceled' WHERE id = ?", [res.paymentId]);
+    res = await createCheckout(f.db, { quoteId: f.quoteA, customerId: f.customerId, baseUrl: BASE });
+    expect((await payment(res.paymentId)).platform_fee_cents).toBe(1_275_000 + 85_030);
   });
 
   it('uses a per-operator fee override', async () => {
@@ -128,11 +141,11 @@ describe('payment success', () => {
     expect((await row<{ c: number }>(f.db, 'SELECT COUNT(*) c FROM refunds')).c).toBe(0);
   });
 
-  it('cannot be simulated by another customer or twice', async () => {
+  it('cannot be simulated by another customer, and a second tap is a no-op', async () => {
     const { paymentId } = await createCheckout(f.db, { quoteId: f.quoteA, customerId: f.customerId, baseUrl: BASE });
     await expectError(simulateStubPayment(f.db, paymentId, f.otherCustomerId, BASE), 404);
     await simulateStubPayment(f.db, paymentId, f.customerId, BASE);
-    await expectError(simulateStubPayment(f.db, paymentId, f.customerId, BASE), 409);
+    expect(await simulateStubPayment(f.db, paymentId, f.customerId, BASE)).toBe('duplicate');
   });
 
   it('refunds automatically when a superseded checkout is paid after another booked', async () => {

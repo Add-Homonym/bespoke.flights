@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { ArrowUpDown } from 'lucide-react';
 import { findAirport, searchAirports } from '@/lib/airports';
 import { AirportIcon } from '@/components/ui/AirportBadge';
@@ -18,15 +18,23 @@ interface AirportFieldProps {
  * (upper-cased) until an airport is chosen, then its ICAO code. Accepts city,
  * airport name, IATA or ICAO.
  */
-function AirportField({ label, value, onChange, readOnly, required }: AirportFieldProps) {
-  const id = useId();
+export function AirportField({ label, value, onChange, readOnly, required, cellClass = 'px-4 py-3 pr-16', inputClass = 'text-title', labelClass = 'text-label', placeholder = 'City, airport or code', id: givenId, listClass = 'inset-x-0' }: AirportFieldProps & {
+  cellClass?: string; inputClass?: string; labelClass?: string; placeholder?: string; id?: string;
+  /** Listbox position; narrow fields widen it with e.g. 'left-0 w-72'. */
+  listClass?: string;
+}) {
+  const autoId = useId();
+  const id = givenId ?? autoId;
   const listId = `${id}-list`;
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(-1);
 
+  const input = useRef<HTMLInputElement>(null);
   const results = open && !readOnly ? searchAirports(value) : [];
   const expanded = results.length > 0;
   const resolved = findAirport(value);
+  // A resolved airport reads as its IATA code (HNL), whatever code is stored.
+  const shown = resolved?.iata || value;
 
   const choose = (code: string) => {
     onChange(code);
@@ -34,10 +42,36 @@ function AirportField({ label, value, onChange, readOnly, required }: AirportFie
     setHighlight(-1);
   };
 
+  /** Enter picks an airport and moves on to the next field, like Tab. */
+  const chooseAndAdvance = (code: string) => {
+    choose(code);
+    const el = input.current;
+    if (!el) return;
+    const fields = Array.from((el.form ?? document).querySelectorAll<HTMLElement>('input, select, textarea, button'))
+      .filter(f => !(f as HTMLInputElement).disabled && !(f as HTMLInputElement).readOnly && f.tabIndex >= 0 && f.getAttribute('type') !== 'hidden' && getComputedStyle(f).display !== 'none' && getComputedStyle(f).visibility !== 'hidden');
+    const next = fields[fields.indexOf(el) + 1];
+    // Wait a tick so the list closes before focus moves on.
+    setTimeout(() => next?.focus(), 0);
+  };
+
+  /** Typing into a resolved field replaces it; the new text never lands after the old code. */
+  const onType = (typed: string) => {
+    let next = typed.toUpperCase();
+    if (resolved && next !== shown) {
+      if (next.length > shown.length && next.startsWith(shown)) next = next.slice(shown.length);
+      else if (next.length > shown.length && next.endsWith(shown)) next = next.slice(0, next.length - shown.length);
+    }
+    onChange(next);
+    setOpen(true);
+    setHighlight(-1);
+  };
+
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Escape') {
       setOpen(false);
     } else if (!expanded) {
+      // Nothing to pick, but the airport may already be settled: Enter moves on.
+      if (e.key === 'Enter' && resolved && !readOnly) { e.preventDefault(); chooseAndAdvance(resolved.icao); }
       return;
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -45,9 +79,9 @@ function AirportField({ label, value, onChange, readOnly, required }: AirportFie
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setHighlight(h => Math.max(h - 1, 0));
-    } else if (e.key === 'Enter' && highlight >= 0) {
+    } else if (e.key === 'Enter') {
       e.preventDefault();
-      choose(results[highlight].icao);
+      chooseAndAdvance(results[highlight >= 0 ? highlight : 0].icao);
     }
   };
 
@@ -60,9 +94,10 @@ function AirportField({ label, value, onChange, readOnly, required }: AirportFie
   };
 
   return (
-    <div className="relative px-4 py-3 pr-16">
-      <label htmlFor={id} className="block text-label text-ink-muted">{label}</label>
+    <div className={`field-cell relative ${cellClass}`}>
+      <label htmlFor={id} className={`block text-ink-muted ${labelClass}`}>{label}</label>
       <input
+        ref={input}
         id={id}
         type="text"
         role="combobox"
@@ -70,16 +105,16 @@ function AirportField({ label, value, onChange, readOnly, required }: AirportFie
         aria-controls={expanded ? listId : undefined}
         aria-autocomplete="list"
         aria-activedescendant={expanded && highlight >= 0 ? `${id}-opt-${highlight}` : undefined}
-        value={value}
+        value={shown}
         readOnly={readOnly}
         required={required}
         autoComplete="off"
-        placeholder="City, airport or code"
-        onChange={e => { onChange(e.target.value.toUpperCase()); setOpen(true); setHighlight(-1); }}
-        onFocus={() => setOpen(true)}
+        placeholder={placeholder}
+        onChange={e => onType(e.target.value)}
+        onFocus={e => { setOpen(true); if (resolved) e.currentTarget.select(); }}
         onBlur={onBlur}
         onKeyDown={onKeyDown}
-        className={`block w-full bg-transparent text-title text-ink placeholder:text-ink-subtle ${readOnly ? 'opacity-70' : ''}`}
+        className={`block w-full bg-transparent text-ink placeholder:text-ink-subtle ${inputClass} ${readOnly ? 'opacity-70' : ''}`}
       />
       <p className="flex min-h-[24px] items-start gap-2 text-[13px] leading-[18px] text-ink-muted">
         {resolved && (
@@ -95,7 +130,7 @@ function AirportField({ label, value, onChange, readOnly, required }: AirportFie
           id={listId}
           role="listbox"
           aria-label={`${label} airports`}
-          className="absolute inset-x-0 top-full z-50 mt-1 max-h-64 overflow-y-auto rounded-md border border-hairline bg-surface-raised shadow-float"
+          className={`absolute ${listClass} top-full z-50 mt-1 max-h-64 overflow-y-auto rounded-md border border-hairline bg-surface-raised shadow-float`}
         >
           {results.map((airport, i) => (
             <li
@@ -112,7 +147,7 @@ function AirportField({ label, value, onChange, readOnly, required }: AirportFie
               <span className="w-12 shrink-0 text-label text-ink tabular-nums">{airport.iata}</span>
               <span className="min-w-0">
                 <span className="block text-body text-ink">{airport.name}</span>
-                <span className="block text-label text-ink-muted">{airport.city}, {airport.country}</span>
+                <span className="block truncate text-label text-ink-muted">{airport.city}, {airport.country}</span>
               </span>
             </li>
           ))}
@@ -143,10 +178,10 @@ export function RouteField({
   originLocked?: boolean;
 }) {
   return (
-    <div className="relative rounded-md border border-border-control bg-surface-raised">
-      <AirportField label="From" value={origin} onChange={onOriginChange} readOnly={originLocked} required />
+    <div className="field-card relative rounded-md border border-border-control bg-surface-raised">
+      <AirportField label="From" value={origin} onChange={onOriginChange} readOnly={originLocked} required cellClass="px-4 py-3 pr-16 rounded-t-md" />
       <div className="border-t border-hairline" />
-      <AirportField label="To" value={destination} onChange={onDestinationChange} required />
+      <AirportField label="To" value={destination} onChange={onDestinationChange} required cellClass="px-4 py-3 pr-16 rounded-b-md" />
       <button
         type="button"
         aria-label="Swap origin and destination"

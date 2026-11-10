@@ -9,7 +9,9 @@ const requestStatus: Record<string, { variant: StatusVariant; label: string }> =
 };
 
 /** Status of a booking request, as a word plus an icon. */
-export function RequestStatusBadge({ status }: { status: string }) {
-  const { variant, label } = requestStatus[status] ?? { variant: 'neutral' as const, label: status };
+export function RequestStatusBadge({ status, emptyLeg = false }: { status: string; /** Booked from an empty-leg listing: held until paid. */ emptyLeg?: boolean }) {
+  const { variant, label } = emptyLeg && (status === 'open' || status === 'quoted')
+    ? { variant: 'warning' as const, label: 'Awaiting payment' }
+    : requestStatus[status] ?? { variant: 'neutral' as const, label: status };
   return <StatusBadge variant={variant}>{label}</StatusBadge>;
 }

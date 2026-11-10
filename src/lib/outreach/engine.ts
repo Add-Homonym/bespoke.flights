@@ -1,10 +1,13 @@
 import type { Db } from '@/lib/db';
 import type { BookingLeg, Operator, MarketKey } from '@/lib/types';
 import { sendEmail } from '@/lib/email/resend';
+import { displayCode } from '@/lib/airports';
 import { rfqNotificationEmail, rfqSmsBody } from '@/lib/email/templates';
 import { sendSms } from '@/lib/notify/sms';
 import { alertStaff } from '@/lib/staff/alerts';
 import { appBaseUrl } from '@/lib/payments/config';
+import { draftQuote } from '@/lib/quotes/autopilot';
+import { newReplyToken, replyAddress } from '@/lib/quotes/by-email';
 
 // Route distance estimates for range filtering (nm)
 const ROUTE_DISTANCES: Record<string, number> = {
@@ -169,7 +172,7 @@ export function generateRFQ(
   notes: string | null,
   requestId: number
 ): { subject: string; body: string } {
-  const route = legs.map(l => l.origin_code).join(' → ') + ' → ' + legs[legs.length - 1].dest_code;
+  const route = legs.map(l => displayCode(l.origin_code)).join(' → ') + ' → ' + displayCode(legs[legs.length - 1].dest_code);
   const dateRange = legs.length > 1
     ? `${legs[0].departure_date} — ${legs[legs.length - 1].departure_date}`
     : legs[0].departure_date;
@@ -177,7 +180,7 @@ export function generateRFQ(
   const subject = `Charter Quote Request #${requestId} — ${route}`;
 
   const legDetails = legs.map((l, i) =>
-    `  Leg ${i + 1}: ${l.origin_code} → ${l.dest_code} | ${l.departure_date}${l.departure_time ? ` @ ${l.departure_time}` : ''}`
+    `  Leg ${i + 1}: ${displayCode(l.origin_code)} → ${displayCode(l.dest_code)} | ${l.departure_date}${l.departure_time ? ` @ ${l.departure_time}` : ''}`
   ).join('\n');
 
   const body = `New charter request from Bespoke Flights.
@@ -185,7 +188,7 @@ export function generateRFQ(
 REQUEST #${requestId}
 ROUTE: ${route}
 DATES: ${dateRange}
-PASSENGERS: ${passengerCount}
+PASSENGERS: ${passengerCount}${passengerCount > 19 ? ' (may need more than one aircraft)' : ''}
 ${notes ? `NOTES: ${notes}` : ''}
 
 ITINERARY:
@@ -198,13 +201,18 @@ QUOTE REQUIREMENTS:
 • Catering inclusions
 • Cancellation terms
 
-Submit your quote at: https://bespoke.flights/operator/inbound
+Submit your quote at: ${appBaseUrl()}/operator/inbound
 
 No markup on your quoted price. Commission on confirmed booking only.
 
 — Bespoke Flights`;
 
   return { subject, body };
+}
+
+/** Reply-by-email quoting is offered only when an inbound-email webhook can receive the replies. */
+function replyByEmailEnabled(): boolean {
+  return !!process.env.INBOUND_EMAIL_SECRET;
 }
 
 /**
@@ -221,6 +229,7 @@ async function deliverRFQ(
     notes: string | null;
     legDetails: string[];
     matchScore: number;
+    replyToken: string | null;
   }
 ): Promise<{ emailId: string | null; error: string | null }> {
   const method = op.contact_method || 'email';
@@ -234,13 +243,14 @@ async function deliverRFQ(
       const { subject, html } = rfqNotificationEmail({
         ...rfqData,
         operatorCompany: op.company_name,
+        replyToQuote: !!rfqData.replyToken,
       });
 
       const result = await sendEmail({
         to: toEmail,
         subject,
         html,
-        replyTo: 'quotes@bespoke.flights',
+        replyTo: replyAddress(rfqData.replyToken),
         tags: [
           { name: 'type', value: 'rfq-notification' },
           { name: 'request_id', value: String(rfqData.requestId) },
@@ -295,12 +305,12 @@ export async function dispatchOutreach(
   const matches = await matchOperators(db, requestId, legs, passengerCount);
   const { subject, body } = generateRFQ(legs, passengerCount, notes, requestId);
 
-  const route = legs.map(l => l.origin_code).join(' → ') + ' → ' + legs[legs.length - 1].dest_code;
+  const route = legs.map(l => displayCode(l.origin_code)).join(' → ') + ' → ' + displayCode(legs[legs.length - 1].dest_code);
   const dateRange = legs.length > 1
     ? `${legs[0].departure_date} — ${legs[legs.length - 1].departure_date}`
     : legs[0].departure_date;
   const legDetails = legs.map((l, i) =>
-    `Leg ${i + 1}: ${l.origin_code} → ${l.dest_code} | ${l.departure_date}${l.departure_time ? ` @ ${l.departure_time}` : ''}`
+    `Leg ${i + 1}: ${displayCode(l.origin_code)} → ${displayCode(l.dest_code)} | ${l.departure_date}${l.departure_time ? ` @ ${l.departure_time}` : ''}`
   );
 
   let dispatched = 0;
@@ -311,16 +321,21 @@ export async function dispatchOutreach(
     const method = op.contact_method || 'pending';
 
     // Log the outreach first as 'sent'; skip operators already contacted for this request
+    // The reply token lets the operator quote by replying to the RFQ email (src/lib/quotes/by-email.ts).
+    const replyToken = replyByEmailEnabled() ? newReplyToken() : null;
     const inserted = await db.run(`
-      INSERT INTO outreach_log (request_id, operator_id, method, match_score, rfq_subject, rfq_body, status)
-      VALUES (?, ?, ?, ?, ?, ?, 'sent')
+      INSERT INTO outreach_log (request_id, operator_id, method, match_score, rfq_subject, rfq_body, status, reply_token)
+      VALUES (?, ?, ?, ?, ?, ?, 'sent', ?)
       ON CONFLICT (request_id, operator_id) DO NOTHING
-    `, [requestId, op.id, method, match.score, subject, body]);
+    `, [requestId, op.id, method, match.score, subject, body, replyToken]);
     if (inserted === 0) continue;
     dispatched++;
 
     pending.push(
-      deliverRFQ(op, {
+      // Autopilot drafts first, so the inquiry and its drafted response reach the dashboard together.
+      draftQuote(db, requestId, op.id)
+        .catch(err => { console.error(`Autopilot draft failed for operator ${op.id}:`, err); })
+        .then(() => deliverRFQ(op, {
         requestId,
         route,
         dateRange,
@@ -328,7 +343,8 @@ export async function dispatchOutreach(
         notes,
         legDetails,
         matchScore: match.score,
-      }).then(async result => {
+        replyToken,
+      })).then(async result => {
         if (result.emailId && !result.error) {
           await db.run("UPDATE outreach_log SET status = 'delivered' WHERE request_id = ? AND operator_id = ?", [requestId, op.id]);
         } else if (result.error) {
@@ -337,7 +353,8 @@ export async function dispatchOutreach(
         }
       }).catch(err => {
         console.error(`RFQ delivery error for operator ${op.id}:`, err);
-      }).then(() => alertStaff(db, { kind: 'new_request', requestId, operatorId: op.id }, baseUrl).then(() => {}))
+      })
+        .then(() => alertStaff(db, { kind: 'new_request', requestId, operatorId: op.id }, baseUrl).then(() => {}))
     );
   }
 

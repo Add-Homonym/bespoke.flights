@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
+import { validationResponse } from '@/lib/api/validation';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { toId } from '@/lib/db/queries';
 import { quoteSchema } from '@/lib/validations';
-import type { Quote, Operator } from '@/lib/types';
+import { requestAccess } from '@/lib/access';
+import { appBaseUrl } from '@/lib/payments/config';
+import { QuoteError, submitQuote } from '@/lib/quotes/submit';
+import type { Quote, Operator, BookingRequest } from '@/lib/types';
 
 export async function GET(_req: Request, { params }: { params: Promise<{ requestId: string }> }) {
   const session = await getSession();
@@ -12,14 +16,22 @@ export async function GET(_req: Request, { params }: { params: Promise<{ request
   const { requestId } = await params;
   const db = getDb();
 
+  const request = await db.one<BookingRequest>('SELECT * FROM booking_requests WHERE id = ?', [toId(requestId)]);
+  if (!request) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  const access = await requestAccess(db, session, request);
+  if (!access.canView) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
+  // Operators see only their own quote; the customer and admins see every quote.
+  const own = !access.canSeeAllQuotes;
   const quotes = await db.query<Quote & { company_name: string; aircraft_type?: string; aircraft_capacity?: number; tail_number?: string }>(`
     SELECT q.*, o.company_name, a.type as aircraft_type, a.capacity as aircraft_capacity, a.tail_number
     FROM quotes q
     JOIN operators o ON o.id = q.operator_id
     LEFT JOIN aircraft a ON a.id = q.aircraft_id
-    WHERE q.request_id = ?
+    WHERE q.request_id = ? ${own ? 'AND q.operator_id = ?' : ''}
     ORDER BY q.created_at DESC
-  `, [toId(requestId)]);
+  `, own ? [request.id, access.operatorId] : [request.id]);
 
   return NextResponse.json(quotes);
 }
@@ -30,44 +42,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ request
   if (session.role !== 'operator') return NextResponse.json({ error: 'Only operators can submit quotes' }, { status: 403 });
 
   const { requestId } = await params;
-  const body = await req.json();
+  const body = await req.json().catch(() => null);
   const parsed = quoteSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
+    return validationResponse(parsed.error);
   }
 
   const db = getDb();
   const operator = await db.one<Operator>('SELECT * FROM operators WHERE user_id = ?', [session.userId]);
   if (!operator) return NextResponse.json({ error: 'Operator profile not found' }, { status: 404 });
-  if (operator.status !== 'approved') return NextResponse.json({ error: 'Operator not approved' }, { status: 403 });
 
-  const request = await db.one<{ id: number }>('SELECT id FROM booking_requests WHERE id = ?', [toId(requestId)]);
-  if (!request) return NextResponse.json({ error: 'Request not found' }, { status: 404 });
-
-  // Check for existing quote
-  const existingQuote = await db.one('SELECT id FROM quotes WHERE request_id = ? AND operator_id = ?', [request.id, operator.id]);
-  if (existingQuote) return NextResponse.json({ error: 'You have already quoted this request' }, { status: 409 });
-
-  const { priceCents, currency, message, aircraftId, validUntil } = parsed.data;
-
-  const quoteId = await db.transaction(async tx => {
-    // Insert quote
-    const { id } = (await tx.one<{ id: number }>(
-      'INSERT INTO quotes (request_id, operator_id, aircraft_id, price_cents, currency, message, valid_until) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id',
-      [request.id, operator.id, aircraftId || null, priceCents, currency, message || null, validUntil || null]
-    ))!;
-
-    // Update request status to 'quoted' if it was 'open'
-    await tx.run("UPDATE booking_requests SET status = 'quoted', updated_at = now() WHERE id = ? AND status = 'open'", [request.id]);
-
-    // Mark outreach log as responded (if this operator was auto-matched)
-    await tx.run(
-      "UPDATE outreach_log SET status = 'responded', responded_at = now() WHERE request_id = ? AND operator_id = ?",
-      [request.id, operator.id]
-    );
-
-    return id;
-  });
-
-  return NextResponse.json({ id: quoteId }, { status: 201 });
+  const { priceCents, currency, message, aircraftId, validUntil, worksheet } = parsed.data;
+  try {
+    const quoteId = await submitQuote(db, operator, {
+      requestId: toId(requestId), priceCents, currency, message, aircraftId, validUntil, worksheet, source: 'app', submittedBy: session.userId,
+    }, appBaseUrl(req));
+    return NextResponse.json({ id: quoteId }, { status: 201 });
+  } catch (err) {
+    if (err instanceof QuoteError) {
+      return NextResponse.json(err.field ? { error: 'Check the highlighted fields.', fieldErrors: { [err.field]: [err.message] } } : { error: err.message }, { status: err.status });
+    }
+    throw err;
+  }
 }

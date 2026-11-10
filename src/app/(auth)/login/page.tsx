@@ -66,7 +66,11 @@ export default function LoginPage() {
 
       <p className="mt-6 text-center text-body text-ink-muted">
         Don&apos;t have an account?{' '}
-        <Link href="/register" className="inline-flex min-h-11 items-center text-brass-ink underline underline-offset-4">Create one</Link>
+        <Link href="/register" className="inline-flex min-h-11 items-center text-royal underline underline-offset-4">Create one</Link>
+      </p>
+      <p className="text-center text-body text-ink-muted">
+        Run a charter company?{' '}
+        <Link href="/register?role=operator" className="inline-flex min-h-11 items-center text-royal underline underline-offset-4">Sign up as an operator</Link>
       </p>
     </div>
   );

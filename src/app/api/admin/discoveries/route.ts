@@ -6,8 +6,10 @@
  */
 
 import { NextResponse } from 'next/server';
+import { validationResponse } from '@/lib/api/validation';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/db';
+import { discoveryPatchSchema } from '@/lib/validations';
 import { toId } from '@/lib/db/queries';
 
 export async function GET(req: Request) {
@@ -56,12 +58,12 @@ export async function GET(req: Request) {
   const stats = await db.one(`
     SELECT
       COUNT(*) as total,
-      SUM(CASE WHEN status = 'new' THEN 1 ELSE 0 END) as new_count,
-      SUM(CASE WHEN status = 'no_email' THEN 1 ELSE 0 END) as no_email_count,
-      SUM(CASE WHEN status = 'emailed' THEN 1 ELSE 0 END) as emailed_count,
-      SUM(CASE WHEN status = 'registered' THEN 1 ELSE 0 END) as registered_count,
-      SUM(CASE WHEN status = 'opted_out' THEN 1 ELSE 0 END) as opted_out_count,
-      SUM(CASE WHEN status = 'bounced' THEN 1 ELSE 0 END) as bounced_count
+      COALESCE(SUM(CASE WHEN status = 'new' THEN 1 ELSE 0 END), 0) as new_count,
+      COALESCE(SUM(CASE WHEN status = 'no_email' THEN 1 ELSE 0 END), 0) as no_email_count,
+      COALESCE(SUM(CASE WHEN status = 'emailed' THEN 1 ELSE 0 END), 0) as emailed_count,
+      COALESCE(SUM(CASE WHEN status = 'registered' THEN 1 ELSE 0 END), 0) as registered_count,
+      COALESCE(SUM(CASE WHEN status = 'opted_out' THEN 1 ELSE 0 END), 0) as opted_out_count,
+      COALESCE(SUM(CASE WHEN status = 'bounced' THEN 1 ELSE 0 END), 0) as bounced_count
     FROM discovered_operators
   `);
 
@@ -78,12 +80,9 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const body = await req.json();
-  const { id, contact_email, phone, status, notes } = body;
-
-  if (!id) {
-    return NextResponse.json({ error: 'Missing id' }, { status: 400 });
-  }
+  const parsed = discoveryPatchSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return validationResponse(parsed.error);
+  const { id, contact_email, phone, status, notes } = parsed.data;
 
   const db = getDb();
 

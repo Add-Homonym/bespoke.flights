@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { currentOperator } from '@/lib/operator-session';
 import { buildBoard } from '@/lib/board/data';
+import { withholdTravelerText } from '@/lib/access';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,5 +9,5 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   const ctx = await currentOperator();
   if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  return NextResponse.json(await buildBoard(ctx.db, ctx.operator.id), { headers: { 'Cache-Control': 'no-store' } });
+  return NextResponse.json(await buildBoard(ctx.db, ctx.operator.id, { withholdTraveler: withholdTravelerText(ctx.operator.status) }), { headers: { 'Cache-Control': 'no-store' } });
 }

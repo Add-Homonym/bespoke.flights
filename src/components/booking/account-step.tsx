@@ -1,5 +1,6 @@
 'use client';
 
+import { readApiFailure, summaryLine } from '@/lib/api/form-errors';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/input';
@@ -19,11 +20,14 @@ export function AccountStep({
   passengerCount,
   notes,
   onBack,
+  inline = false,
 }: {
   legs: TripLeg[];
   passengerCount: number;
   notes: string;
-  onBack: () => void;
+  onBack?: () => void;
+  /** Shown under the booking form's own ticket: no second trip summary. */
+  inline?: boolean;
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<'register' | 'login'>('register');
@@ -55,8 +59,8 @@ export function AccountStep({
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        const err = data.error;
-        setError(typeof err === 'object' && err ? String(Object.values(err).flat()[0]) : err || 'Something went wrong. Try again.');
+        const failure = await readApiFailure(new Response(JSON.stringify(data), { status: res.status }));
+        setError(Object.keys(failure.fields).length ? summaryLine(failure.fields) : failure.message);
         return;
       }
 
@@ -79,20 +83,20 @@ export function AccountStep({
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4 rounded-lg border border-hairline bg-surface-raised px-6 py-4 shadow-raised">
+    <div id="account-step" className="space-y-6">
+      {!inline && <div className="flex items-start justify-between gap-4 rounded-lg border border-hairline bg-surface-raised px-6 py-4 shadow-raised">
         <TripDetails title="Your trip" legs={legs} passengerCount={passengerCount} notes={notes} />
         <Button type="button" variant="quiet" size="sm" onClick={onBack} className="shrink-0">
           Edit trip
         </Button>
-      </div>
+      </div>}
 
       <div className="rounded-lg border border-hairline bg-surface-raised p-6 shadow-raised">
         <h2 className="text-title text-ink mb-2">
           {mode === 'register' ? 'Create an account to get quotes' : 'Sign in to get quotes'}
         </h2>
         <p className="text-body text-ink-muted mb-6">
-          Operators send quotes to your account. Your trip is saved and is submitted as soon as you continue.
+          Your trip is saved. It goes to operators the moment your account is ready.
         </p>
 
         <Segmented

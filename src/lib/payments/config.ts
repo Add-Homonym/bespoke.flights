@@ -48,11 +48,12 @@ export interface FeeBreakdown {
 }
 
 /** Split a charge into platform fee and operator payout. Fee rounds half up to the cent. */
-export function computeFees(amountCents: number, bps: number): FeeBreakdown {
+export function computeFees(amountCents: number, bps: number, extraPlatformCents = 0): FeeBreakdown {
   if (!Number.isInteger(amountCents) || amountCents <= 0) {
     throw new Error('amountCents must be a positive integer');
   }
-  const platformFeeCents = Math.round((amountCents * clampBps(bps)) / 10_000);
+  const extra = Math.max(0, Math.round(extraPlatformCents));
+  const platformFeeCents = Math.min(amountCents, Math.round((amountCents * clampBps(bps)) / 10_000) + extra);
   return {
     amountCents,
     platformFeeCents,
@@ -66,10 +67,19 @@ export const MIN_CHARGE_CENTS = 50;
 /** How long a Checkout Session stays open (Stripe allows 30 min – 24 h). */
 export const CHECKOUT_TTL_SECONDS = 60 * 60;
 
-/** Absolute base URL for redirects. Prefers APP_URL, falls back to the request origin. */
+/**
+ * Absolute base URL for redirects and links in email/SMS. Prefers APP_URL, then
+ * Vercel's production domain. The request origin is trusted only outside
+ * production, because the Host header is attacker-controlled.
+ */
 export function appBaseUrl(req?: Request): string {
   if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, '');
-  if (req) return new URL(req.url).origin;
+  const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  if (vercel) return `https://${vercel}`;
+  if (req && process.env.NODE_ENV !== 'production') return new URL(req.url).origin;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('APP_URL is not set. Links in emails and Stripe redirects need the public URL.');
+  }
   return 'http://localhost:3000';
 }
 

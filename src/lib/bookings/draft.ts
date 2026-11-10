@@ -9,10 +9,11 @@
  * details, never credentials.
  */
 
+import { combineRequests, normalizeCustom, normalizeTags, MAX_CUSTOM_REQUEST_CHARS, type RequestTagId } from './request-tags';
+
 export const DRAFT_COOKIE = 'bf_booking_draft';
 export const DRAFT_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
 const MAX_LEGS = 10;
-const MAX_NOTES = 500;
 
 export interface DraftLeg {
   originCode: string;
@@ -23,12 +24,19 @@ export interface DraftLeg {
 
 export interface BookingDraft {
   passengerCount: number;
-  notes: string;
+  /** Quick-add special request tags (see request-tags.ts). */
+  tags: RequestTagId[];
+  /** Special requests the traveler wrote, one per chip. */
+  custom: string[];
   legs: DraftLeg[];
+  /** Booking form in use when the draft was saved. */
+  variant?: FormVariant;
 }
 
+export type FormVariant = 'ticket' | 'classic';
+
 export const emptyLeg = (): DraftLeg => ({ originCode: '', destCode: '', departureDate: '', departureTime: '' });
-export const emptyDraft = (): BookingDraft => ({ passengerCount: 1, notes: '', legs: [emptyLeg()] });
+export const emptyDraft = (): BookingDraft => ({ passengerCount: 1, tags: [], custom: [], legs: [emptyLeg()] });
 
 const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '');
 
@@ -51,9 +59,12 @@ export function parseDraft(raw: string | undefined | null): BookingDraft | null 
       : [];
     const pax = Number(data.passengerCount);
     return {
-      passengerCount: Number.isInteger(pax) && pax >= 1 && pax <= 19 ? pax : 1,
-      notes: str(data.notes, MAX_NOTES),
+      passengerCount: Number.isInteger(pax) && pax >= 1 && pax <= 999 ? pax : 1,
+      tags: normalizeTags(data.tags),
+      // Drafts saved before custom chips kept one free-text `notes` field.
+      custom: Array.isArray(data.custom) ? normalizeCustom(data.custom) : normalizeCustom([str(data.notes, MAX_CUSTOM_REQUEST_CHARS)]),
       legs: legs.length > 0 ? legs : [emptyLeg()],
+      ...(data.variant === 'ticket' || data.variant === 'classic' ? { variant: data.variant } : {}),
     };
   } catch {
     return null;
@@ -64,25 +75,28 @@ export function parseDraft(raw: string | undefined | null): BookingDraft | null 
 const MAX_COOKIE_VALUE = 3800;
 
 export function serializeDraft(draft: BookingDraft): string {
-  const encode = (notes: string) => encodeURIComponent(JSON.stringify({
+  const encode = (custom: string[]) => encodeURIComponent(JSON.stringify({
     passengerCount: draft.passengerCount,
-    notes,
+    tags: draft.tags,
+    custom,
     legs: draft.legs.slice(0, MAX_LEGS),
+    variant: draft.variant,
   }));
-  // Non-ASCII notes expand up to 9x when encoded; shorten them rather than
-  // lose the whole itinerary.
-  let notes = draft.notes.slice(0, MAX_NOTES);
-  let value = encode(notes);
-  while (value.length > MAX_COOKIE_VALUE && notes.length > 0) {
-    notes = notes.slice(0, Math.floor(notes.length * 0.8));
-    value = encode(notes);
+  // Non-ASCII text expands up to 9x when encoded; shorten the longest custom
+  // request rather than lose the whole itinerary.
+  const custom = normalizeCustom(draft.custom);
+  let value = encode(custom);
+  while (value.length > MAX_COOKIE_VALUE && custom.some(c => c.length > 0)) {
+    const i = custom.reduce((longest, c, j) => (c.length > custom[longest].length ? j : longest), 0);
+    custom[i] = custom[i].slice(0, Math.floor(custom[i].length * 0.8));
+    value = encode(custom.filter(Boolean));
   }
   return value;
 }
 
 /** True when the draft has any user input worth keeping. */
 export function draftHasContent(draft: BookingDraft): boolean {
-  return draft.notes !== '' || draft.passengerCount !== 1 ||
+  return draft.custom.length > 0 || draft.tags.length > 0 || draft.passengerCount !== 1 ||
     draft.legs.some(l => l.originCode || l.destCode || l.departureDate || l.departureTime);
 }
 
@@ -90,13 +104,14 @@ export function draftHasContent(draft: BookingDraft): boolean {
 export function draftToRequest(draft: BookingDraft) {
   return {
     passengerCount: draft.passengerCount,
-    notes: draft.notes || undefined,
+    notes: combineRequests(draft.tags, draft.custom) || undefined,
     legs: draft.legs.map(l => ({
       originCode: l.originCode.toUpperCase(),
       destCode: l.destCode.toUpperCase(),
       departureDate: l.departureDate,
       departureTime: l.departureTime || undefined,
     })),
+    formVariant: draft.variant,
   };
 }
 

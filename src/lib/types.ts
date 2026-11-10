@@ -6,6 +6,7 @@ export interface User {
   auth_id: string | null;
   name: string;
   role: 'customer' | 'operator' | 'admin';
+  is_demo: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -30,8 +31,13 @@ export interface Operator {
   stripe_account_id: string | null;
   stripe_charges_enabled: number;
   stripe_payouts_enabled: number;
+  /** Autopilot settings JSON (src/lib/quotes/autopilot.ts). */
+  autopilot?: string | null;
   stripe_details_submitted: number;
-  platform_fee_bps: number | null;  // per-operator override of PLATFORM_FEE_BPS
+  platform_fee_bps: number | null;  // per-operator override of the default commission
+  plan: 'standard' | 'subscriber';  // business model tier (src/lib/business-model.ts)
+  launch_partner: number;           // 1 = eligible for the launch promo commission
+  cancellation_policy: string | null;  // JSON, see src/lib/bookings/cancellation.ts
   created_at: string;
 }
 
@@ -43,7 +49,27 @@ export interface Aircraft {
   capacity: number;
   range_nm: number | null;
   year: number | null;
+  serial_number: string | null;
+  manufacturer: string | null;
+  model: string | null;
+  /** JSON RegistryRecord from the last FAA lookup. */
+  faa_record: string | null;
+  faa_checked_at: string | null;
+  /** Pricing defaults for the quote worksheet; private to the operator. */
+  hourly_rate_cents: number | null;
+  cruise_ktas: number | null;
+  updated_at: string | null;
   created_at: string;
+}
+
+export interface AircraftPhotoMeta {
+  id: number;
+  aircraft_id: number;
+  position: number;
+  content_type: string;
+  width: number | null;
+  height: number | null;
+  caption: string | null;
 }
 
 export interface BookingRequest {
@@ -54,6 +80,13 @@ export interface BookingRequest {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  /** Set when a paid booking is cancelled. */
+  cancelled_at?: string | null;
+  /** Refund tier applied at cancellation: full, partial or none. */
+  cancel_tier?: 'full' | 'partial' | 'none' | null;
+  cancel_refund_cents?: number | null;
+  /** The empty-leg listing this request was booked from. */
+  empty_leg_id?: number | null;
 }
 
 export interface BookingLeg {
@@ -76,9 +109,33 @@ export interface Quote {
   price_cents: number;
   currency: string;
   message: string | null;
-  status: 'pending' | 'accepted' | 'rejected' | 'withdrawn';
+  status: 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'expired' | 'cancelled';
   valid_until: string | null;
+  is_empty_leg: number;  // 1 = repositioning flight, charged the empty-leg commission
+  empty_leg_id: number | null;  // the listing this quote was booked from
+  source: 'app' | 'email';      // how the operator submitted it
+  previous_price_cents: number | null;
+  revised_at: string | null;
   created_at: string;
+}
+
+export interface EmptyLeg {
+  id: number;
+  operator_id: number;
+  aircraft_id: number | null;
+  origin_code: string;
+  dest_code: string;
+  departure_date: string;
+  departure_time: string | null;
+  flex_days: number;
+  seats: number;
+  price_cents: number;
+  currency: string;
+  notes: string | null;
+  status: 'listed' | 'booked' | 'withdrawn' | 'expired';
+  booked_request_id: number | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface OutreachLog {
@@ -117,6 +174,10 @@ export interface Payment {
   checkout_url: string | null;
   failure_reason: string | null;
   dispute_status: string | null;
+  /** Set on a price-difference payment for an accepted change request. */
+  change_request_id: number | null;
+  /** "card ending 4242" once known; null for test payments. */
+  payment_method_label?: string | null;
   created_at: string;
   updated_at: string;
   paid_at: string | null;
