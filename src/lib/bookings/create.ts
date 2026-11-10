@@ -4,6 +4,7 @@ import type { Db } from '@/lib/db';
 import { bookingRequestSchema } from '@/lib/validations';
 import { dispatchOutreach } from '@/lib/outreach/engine';
 import { DRAFT_COOKIE, parseDraft, draftToRequest } from './draft';
+import { attributionColumns, readAttribution } from '@/lib/ads/attribution';
 import type { BookingLeg } from '@/lib/types';
 import type { z } from 'zod';
 
@@ -16,11 +17,12 @@ export type BookingRequestInput = z.infer<typeof bookingRequestSchema>;
 export async function createBookingRequest(db: Db, customerId: number, input: BookingRequestInput, baseUrl?: string) {
   const { passengerCount, notes, legs, formVariant } = input;
   const savedLegs: BookingLeg[] = [];
+  const [adVariantId, attribution] = attributionColumns(await readAttribution());
 
   const requestId = await db.transaction(async tx => {
     const { id } = (await tx.one<{ id: number }>(
-      'INSERT INTO booking_requests (customer_id, passenger_count, notes, form_variant) VALUES (?, ?, ?, ?) RETURNING id',
-      [customerId, passengerCount, notes || null, formVariant ?? null]
+      'INSERT INTO booking_requests (customer_id, passenger_count, notes, form_variant, ad_variant_id, attribution) VALUES (?, ?, ?, ?, ?, ?) RETURNING id',
+      [customerId, passengerCount, notes || null, formVariant ?? null, adVariantId, attribution]
     ))!;
 
     for (let i = 0; i < legs.length; i++) {

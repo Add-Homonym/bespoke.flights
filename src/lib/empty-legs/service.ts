@@ -17,6 +17,7 @@ import type { Db } from '@/lib/db';
 import type { EmptyLeg, Quote } from '@/lib/types';
 import { findAirport } from '@/lib/airports';
 import { notifyEmptyLegUnavailable } from '@/lib/notify/traveler';
+import { attributionColumns, readAttribution } from '@/lib/ads/attribution';
 
 export class EmptyLegError extends Error {
   /** The form field the message belongs under, when there is one. */
@@ -195,10 +196,11 @@ export async function bookEmptyLeg(
   }
 
   const notes = input.notes?.trim() || null;
+  const [adVariantId, attribution] = attributionColumns(await readAttribution());
   return db.transaction(async tx => {
     const { id: requestId } = (await tx.one<{ id: number }>(
-      "INSERT INTO booking_requests (customer_id, status, passenger_count, notes, form_variant, empty_leg_id) VALUES (?, 'quoted', ?, ?, 'empty_leg', ?) RETURNING id",
-      [customerId, input.passengerCount, notes, leg.id]))!;
+      "INSERT INTO booking_requests (customer_id, status, passenger_count, notes, form_variant, empty_leg_id, ad_variant_id, attribution) VALUES (?, 'quoted', ?, ?, 'empty_leg', ?, ?, ?) RETURNING id",
+      [customerId, input.passengerCount, notes, leg.id, adVariantId, attribution]))!;
     await tx.run(
       'INSERT INTO booking_legs (request_id, leg_order, origin_code, dest_code, departure_date, departure_time) VALUES (?, 1, ?, ?, ?, ?)',
       [requestId, leg.origin_code, leg.dest_code, leg.departure_date, leg.departure_time]);
