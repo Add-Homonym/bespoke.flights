@@ -42,7 +42,7 @@ export default async function RequestsPage() {
                 <Link href={`/requests/${req.id}`} className="block rounded-lg">
                   <Card hover className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
-                      <TripDetails compact legs={fromDbLegs(legs)} passengerCount={req.passenger_count} notes={req.notes} />
+                      <TripDetails compact routeBadges legs={fromDbLegs(legs)} passengerCount={req.passenger_count} notes={req.notes} />
                       {quoteCount > 0 && (
                         <p className="mt-2 text-label text-ink-muted tabular-nums">{quoteCount} {quoteCount !== 1 ? 'quotes' : 'quote'} received</p>
                       )}

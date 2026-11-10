@@ -1,5 +1,6 @@
 import { formatTripDate, formatTripTime, type TripLeg } from '@/lib/trip-format';
 import { airportLabel } from '@/lib/airports';
+import { RouteBadges } from '@/components/ui/AirportBadge';
 
 /**
  * Every detail of a trip: route, each leg's date and time, passengers and
@@ -12,6 +13,7 @@ export function TripDetails({
   notes,
   title,
   compact = false,
+  routeBadges = false,
 }: {
   legs: TripLeg[];
   passengerCount: number;
@@ -19,6 +21,8 @@ export function TripDetails({
   title?: string;
   /** Tighter spacing for list cards. */
   compact?: boolean;
+  /** Show the route as origin and destination badges instead of a text line. */
+  routeBadges?: boolean;
 }) {
   const pending = <span className="text-ink-subtle">Not set</span>;
   const route = legs.length === 0
@@ -28,7 +32,11 @@ export function TripDetails({
   return (
     <div className={compact ? 'space-y-2' : 'space-y-3'}>
       {title && <p className="text-overline text-ink-muted">{title}</p>}
-      <p className={`text-ink tabular-nums ${compact ? 'text-heading' : 'text-title'}`}>{route}</p>
+      {routeBadges && legs.length > 0 ? (
+        <RouteBadges from={legs[0].from} to={legs[legs.length - 1].to} />
+      ) : (
+        <p className={`text-ink tabular-nums ${compact ? 'text-heading' : 'text-title'}`}>{route}</p>
+      )}
 
       <ol className={compact ? 'space-y-1' : 'space-y-2'}>
         {legs.map((leg, i) => (
