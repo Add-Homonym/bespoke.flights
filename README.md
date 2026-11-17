@@ -288,6 +288,30 @@ To go live: remove `APP_TEST_MODE`, set the Stripe variables, and delete the dem
 
 ---
 
+## Ads loop
+
+Measures the Google Ads search campaign against a monthly net goal and adjusts the ads and budgets. Admin page: `/admin/ads`. Code: `src/lib/ads/`.
+
+**Net** = the platform fee kept on paid bookings, less card processing when the platform absorbs it, less ad spend. Goal default: $10,000 a month. Months and days are UTC.
+
+Each run (`GET /api/cron/ads-loop`, daily 16:00 UTC via `vercel.json`, bearer `CRON_SECRET`, or **Run the loop now** as an admin):
+
+1. **Measure.** Ad delivery per ad per day (`ad_metrics_daily`) comes from the Google Ads API, or from a CSV report import until the API is connected. Requests and bookings are joined to ads by attribution: every ad's final URL carries `bfv=<ad id>` and `utm_*`; `src/proxy.ts` stores the click (with `gclid`) in the httpOnly `bf_attr` cookie for 90 days, last paid click wins; the booking request records it in `booking_requests.ad_variant_id` and `attribution` (`attribution.ts`, `measure.ts`).
+2. **Decide** (`decide.ts`, pure).
+   - *Pause* an ad once it and at least one other ad in its campaign have 100 clicks and its probability of having the best request rate is under 5% (Beta posteriors, Monte Carlo), or when it has spent three requests' worth with no request.
+   - *Launch* a replacement for each paused ad, keeping three live per campaign.
+   - *Budget*: at most every 7 days per campaign and only with 100 clicks, raise by 20% when each dollar returns $1.20 or more in expected net, cut by 20% (not below the floor) under $0.80. Expected net = requests x the value of a request. The value of a request starts from two assumptions in the settings (10% of requests book; $300 net per booking) and moves to the measured figure as ad-attributed requests older than 14 days accumulate.
+   - *Cap*: the sum of daily budgets never exceeds the monthly spend cap / 30.4, nor what is left of the cap spread over the days left in the month. Cap default is $0: nothing is budgeted until an admin sets it. A budget of zero pauses the campaign.
+3. **Write copy** (`copy.ts`). A replacement ad is assembled from fixed blocks: route headline, a lead headline and description sharing one angle (compare, named operator, no markup, change or cancel on screen, all-in price, empty leg), the brand headline, and a closing line. The angle is chosen by Thompson sampling on each angle's request rate across all campaigns, preferring angles not already live in the campaign. No free-text generation: the loop can only publish wording that is in `copy.ts`.
+4. **Lint** (`lint.ts`). 30/90 character limits, no exclamation marks or emoji, none of the banned words, no phone, membership, price, count, response-time, guarantee or percent-off claims, final URL on `/book` or `/empty-legs` with `bfv`. Copy with any violation is discarded.
+5. **Apply.** `mode: api` with the `GOOGLE_ADS_*` variables set: the loop pauses, creates and re-budgets through the API (`google.ts`) and records each change in `ad_actions`; a refused change is stored as `failed` and launches are retried on the next run. Otherwise each change is queued on `/admin/ads` with the exact ad text; make it in Google Ads and press **Mark as applied** (paste the Google ad ID for a new ad), or **Dismiss**.
+
+With the loop switched off (the default) only step 1 runs and nothing changes.
+
+**Setup.** In Google Ads create one search campaign and ad group per route, with its keywords. On `/admin/ads` add a campaign with the same route and daily budget, set the monthly spend cap, switch the loop on, run it, and create the three queued ads in Google Ads. Import the Ads report (CSV, segmented by Day; columns Day, Final URL, Impr., Clicks, Cost) as often as the loop should learn; the cron reads whatever has been imported.
+
+**API mode.** Apply for a Google Ads developer token (API Center in a manager account; Basic access is enough), create an OAuth client and refresh token for a user with access to the account, set the variables below, and store each campaign's three resource names. `google.ts` has not been run against a live account: before selecting API mode, make one pause, one create and one budget change against a test account and confirm each in the Google Ads UI.
+
 ## Quote lifecycle
 
 - **Withdraw**: an operator withdraws a pending quote (`PATCH /api/quotes/[id] {status:'withdrawn'}`) from the request page; the traveler is emailed and the operator may quote again (the partial unique index only counts pending and accepted quotes).
@@ -463,7 +487,10 @@ Created by `npm run seed` locally, or automatically in [test mode](#test-mode). 
 | `INBOUND_EMAIL_SECRET` | No | Bearer token for `POST /api/webhooks/inbound-email`. When set, RFQ emails offer reply-by-email quoting. |
 | `EMAIL_REPLY_DOMAIN` | No | Domain for `quotes+<token>@` reply addresses. Defaults to the domain of `EMAIL_FROM`. |
 | `EMAIL_FROM` | No | Verified sender address (default: `hello@bespoke.flights`) |
-| `CRON_SECRET` | Production | Secures the `/api/cron/weekly-discovery` and `/api/cron/daily-lifecycle` endpoints |
+| `CRON_SECRET` | Production | Secures the `/api/cron/weekly-discovery`, `/api/cron/daily-lifecycle` and `/api/cron/ads-loop` endpoints |
+| `GOOGLE_ADS_API_VERSION` | Ads API mode | Google Ads API version, e.g. `v25`. No default: Google retires each version about a year after release |
+| `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_ADS_CUSTOMER_ID`, `GOOGLE_ADS_LOGIN_CUSTOMER_ID` | Ads API mode | Developer token, advertiser account id, manager account id (optional) |
+| `GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_CLIENT_SECRET`, `GOOGLE_ADS_REFRESH_TOKEN` | Ads API mode | OAuth credentials for a user with access to the account |
 | `STRIPE_SECRET_KEY` | Production | Stripe secret key. Without it, payments run in stub mode (development) or are disabled (production). |
 | `STRIPE_WEBHOOK_SECRET` | Production | Signing secret for the platform webhook endpoint |
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | Production | Signing secret for the connected-accounts webhook endpoint |

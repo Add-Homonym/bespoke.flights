@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { hasSessionCookie } from '@/lib/session-cookie';
+import { ATTR_COOKIE, ATTR_MAX_AGE_SECONDS, attributionFromUrl, encodeAttribution } from '@/lib/ads/attribution';
 
 // Callers that authenticate by signature or bearer secret, not by cookie.
 const NO_ORIGIN_CHECK = ['/api/webhooks', '/api/cron', '/api/admin/stripe/webhooks'];
@@ -25,6 +26,18 @@ function crossSiteWrite(req: NextRequest): boolean {
   }
 }
 
+/** Remember the paid click (bfv, gclid, utm_*) that brought this visitor, for the ads loop. */
+function rememberClick(req: NextRequest, res: NextResponse): NextResponse {
+  if (req.method !== 'GET' || req.nextUrl.pathname.startsWith('/api/')) return res;
+  const click = attributionFromUrl(req.nextUrl);
+  if (click) {
+    res.cookies.set(ATTR_COOKIE, encodeAttribution(click), {
+      httpOnly: true, sameSite: 'lax', secure: req.nextUrl.protocol === 'https:', path: '/', maxAge: ATTR_MAX_AGE_SECONDS,
+    });
+  }
+  return res;
+}
+
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
@@ -36,7 +49,7 @@ export async function proxy(req: NextRequest) {
   // signature; cron routes by CRON_SECRET (or an admin session, checked in the handler).
   const publicPaths = ['/', '/login', '/register', '/book', '/empty-legs', '/api/empty-legs', '/operators', '/trip', '/board', '/api/board', '/api/auth', '/api/webhooks', '/api/cron', '/api/aircraft-photos', '/unsubscribe', '/api/unsubscribe'];
   if (publicPaths.some(p => pathname === p || pathname.startsWith(p + '/'))) {
-    return NextResponse.next();
+    return rememberClick(req, NextResponse.next());
   }
 
   // Protected routes require a session. Role checks (operator, admin) happen in the
@@ -45,10 +58,10 @@ export async function proxy(req: NextRequest) {
     if (pathname.startsWith('/api/')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    return NextResponse.redirect(new URL('/login', req.url));
+    return rememberClick(req, NextResponse.redirect(new URL('/login', req.url)));
   }
 
-  return NextResponse.next();
+  return rememberClick(req, NextResponse.next());
 }
 
 export const config = {
